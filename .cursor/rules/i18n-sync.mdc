@@ -1,0 +1,17 @@
+---
+description: Keep UI i18n translations in sync when changing user-facing copy
+alwaysApply: true
+---
+
+# i18n sync (Nove Work)
+
+UI strings live in `src/i18n/messages.ts`. Supported locales: `en`, `zh-CN`, `zh-TW`, `ja`, `de`, `fr`. Preference `system` follows OS language.
+
+When you add or change user-visible text:
+
+1. Add/update the key in `zhCN` (source of truth).
+2. Update the **same key** in `en`, `zhTW`, `ja`, `de`, and `fr` in the same change.
+3. Use `useI18n().t('key')` or `t('key', { param })` in Vue—do not hardcode new UI strings.
+4. Do not leave a new key only in one language.
+
+Backend/LLM prompts may stay Chinese unless the task asks otherwise; this rule is for the app UI.
