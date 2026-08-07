@@ -110,7 +110,11 @@ async fn fetch_gemini(api_key: &str) -> Result<Vec<String>> {
         if !m.supported.is_empty() && !m.supported.iter().any(|s| s == "generateContent") {
             continue;
         }
-        let id = m.name.strip_prefix("models/").unwrap_or(&m.name).to_string();
+        let id = m
+            .name
+            .strip_prefix("models/")
+            .unwrap_or(&m.name)
+            .to_string();
         if !id.is_empty() {
             ids.push(id);
         }

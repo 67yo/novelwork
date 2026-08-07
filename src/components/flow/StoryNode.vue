@@ -15,6 +15,9 @@ const wordTarget = computed(() =>
     max: n.value?.word_count_max ?? 0,
   }),
 );
+const chapterTarget = computed(() =>
+  t("workspace.chapterTarget", { n: n.value?.chapter_count ?? 0 }),
+);
 const wordWritten = computed(() => t("workspace.wordWritten", { n: n.value?.word_count ?? 0 }));
 
 const shellClass = computed(() => {
@@ -28,6 +31,13 @@ const shellClass = computed(() => {
     default:
       return "border-border bg-card";
   }
+});
+
+const glowTone = computed(() => {
+  if (!props.selected) return "";
+  if (kind.value === "character") return "story-node-glow story-node-glow--amber";
+  if (kind.value === "side_plot") return "story-node-glow story-node-glow--sky";
+  return "story-node-glow story-node-glow--primary";
 });
 
 /** 人物/剧情卡左右同色；章节仍左琥珀右天蓝作挂载提示。线类型由两端卡片 kind 决定。 */
@@ -47,7 +57,8 @@ const rightHandleClass = computed(
 <template>
   <div
     class="relative rounded-lg border px-3 py-2 text-xs shadow-sm"
-    :class="shellClass"
+    :class="[shellClass, glowTone]"
+    :aria-selected="selected"
     style="max-width: 200px"
   >
     <Handle
@@ -106,6 +117,12 @@ const rightHandleClass = computed(
       >
         {{ wordTarget }}
       </p>
+      <p
+        v-if="n?.chapter_count"
+        class="mt-0.5 text-[11px] font-medium text-primary"
+      >
+        {{ chapterTarget }}
+      </p>
       <p v-if="n?.outline" class="mt-1 line-clamp-2 text-[11px] text-muted-foreground">{{ n.outline }}</p>
     </template>
 
@@ -116,3 +133,48 @@ const rightHandleClass = computed(
     </template>
   </div>
 </template>
+
+<style scoped>
+.story-node-glow {
+  --glow: 61 107 79;
+  z-index: 1;
+  animation: story-node-halo 1.8s ease-in-out infinite;
+}
+.story-node-glow--primary {
+  --glow: 61 107 79;
+  border-color: rgb(61 107 79 / 0.55);
+}
+.story-node-glow--amber {
+  --glow: 217 119 6;
+  border-color: rgb(217 119 6 / 0.55);
+}
+.story-node-glow--sky {
+  --glow: 2 132 199;
+  border-color: rgb(2 132 199 / 0.55);
+}
+
+@keyframes story-node-halo {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px rgb(var(--glow) / 0.35),
+      0 0 10px 2px rgb(var(--glow) / 0.28),
+      0 0 22px 6px rgb(var(--glow) / 0.12);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px rgb(var(--glow) / 0.55),
+      0 0 16px 4px rgb(var(--glow) / 0.4),
+      0 0 32px 10px rgb(var(--glow) / 0.18);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .story-node-glow {
+    animation: none;
+    box-shadow:
+      0 0 0 2px rgb(var(--glow) / 0.5),
+      0 0 14px 3px rgb(var(--glow) / 0.35);
+  }
+}
+</style>

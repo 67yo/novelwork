@@ -64,3 +64,76 @@
     min-height: 100vh;
   }
 }
+
+/* 章节预览：Markdown 渲染 + 段首缩进两字 */
+.chapter-md {
+  font-family: "Source Han Sans SC", "Noto Sans SC", "Segoe UI", sans-serif;
+  color: var(--foreground);
+}
+.chapter-md p {
+  /* 缩进靠段首全角空格，复制时一并带走；不用 text-indent */
+  margin: 0.65em 0;
+  line-height: 1.8;
+}
+.chapter-md h1,
+.chapter-md h2,
+.chapter-md h3,
+.chapter-md h4 {
+  text-indent: 0;
+  font-weight: 600;
+  margin: 1em 0 0.5em;
+  line-height: 1.4;
+}
+.chapter-md h1 {
+  font-size: 1.25rem;
+}
+.chapter-md h2 {
+  font-size: 1.125rem;
+}
+.chapter-md h3 {
+  font-size: 1.05rem;
+}
+.chapter-md ul,
+.chapter-md ol {
+  margin: 0.65em 0;
+  padding-left: 1.5em;
+  text-indent: 0;
+}
+.chapter-md li {
+  text-indent: 0;
+  margin: 0.25em 0;
+}
+.chapter-md blockquote {
+  text-indent: 0;
+  margin: 0.65em 0;
+  padding-left: 1em;
+  border-left: 3px solid var(--border);
+  color: var(--muted-foreground);
+}
+.chapter-md hr {
+  margin: 1em 0;
+  border: none;
+  border-top: 1px solid var(--border);
+}
+.chapter-md strong {
+  font-weight: 600;
+}
+.chapter-md code {
+  text-indent: 0;
+  font-size: 0.9em;
+  padding: 0.1em 0.35em;
+  border-radius: 0.25rem;
+  background: var(--muted);
+}
+.chapter-md pre {
+  text-indent: 0;
+  overflow-x: auto;
+  padding: 0.75em 1em;
+  border-radius: 0.375rem;
+  background: var(--muted);
+  margin: 0.65em 0;
+}
+.chapter-md pre code {
+  padding: 0;
+  background: transparent;
+}

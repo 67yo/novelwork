@@ -51,6 +51,7 @@ export type NovelProject = {
   archived: boolean;
   word_count_min: number;
   word_count_max: number;
+  chapter_count: number;
   created_at: string;
   updated_at: string;
 };
@@ -76,6 +77,7 @@ export type TreeNode = {
   word_count: number;
   word_count_min: number;
   word_count_max: number;
+  chapter_count: number;
 };
 
 export type TreeEdge = {
@@ -122,10 +124,29 @@ export type TokenUsageHourRow = {
   total_tokens: number;
 };
 
+export type TokenUsageNovelRow = {
+  novel_id: string;
+  title: string;
+  day_tokens: number;
+  total_tokens: number;
+};
+
 export type TokenUsageDay = {
   date: string;
   rows: TokenUsageHourRow[];
   models: string[];
+  novels: TokenUsageNovelRow[];
+};
+
+export type TokenUsageModelRow = {
+  model: string;
+  total_tokens: number;
+};
+
+export type TokenUsageMonth = {
+  month: string;
+  total_tokens: number;
+  models: TokenUsageModelRow[];
 };
 
 export type ChatTurn = {
@@ -210,6 +231,8 @@ export const api = {
   listChat: (novelId: string) => invoke<ChatMessage[]>("list_chat_messages", { novelId }),
   chatSend: (novelId: string, content: string) =>
     invoke<ChatMessage[]>("chat_send", { novelId, content }),
+  /** 终止进行中的 chat / 开书聊（开书传 `__create__`） */
+  chatCancel: (novelId: string) => invoke<void>("chat_cancel", { novelId }),
   cardChatSend: (novelId: string, nodeId: string, content: string) =>
     invoke<CardChatResult>("card_chat_send", { novelId, nodeId, content }),
   pickCover: () => invoke<string | null>("pick_cover"),
@@ -218,4 +241,6 @@ export const api = {
   pickTextFile: () => invoke<string | null>("pick_text_file"),
   appDataRoot: () => invoke<string>("app_data_root"),
   getTokenUsage: (date: string) => invoke<TokenUsageDay>("get_token_usage", { date }),
+  getTokenUsageMonth: (month: string) =>
+    invoke<TokenUsageMonth>("get_token_usage_month", { month }),
 };

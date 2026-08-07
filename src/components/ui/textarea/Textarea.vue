@@ -17,6 +17,7 @@ const emit = defineEmits<{ "update:modelValue": [string] }>();
 
 <template>
   <textarea
+    v-bind="$attrs"
     :value="modelValue"
     :placeholder="placeholder"
     :disabled="disabled"

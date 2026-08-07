@@ -3,6 +3,7 @@ import { computed, markRaw, nextTick, onMounted, ref, watch, type Ref } from "vu
 import {
   VueFlow,
   ConnectionMode,
+  useVueFlow,
   type Connection,
   type Edge,
   type EdgeUpdateEvent,
@@ -30,10 +31,14 @@ import { Separator } from "@/components/ui/separator";
 import StoryNode from "@/components/flow/StoryNode.vue";
 import CharacterCardPanel from "@/components/CharacterCardPanel.vue";
 import { useI18n } from "@/i18n";
-import { Loader2 } from "@lucide/vue";
+import { Copy, LayoutGrid, Loader2, Play, Square } from "@lucide/vue";
+import { diffLines } from "@/lib/linediff";
+import { renderChapterMd, stripChapterMeta } from "@/lib/md";
+import { applyAutoLayout } from "@/lib/treeLayout";
 
 const props = defineProps<{ id: string }>();
 const { t, locale } = useI18n();
+const { fitView } = useVueFlow({ id: "nove-workspace" });
 
 const novel = ref<NovelProject | null>(null);
 const tree = ref<NovelTree | null>(null);
@@ -48,7 +53,16 @@ const cardChatInput = ref("");
 const prevN = ref(10);
 const busy = ref("");
 const notice = ref("");
+/** 全章自动：预生成 → 精修，可点按钮中止 */
+const autoAll = ref(false);
+/** 预生成/精修结束后的结束语（左侧底部独立区） */
+const chapterResultNotice = ref("");
 const coverBusy = ref(false);
+const chapterBodyEl = ref<HTMLElement | null>(null);
+const copyHint = ref("");
+/** 精修前后快照（会话内，按节点） */
+const refineBeforeByNode = ref<Record<string, string>>({});
+const bodyTab = ref<"body" | "diff">("body");
 
 const nodeTypes = { story: markRaw(StoryNode) };
 const flowNodes = ref<Node[]>([]) as Ref<Node[]>;
@@ -72,6 +86,7 @@ function syncFlowFromTree() {
             ...n,
             word_count_min: n.word_count_min || novel.value.word_count_min,
             word_count_max: n.word_count_max || novel.value.word_count_max,
+            chapter_count: n.chapter_count || novel.value.chapter_count,
           }
         : n;
     return {
@@ -79,6 +94,7 @@ function syncFlowFromTree() {
       type: "story",
       position: { ...n.position },
       data,
+      selected: n.id === selected.value?.id,
     };
   });
   flowEdges.value = tr.edges.map((e) => ({
@@ -152,8 +168,21 @@ async function loadAll() {
   else if (root) await selectNode(root);
 }
 
+function markFlowSelection() {
+  const id = selected.value?.id;
+  flowNodes.value = flowNodes.value.map((n) => ({
+    ...n,
+    selected: n.id === id,
+  }));
+}
+
 async function selectNode(n: TreeNode) {
   selected.value = n;
+  markFlowSelection();
+  bodyTab.value = "body";
+  if (!autoAll.value) notice.value = "";
+  chapterResultNotice.value = "";
+  copyHint.value = "";
   if (n.kind === "chapter" || n.kind === "side_plot") {
     chapterMd.value = await api.getChapter(props.id, n.id);
   } else {
@@ -318,45 +347,127 @@ onMounted(loadAll);
 watch(() => props.id, loadAll);
 watch(locale, () => syncFlowFromTree());
 
-async function generate() {
-  if (!selected.value || selected.value.kind !== "chapter") return;
+async function generate(): Promise<boolean> {
+  if (!selected.value || selected.value.kind !== "chapter") return false;
   busy.value = "generate";
-  notice.value = "";
+  if (!autoAll.value) notice.value = "";
+  chapterResultNotice.value = "";
   try {
     const r = await api.generateChapter(props.id, selected.value.id);
+    const id = selected.value.id;
+    delete refineBeforeByNode.value[id];
+    refineBeforeByNode.value = { ...refineBeforeByNode.value };
     chapterMd.value = r.content;
-    notice.value = r.message;
+    bodyTab.value = "body";
+    chapterResultNotice.value = r.message;
     tree.value = await api.getTree(props.id);
     syncFlowFromTree();
     if (selected.value) {
       const n = tree.value.nodes.find((x) => x.id === selected.value!.id);
       if (n) selected.value = n;
     }
+    return true;
   } catch (e) {
-    notice.value = String(e);
+    chapterResultNotice.value = String(e);
+    return false;
   } finally {
     busy.value = "";
   }
 }
 
-async function refine() {
-  if (!selected.value || selected.value.kind !== "chapter") return;
+async function refine(): Promise<boolean> {
+  if (!selected.value || selected.value.kind !== "chapter") return false;
   busy.value = "refine";
-  notice.value = "";
+  if (!autoAll.value) notice.value = "";
+  chapterResultNotice.value = "";
+  const id = selected.value.id;
+  const before = chapterMd.value;
   try {
-    const r = await api.refineChapter(props.id, selected.value.id, prevN.value);
+    const r = await api.refineChapter(props.id, id, prevN.value);
+    refineBeforeByNode.value = { ...refineBeforeByNode.value, [id]: before };
     chapterMd.value = r.content;
-    notice.value = r.message;
+    bodyTab.value = "diff";
+    chapterResultNotice.value = r.message;
     tree.value = await api.getTree(props.id);
     syncFlowFromTree();
     if (selected.value) {
       const n = tree.value.nodes.find((x) => x.id === selected.value!.id);
       if (n) selected.value = n;
     }
+    return true;
   } catch (e) {
-    notice.value = String(e);
+    chapterResultNotice.value = String(e);
+    return false;
   } finally {
     busy.value = "";
+  }
+}
+
+function stopAutoAll() {
+  if (!autoAll.value) return;
+  autoAll.value = false;
+  notice.value = t("workspace.autoAllStopped");
+}
+
+async function runAutoAll() {
+  if (autoAll.value || busy.value || !tree.value) return;
+  const chapters = tree.value.nodes
+    .filter((n) => n.kind === "chapter")
+    .sort((a, b) => a.position.y - b.position.y || a.position.x - b.position.x);
+  if (!chapters.length) {
+    notice.value = t("workspace.autoAllEmpty");
+    return;
+  }
+  autoAll.value = true;
+  let failed = false;
+  try {
+    for (let i = 0; i < chapters.length; i++) {
+      if (!autoAll.value) break;
+      const id = chapters[i].id;
+      const node = tree.value?.nodes.find((n) => n.id === id);
+      if (!node || node.kind !== "chapter") continue;
+      notice.value = t("workspace.autoAllProgress", {
+        i: i + 1,
+        n: chapters.length,
+        title: node.label,
+      });
+      await selectNode(node);
+      if (!autoAll.value) break;
+      if (!(await generate())) {
+        failed = true;
+        break;
+      }
+      if (!autoAll.value) break;
+      if (!(await refine())) {
+        failed = true;
+        break;
+      }
+    }
+    if (autoAll.value && !failed) notice.value = t("workspace.autoAllDone");
+  } finally {
+    autoAll.value = false;
+  }
+}
+
+async function copyChapterBody() {
+  const md = stripChapterMeta(chapterMd.value);
+  if (!md) return;
+  const el = document.createElement("div");
+  el.innerHTML = renderChapterMd(md);
+  let text = (el.innerText || md).trim();
+  // 正文里没有标题时，补上章节卡标题
+  const title = selected.value?.kind === "chapter" ? selected.value.label.trim() : "";
+  if (title && !/^#{1,6}\s/.test(md)) {
+    text = `${title}\n\n${text}`;
+  }
+  try {
+    await navigator.clipboard.writeText(text.trimEnd() + "\n");
+    copyHint.value = t("workspace.copied");
+    window.setTimeout(() => {
+      if (copyHint.value === t("workspace.copied")) copyHint.value = "";
+    }, 2000);
+  } catch {
+    copyHint.value = t("workspace.copyFailed");
   }
 }
 
@@ -429,16 +540,40 @@ async function sendChat() {
     syncFlowFromTree();
     await scrollChatBottom();
   } catch (e) {
-    patchPending(pendingId, [`${t("workspace.chatStepFailed")}\n${String(e)}`]);
-    notice.value = String(e);
+    const msg = String(e);
+    if (msg.toLowerCase().includes("cancelled")) {
+      patchPending(pendingId, [t("workspace.chatStopped")]);
+      messages.value = await api.listChat(props.id);
+    } else {
+      patchPending(pendingId, [`${t("workspace.chatStepFailed")}\n${msg}`]);
+      notice.value = msg;
+    }
   } finally {
     unlisten();
     busy.value = "";
   }
 }
 
+async function stopChat() {
+  if (busy.value !== "chat" && busy.value !== "card-chat") return;
+  try {
+    await api.chatCancel(props.id);
+  } catch {
+    /* ignore */
+  }
+}
+
 function emptyCharacter(): NonNullable<TreeNode["character"]> {
   return { role: "", personality: "", motto: "", gender: "", style: "", alignment: "" };
+}
+
+async function autoLayout() {
+  if (!tree.value || autoAll.value) return;
+  applyAutoLayout(tree.value.nodes, tree.value.edges);
+  await api.saveTree(tree.value);
+  syncFlowFromTree();
+  await nextTick();
+  void fitView({ padding: 0.18, duration: 280 });
 }
 
 async function addCard(kind: "chapter" | "character" | "side_plot") {
@@ -467,6 +602,7 @@ async function addCard(kind: "chapter" | "character" | "side_plot") {
       word_count: 0,
       word_count_min: 0,
       word_count_max: 0,
+      chapter_count: 0,
     };
     edge = {
       id: `e-${prev.id}-${id}`,
@@ -490,6 +626,7 @@ async function addCard(kind: "chapter" | "character" | "side_plot") {
       word_count: 0,
       word_count_min: 0,
       word_count_max: 0,
+      chapter_count: 0,
     };
     root.linked_character_ids.push(id);
     edge = {
@@ -514,6 +651,7 @@ async function addCard(kind: "chapter" | "character" | "side_plot") {
       word_count: 0,
       word_count_min: 0,
       word_count_max: 0,
+      chapter_count: 0,
     };
     root.linked_side_plot_ids.push(id);
     edge = {
@@ -592,11 +730,15 @@ async function sendCardChat() {
     ]);
     await scrollChatBottom();
   } catch (e) {
+    const msg = String(e);
+    const content = msg.toLowerCase().includes("cancelled")
+      ? t("workspace.chatStopped")
+      : `${t("workspace.chatStepFailed")}\n${msg}`;
     const list = cardMessagesFor(node.id).map((m) =>
-      m.id === pendingId ? { ...m, content: `${t("workspace.chatStepFailed")}\n${String(e)}` } : m,
+      m.id === pendingId ? { ...m, content } : m,
     );
     setCardMessages(node.id, list);
-    notice.value = String(e);
+    if (!msg.toLowerCase().includes("cancelled")) notice.value = msg;
   } finally {
     unlisten();
     busy.value = "";
@@ -625,7 +767,22 @@ async function onDropCover(ev: DragEvent) {
 const selectedIsChapter = computed(() => selected.value?.kind === "chapter");
 const selectedIsCharacter = computed(() => selected.value?.kind === "character");
 
-/** 本章直接链接的剧情 + 人物（含剧情卡上挂的人物）名称，供左侧 tag 展示 */
+const hasRefineDiff = computed(() => {
+  const id = selected.value?.id;
+  return !!(id && refineBeforeByNode.value[id] != null && chapterMd.value);
+});
+
+const refineDiffHunks = computed(() => {
+  const id = selected.value?.id;
+  if (!id) return [];
+  const before = refineBeforeByNode.value[id];
+  if (before == null) return [];
+  return diffLines(before, chapterMd.value);
+});
+
+const chapterHtml = computed(() => (chapterMd.value ? renderChapterMd(chapterMd.value) : ""));
+
+/** 本章剧情/人物 tag：含根节点贯穿人物、剧情卡上挂的人物 */
 const chapterLinkTags = computed(() => {
   const ch = selected.value;
   const tr = tree.value;
@@ -641,6 +798,16 @@ const chapterLinkTags = computed(() => {
     if (!other) continue;
     if (other.kind === "character") charIds.add(otherId);
     if (other.kind === "side_plot") plotIds.add(otherId);
+  }
+
+  const root = tr.nodes.find((n) => n.kind === "novel");
+  if (root) {
+    for (const cid of root.linked_character_ids) charIds.add(cid);
+    for (const e of tr.edges) {
+      if (e.source !== root.id && e.target !== root.id) continue;
+      const otherId = e.source === root.id ? e.target : e.source;
+      if (tr.nodes.find((n) => n.id === otherId)?.kind === "character") charIds.add(otherId);
+    }
   }
 
   for (const pid of [...plotIds]) {
@@ -671,10 +838,11 @@ const activeCardMessages = computed(() =>
   selected.value ? cardMessagesFor(selected.value.id) : [],
 );
 const cardChatTitle = computed(() => {
-  const k = selected.value?.kind;
-  if (k === "chapter") return t("workspace.cardChatChapter");
-  if (k === "character") return t("workspace.cardChatCharacter");
-  if (k === "side_plot") return t("workspace.cardChatPlot");
+  const n = selected.value;
+  if (!n) return t("workspace.chat");
+  if (n.kind === "chapter" || n.kind === "character" || n.kind === "side_plot") {
+    return `${n.label} Chat`;
+  }
   return t("workspace.chat");
 });
 const cardChatPlaceholder = computed(() => {
@@ -684,6 +852,92 @@ const cardChatPlaceholder = computed(() => {
   if (k === "side_plot") return t("workspace.cardChatPlotPh");
   return t("workspace.chatPlaceholder");
 });
+
+type SlashCmd = { cmd: string; insert: string; hint: string };
+
+const rootSlashCmds = computed<SlashCmd[]>(() => {
+  const zh = locale.value.startsWith("zh") || locale.value === "ja";
+  if (zh) {
+    return [
+      { cmd: "/章节卡", insert: "/章节卡 ", hint: t("workspace.slashHintChapters") },
+      { cmd: "/添加剧情", insert: "/添加剧情 ", hint: t("workspace.slashHintAddPlot") },
+      { cmd: "/剧情卡", insert: "/剧情卡 ", hint: t("workspace.slashHintPlots") },
+      { cmd: "/清空章节", insert: "/清空章节", hint: t("workspace.slashHintClear") },
+    ];
+  }
+  return [
+    { cmd: "/chapters", insert: "/chapters ", hint: t("workspace.slashHintChapters") },
+    { cmd: "/add-plot", insert: "/add-plot ", hint: t("workspace.slashHintAddPlot") },
+    { cmd: "/plots", insert: "/plots ", hint: t("workspace.slashHintPlots") },
+    { cmd: "/clear-chapters", insert: "/clear-chapters", hint: t("workspace.slashHintClear") },
+  ];
+});
+
+const chapterSlashCmds = computed<SlashCmd[]>(() => {
+  const zh = locale.value.startsWith("zh") || locale.value === "ja";
+  if (zh) {
+    return [
+      { cmd: "/完善剧情", insert: "/完善剧情", hint: t("workspace.slashHintEnrichPlots") },
+    ];
+  }
+  return [
+    { cmd: "/enrich-plots", insert: "/enrich-plots", hint: t("workspace.slashHintEnrichPlots") },
+  ];
+});
+
+const slashActive = ref(0);
+
+/** 输入以 / 开头且尚未空格时，提示可补全指令 */
+const slashSuggestions = computed(() => {
+  const chapterCard = selected.value?.kind === "chapter";
+  const cmds = chapterCard
+    ? chapterSlashCmds.value
+    : cardChatMode.value
+      ? []
+      : rootSlashCmds.value;
+  if (!cmds.length) return [];
+  const v = chapterCard ? cardChatInput.value : chatInput.value;
+  if (!v.startsWith("/") || /\s/.test(v)) return [];
+  const q = v.toLowerCase();
+  return cmds.filter((c) => c.cmd.toLowerCase().startsWith(q) || c.cmd.startsWith(v));
+});
+
+watch(slashSuggestions, () => {
+  slashActive.value = 0;
+});
+
+function applySlashCmd(cmd: SlashCmd) {
+  if (selected.value?.kind === "chapter") cardChatInput.value = cmd.insert;
+  else chatInput.value = cmd.insert;
+  slashActive.value = 0;
+}
+
+function onChatKeydown(ev: KeyboardEvent) {
+  const list = slashSuggestions.value;
+  if (list.length) {
+    if (ev.key === "ArrowDown") {
+      ev.preventDefault();
+      slashActive.value = (slashActive.value + 1) % list.length;
+    } else if (ev.key === "ArrowUp") {
+      ev.preventDefault();
+      slashActive.value = (slashActive.value - 1 + list.length) % list.length;
+    } else if (ev.key === "Enter" || ev.key === "Tab") {
+      ev.preventDefault();
+      applySlashCmd(list[slashActive.value] ?? list[0]);
+    } else if (ev.key === "Escape") {
+      ev.preventDefault();
+      if (cardChatMode.value) cardChatInput.value = "";
+      else chatInput.value = "";
+    }
+    return;
+  }
+  // Enter 发送；Shift+Enter 换行
+  if (ev.key === "Enter" && !ev.shiftKey) {
+    ev.preventDefault();
+    if (cardChatMode.value) void sendCardChat();
+    else void sendChat();
+  }
+}
 
 watch(
   () => selected.value?.id,
@@ -780,7 +1034,7 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
             >{{ name }}</span>
           </div>
           <div v-if="selectedIsChapter" class="flex flex-wrap items-center gap-2">
-            <Button size="sm" :disabled="!!busy" @click="generate">
+            <Button size="sm" :disabled="!!busy || autoAll" @click="generate">
               <Loader2 v-if="busy === 'generate'" class="mr-1.5 h-3.5 w-3.5 animate-spin" />
               {{
                 busy === "generate"
@@ -790,7 +1044,7 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                     : t("workspace.generate")
               }}
             </Button>
-            <div class="flex items-center gap-1 text-xs" :class="chapterBusy ? 'opacity-50' : ''">
+            <div class="flex items-center gap-1 text-xs" :class="chapterBusy || autoAll ? 'opacity-50' : ''">
               <span>{{ t("workspace.refinePrev") }}</span>
               <Input
                 v-model.number="prevN"
@@ -798,14 +1052,26 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                 min="0"
                 max="20"
                 class="h-8 w-14"
-                :disabled="chapterBusy"
+                :disabled="chapterBusy || autoAll"
               />
               <span>{{ t("workspace.chapters") }}</span>
             </div>
-            <Button size="sm" variant="secondary" :disabled="!!busy || !chapterMd" @click="refine">
+            <Button size="sm" variant="secondary" :disabled="!!busy || autoAll || !chapterMd" @click="refine">
               <Loader2 v-if="busy === 'refine'" class="mr-1.5 h-3.5 w-3.5 animate-spin" />
               {{ busy === "refine" ? t("workspace.refining") : t("workspace.refine") }}
             </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              class="px-2"
+              :disabled="!!busy || autoAll || !chapterMd"
+              :title="t('workspace.copyBody')"
+              :aria-label="t('workspace.copyBody')"
+              @click="copyChapterBody"
+            >
+              <Copy class="h-3.5 w-3.5" />
+            </Button>
+            <span v-if="copyHint" class="text-[11px] text-muted-foreground">{{ copyHint }}</span>
           </div>
           <p v-if="chapterBusy" class="flex items-center gap-1.5 text-xs text-primary">
             <Loader2 class="h-3.5 w-3.5 animate-spin" />
@@ -829,17 +1095,69 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
             :name="selected?.label ?? ''"
             :card="selected?.character ?? emptyCharacter()"
           />
-          <pre
-            v-else-if="chapterMd"
-            class="whitespace-pre-wrap font-sans text-sm leading-relaxed"
-            :class="chapterBusy ? 'opacity-40' : ''"
-          >{{ chapterMd }}</pre>
+          <template v-else-if="chapterMd">
+            <div
+              v-if="selectedIsChapter && hasRefineDiff"
+              class="mb-3 flex flex-wrap items-center gap-1 border-b pb-2"
+            >
+              <button
+                type="button"
+                class="rounded px-2 py-1 text-xs"
+                :class="bodyTab === 'body' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'"
+                @click="bodyTab = 'body'"
+              >
+                {{ t("workspace.bodyTab") }}
+              </button>
+              <button
+                type="button"
+                class="rounded px-2 py-1 text-xs"
+                :class="bodyTab === 'diff' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'"
+                @click="bodyTab = 'diff'"
+              >
+                {{ t("workspace.refineDiffTab") }}
+              </button>
+            </div>
+            <div
+              v-if="bodyTab === 'body' || !hasRefineDiff"
+              ref="chapterBodyEl"
+              class="chapter-md text-sm leading-relaxed"
+              :class="chapterBusy ? 'opacity-40' : ''"
+              v-html="chapterHtml"
+            />
+            <div
+              v-else
+              class="space-y-0.5 font-sans text-sm leading-relaxed"
+              :class="chapterBusy ? 'opacity-40' : ''"
+            >
+              <p class="mb-2 text-[11px] text-muted-foreground">{{ t("workspace.refineDiffHint") }}</p>
+              <div
+                v-for="(h, i) in refineDiffHunks"
+                :key="i"
+                class="whitespace-pre-wrap rounded-sm px-1"
+                :class="{
+                  'bg-red-100 text-red-950 dark:bg-red-950/40 dark:text-red-100': h.type === 'del',
+                  'bg-emerald-100 text-emerald-950 dark:bg-emerald-950/40 dark:text-emerald-100': h.type === 'add',
+                }"
+              >
+                <span class="mr-1 select-none opacity-50">{{
+                  h.type === "del" ? "−" : h.type === "add" ? "+" : " "
+                }}</span>{{ h.text || " " }}
+              </div>
+            </div>
+          </template>
           <div v-else class="text-sm text-muted-foreground">
             <template v-if="selectedIsChapter">{{ t("workspace.noBody") }}</template>
             <template v-else-if="selected?.kind === 'side_plot'">{{ t("workspace.sidePlotHint") }}</template>
             <template v-else-if="selected?.kind === 'novel'">{{ t("workspace.rootHint") }}</template>
             <template v-else>{{ t("workspace.clickNode") }}</template>
           </div>
+        </div>
+        <div
+          v-if="chapterResultNotice"
+          class="shrink-0 border-t bg-muted/40 px-3 py-2"
+        >
+          <p class="text-[11px] font-medium text-muted-foreground">{{ t("workspace.resultPanel") }}</p>
+          <p class="mt-1 whitespace-pre-wrap text-xs leading-relaxed">{{ chapterResultNotice }}</p>
         </div>
       </div>
 
@@ -852,14 +1170,40 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
       <!-- 中：树图（缩放 / 拖动画布） -->
       <div class="relative min-h-0 min-w-0 flex-1">
         <div class="absolute left-2 top-2 z-10 flex flex-wrap items-center gap-1">
-          <Button size="sm" variant="secondary" class="h-7 text-xs" @click="addCard('chapter')">
+          <Button size="sm" variant="secondary" class="h-7 text-xs" :disabled="autoAll" @click="addCard('chapter')">
             + {{ t("workspace.addChapter") }}
           </Button>
-          <Button size="sm" variant="secondary" class="h-7 text-xs" @click="addCard('character')">
+          <Button size="sm" variant="secondary" class="h-7 text-xs" :disabled="autoAll" @click="addCard('character')">
             + {{ t("workspace.addCharacter") }}
           </Button>
-          <Button size="sm" variant="secondary" class="h-7 text-xs" @click="addCard('side_plot')">
+          <Button size="sm" variant="secondary" class="h-7 text-xs" :disabled="autoAll" @click="addCard('side_plot')">
             + {{ t("workspace.addPlot") }}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            class="h-7 text-xs"
+            :disabled="autoAll || !tree"
+            :title="t('workspace.autoLayout')"
+            @click="autoLayout"
+          >
+            <LayoutGrid class="mr-1 h-3.5 w-3.5" />
+            {{ t("workspace.autoLayout") }}
+          </Button>
+        </div>
+        <div class="absolute right-2 top-2 z-10">
+          <Button
+            size="sm"
+            class="h-8 shadow-md"
+            :variant="autoAll ? 'destructive' : 'default'"
+            :disabled="!!busy && !autoAll"
+            :title="autoAll ? t('workspace.autoAllStop') : t('workspace.autoAll')"
+            @click="autoAll ? stopAutoAll() : runAutoAll()"
+          >
+            <Loader2 v-if="autoAll && chapterBusy" class="mr-1.5 h-3.5 w-3.5 animate-spin" />
+            <Square v-else-if="autoAll" class="mr-1.5 h-3.5 w-3.5" />
+            <Play v-else class="mr-1.5 h-3.5 w-3.5" />
+            {{ autoAll ? t("workspace.autoAllStop") : t("workspace.autoAll") }}
           </Button>
         </div>
         <div class="pointer-events-none absolute left-2 top-11 z-10 rounded bg-background/90 px-2 py-1 text-[10px] text-muted-foreground shadow">
@@ -888,6 +1232,7 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
           </div>
         </div>
         <VueFlow
+          id="nove-workspace"
           v-model:nodes="flowNodes"
           v-model:edges="flowEdges"
           :node-types="nodeTypes"
@@ -965,21 +1310,76 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
         </div>
         <Separator />
         <div class="space-y-2 p-3">
-          <Textarea
-            v-if="cardChatMode"
-            v-model="cardChatInput"
-            rows="3"
-            :placeholder="cardChatPlaceholder"
-          />
-          <Textarea
-            v-else
-            v-model="chatInput"
-            rows="3"
-            :placeholder="t('workspace.chatPlaceholder')"
-          />
+          <p
+            v-if="!cardChatMode"
+            class="text-[11px] leading-relaxed text-muted-foreground"
+          >
+            {{ t("workspace.chatCommands") }}
+          </p>
+          <div v-if="cardChatMode" class="relative">
+            <ul
+              v-if="slashSuggestions.length"
+              class="absolute bottom-full left-0 right-0 z-20 mb-1 max-h-48 overflow-auto rounded-md border bg-popover py-1 text-sm shadow-md"
+              role="listbox"
+            >
+              <li
+                v-for="(s, i) in slashSuggestions"
+                :key="s.cmd"
+                class="cursor-pointer px-3 py-1.5"
+                :class="i === slashActive ? 'bg-accent text-accent-foreground' : 'hover:bg-muted'"
+                role="option"
+                :aria-selected="i === slashActive"
+                @mousedown.prevent="applySlashCmd(s)"
+              >
+                <span class="font-medium">{{ s.cmd }}</span>
+                <span class="ml-2 text-xs text-muted-foreground">{{ s.hint }}</span>
+              </li>
+            </ul>
+            <Textarea
+              v-model="cardChatInput"
+              rows="3"
+              :placeholder="cardChatPlaceholder"
+              @keydown="onChatKeydown"
+            />
+          </div>
+          <div v-else class="relative">
+            <ul
+              v-if="slashSuggestions.length"
+              class="absolute bottom-full left-0 right-0 z-20 mb-1 max-h-48 overflow-auto rounded-md border bg-popover py-1 text-sm shadow-md"
+              role="listbox"
+            >
+              <li
+                v-for="(s, i) in slashSuggestions"
+                :key="s.cmd"
+                class="cursor-pointer px-3 py-1.5"
+                :class="i === slashActive ? 'bg-accent text-accent-foreground' : 'hover:bg-muted'"
+                role="option"
+                :aria-selected="i === slashActive"
+                @mousedown.prevent="applySlashCmd(s)"
+              >
+                <span class="font-medium">{{ s.cmd }}</span>
+                <span class="ml-2 text-xs text-muted-foreground">{{ s.hint }}</span>
+              </li>
+            </ul>
+            <Textarea
+              v-model="chatInput"
+              rows="3"
+              :placeholder="t('workspace.chatPlaceholder')"
+              @keydown="onChatKeydown"
+            />
+          </div>
           <Button
+            v-if="busy === 'chat' || busy === 'card-chat'"
             class="w-full"
-            :disabled="busy === 'chat' || busy === 'card-chat'"
+            variant="destructive"
+            @click="stopChat"
+          >
+            <Square class="mr-1.5 h-3.5 w-3.5" />
+            {{ t("workspace.stop") }}
+          </Button>
+          <Button
+            v-else
+            class="w-full"
             @click="cardChatMode ? sendCardChat() : sendChat()"
           >
             {{ t("workspace.send") }}

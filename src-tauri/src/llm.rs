@@ -1,6 +1,9 @@
 use crate::models::AppSettings;
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
 
 #[derive(Debug, Clone)]
 pub struct CompletionResult {
@@ -12,17 +15,42 @@ pub struct CompletionResult {
     pub total_tokens: u32,
 }
 
+fn cancelled(cancel: &Option<Arc<AtomicBool>>) -> bool {
+    cancel
+        .as_ref()
+        .map(|c| c.load(Ordering::Relaxed))
+        .unwrap_or(false)
+}
+
+async fn wait_cancel(cancel: &Option<Arc<AtomicBool>>) {
+    let Some(flag) = cancel else {
+        std::future::pending::<()>().await;
+        return;
+    };
+    loop {
+        if flag.load(Ordering::Relaxed) {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(40)).await;
+    }
+}
+
 /// Thin DeepSeek client. Uses OpenAI-compatible chat API.
 pub async fn complete(
     settings: &AppSettings,
     system: &str,
     user: &str,
     model: Option<&str>,
+    cancel: Option<Arc<AtomicBool>>,
 ) -> Result<CompletionResult> {
     let model = model
         .filter(|m| !m.trim().is_empty())
         .unwrap_or(settings.default_model.as_str())
         .to_string();
+
+    if cancelled(&cancel) {
+        return Err(anyhow!("cancelled"));
+    }
 
     if settings.deepseek_api_key.trim().is_empty() {
         let content = mock_complete(system, user);
@@ -38,7 +66,8 @@ pub async fn complete(
         });
     }
 
-    let _ = rig_bridge::warm_client(settings);
+    // ponytail: 仅预热，失败不影响主 HTTP 路径；切勿 expect（会拖垮整个进程）
+    rig_bridge::warm_client(settings);
     let _ = adk_bridge::describe();
 
     let base = settings.deepseek_base_url.trim_end_matches('/');
@@ -59,20 +88,34 @@ pub async fn complete(
     };
 
     let client = reqwest::Client::new();
-    let resp = client
+    let send = client
         .post(&url)
         .bearer_auth(&settings.deepseek_api_key)
         .json(&body)
-        .send()
-        .await?;
+        .send();
+
+    let resp = tokio::select! {
+        r = send => r?,
+        _ = wait_cancel(&cancel) => return Err(anyhow!("cancelled")),
+    };
+
+    if cancelled(&cancel) {
+        return Err(anyhow!("cancelled"));
+    }
 
     if !resp.status().is_success() {
         let status = resp.status();
-        let text = resp.text().await.unwrap_or_default();
+        let text = tokio::select! {
+            r = resp.text() => r.unwrap_or_default(),
+            _ = wait_cancel(&cancel) => return Err(anyhow!("cancelled")),
+        };
         return Err(anyhow!("DeepSeek API {status}: {text}"));
     }
 
-    let parsed: ChatResponse = resp.json().await?;
+    let parsed: ChatResponse = tokio::select! {
+        r = resp.json() => r?,
+        _ = wait_cancel(&cancel) => return Err(anyhow!("cancelled")),
+    };
     let content = parsed
         .choices
         .into_iter()
@@ -172,13 +215,12 @@ mod rig_bridge {
     use rig_core::providers::openai;
 
     /// Wire rig-core OpenAI-compatible client to DeepSeek base URL.
-    pub fn warm_client(settings: &AppSettings) -> openai::Client {
-        openai::Client::builder()
+    pub fn warm_client(settings: &AppSettings) {
+        let _ = openai::Client::builder()
             .api_key(&settings.deepseek_api_key)
             .base_url(&settings.deepseek_base_url)
             .build()
-            .or_else(|_| openai::Client::new(&settings.deepseek_api_key))
-            .expect("rig OpenAI-compatible client")
+            .or_else(|_| openai::Client::new(&settings.deepseek_api_key));
     }
 }
 

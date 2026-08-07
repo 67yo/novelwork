@@ -1,6 +1,6 @@
+use crate::db::Db;
 use crate::models::*;
 use crate::paths::{novel_meta_path, novel_tree_path};
-use crate::db::Db;
 use anyhow::Result;
 use chrono::Utc;
 use std::fs;
@@ -22,6 +22,7 @@ pub fn ensure_sample(db: &Db) -> Result<()> {
         archived: false,
         word_count_min: 2000,
         word_count_max: 3000,
+        chapter_count: 20,
         created_at: now.clone(),
         updated_at: now,
     };
@@ -59,6 +60,7 @@ fn sample_tree(novel_id: &str) -> NovelTree {
                 word_count: 0,
                 word_count_min: 2000,
                 word_count_max: 3000,
+                chapter_count: 20,
             },
             TreeNode {
                 id: c1.into(),
@@ -72,6 +74,7 @@ fn sample_tree(novel_id: &str) -> NovelTree {
                 word_count: 0,
                 word_count_min: 0,
                 word_count_max: 0,
+                chapter_count: 0,
             },
             TreeNode {
                 id: c2.into(),
@@ -85,6 +88,7 @@ fn sample_tree(novel_id: &str) -> NovelTree {
                 word_count: 0,
                 word_count_min: 0,
                 word_count_max: 0,
+                chapter_count: 0,
             },
             TreeNode {
                 id: c3.into(),
@@ -98,6 +102,7 @@ fn sample_tree(novel_id: &str) -> NovelTree {
                 word_count: 0,
                 word_count_min: 0,
                 word_count_max: 0,
+                chapter_count: 0,
             },
             TreeNode {
                 id: hero.into(),
@@ -118,6 +123,7 @@ fn sample_tree(novel_id: &str) -> NovelTree {
                 word_count: 0,
                 word_count_min: 0,
                 word_count_max: 0,
+                chapter_count: 0,
             },
             TreeNode {
                 id: side.into(),
@@ -138,6 +144,7 @@ fn sample_tree(novel_id: &str) -> NovelTree {
                 word_count: 0,
                 word_count_min: 0,
                 word_count_max: 0,
+                chapter_count: 0,
             },
             TreeNode {
                 id: plot.into(),
@@ -151,6 +158,7 @@ fn sample_tree(novel_id: &str) -> NovelTree {
                 word_count: 0,
                 word_count_min: 0,
                 word_count_max: 0,
+                chapter_count: 0,
             },
         ],
         edges: vec![

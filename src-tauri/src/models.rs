@@ -161,6 +161,9 @@ pub struct NovelProject {
     /// 每章目标字数上限
     #[serde(default = "default_word_max")]
     pub word_count_max: u32,
+    /// 全书计划章节数（剧情节奏约束）
+    #[serde(default = "default_chapter_count")]
+    pub chapter_count: u32,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -170,6 +173,9 @@ fn default_word_min() -> u32 {
 }
 fn default_word_max() -> u32 {
     3000
+}
+fn default_chapter_count() -> u32 {
+    20
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -234,6 +240,9 @@ pub struct TreeNode {
     /// 根节点：目标字数上限
     #[serde(default)]
     pub word_count_max: u32,
+    /// 根节点：全书计划章节数
+    #[serde(default)]
+    pub chapter_count: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -306,15 +315,73 @@ pub struct TokenUsageHourRow {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TokenUsageNovelRow {
+    pub novel_id: String,
+    pub title: String,
+    pub day_tokens: i64,
+    pub total_tokens: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TokenUsageDay {
     pub date: String,
     pub rows: Vec<TokenUsageHourRow>,
     pub models: Vec<String>,
+    pub novels: Vec<TokenUsageNovelRow>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TokenUsageModelRow {
+    pub model: String,
+    pub total_tokens: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TokenUsageMonth {
+    /// YYYY-MM
+    pub month: String,
+    pub total_tokens: i64,
+    pub models: Vec<TokenUsageModelRow>,
 }
 
 pub const GENRES: &[&str] = &[
-    "玄幻", "奇幻", "武侠", "仙侠", "都市", "言情", "古代言情", "现代言情", "豪门",
-    "重生", "穿越", "快穿", "系统", "无限流", "末日", "科幻", "游戏", "电竞", "灵异",
-    "悬疑", "推理", "历史", "军事", "竞技", "同人", "耽美", "百合", "情色", "种田",
-    "宫斗", "宅斗", "职场", "青春", "校园", "娱乐圈", "美食", "治愈", "暗黑", "克苏鲁",
+    "玄幻",
+    "奇幻",
+    "武侠",
+    "仙侠",
+    "都市",
+    "言情",
+    "古代言情",
+    "现代言情",
+    "豪门",
+    "重生",
+    "穿越",
+    "快穿",
+    "系统",
+    "无限流",
+    "末日",
+    "科幻",
+    "游戏",
+    "电竞",
+    "灵异",
+    "悬疑",
+    "推理",
+    "历史",
+    "军事",
+    "竞技",
+    "同人",
+    "耽美",
+    "百合",
+    "情色",
+    "种田",
+    "宫斗",
+    "宅斗",
+    "职场",
+    "青春",
+    "校园",
+    "娱乐圈",
+    "美食",
+    "治愈",
+    "暗黑",
+    "克苏鲁",
 ];
