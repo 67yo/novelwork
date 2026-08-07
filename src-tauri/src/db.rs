@@ -85,6 +85,10 @@ impl Db {
             "ALTER TABLE novels ADD COLUMN chapter_count INTEGER NOT NULL DEFAULT 20",
             [],
         );
+        let _ = conn.execute(
+            "ALTER TABLE knowledge_books ADD COLUMN archived INTEGER NOT NULL DEFAULT 0",
+            [],
+        );
         migrate_token_usage_novel_id(&conn)?;
         Ok(Self {
             conn: Mutex::new(conn),
@@ -139,6 +143,7 @@ impl Db {
             generate_model: get("generate_model", &d.generate_model),
             chat_model: get("chat_model", &d.chat_model),
             refine_model: get("refine_model", &d.refine_model),
+            knowledge_model: get("knowledge_model", &d.knowledge_model),
             ui_locale: get("ui_locale", &d.ui_locale),
         };
         // migrate legacy plaintext → encrypted on read
@@ -165,6 +170,7 @@ impl Db {
             ("generate_model", s.generate_model.clone()),
             ("chat_model", s.chat_model.clone()),
             ("refine_model", s.refine_model.clone()),
+            ("knowledge_model", s.knowledge_model.clone()),
             ("ui_locale", s.ui_locale.clone()),
         ];
         let conn = self.conn.lock().unwrap();
@@ -209,11 +215,13 @@ impl Db {
     pub fn list_knowledge(&self) -> Result<Vec<KnowledgeBook>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, title, author, genres, source_path, extract_prompt, created_at, chunk_count
+            "SELECT id, title, author, genres, source_path, extract_prompt, created_at, chunk_count,
+                    COALESCE(archived, 0)
              FROM knowledge_books ORDER BY created_at DESC",
         )?;
         let rows = stmt.query_map([], |row| {
             let genres: String = row.get(3)?;
+            let archived_i: i64 = row.get(8).unwrap_or(0);
             Ok(KnowledgeBook {
                 id: row.get(0)?,
                 title: row.get(1)?,
@@ -223,6 +231,82 @@ impl Db {
                 extract_prompt: row.get(5)?,
                 created_at: row.get(6)?,
                 chunk_count: row.get(7)?,
+                archived: archived_i != 0,
+            })
+        })?;
+        Ok(rows.filter_map(|r| r.ok()).collect())
+    }
+
+    pub fn get_knowledge(&self, id: &str) -> Result<Option<KnowledgeBook>> {
+        Ok(self
+            .list_knowledge()?
+            .into_iter()
+            .find(|b| b.id == id))
+    }
+
+    pub fn set_knowledge_archived(&self, id: &str, archived: bool) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let n = conn.execute(
+            "UPDATE knowledge_books SET archived=?1 WHERE id=?2",
+            params![archived as i64, id],
+        )?;
+        if n == 0 {
+            anyhow::bail!("knowledge book not found");
+        }
+        Ok(())
+    }
+
+    pub fn delete_knowledge(&self, id: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        // chunks CASCADE via FK
+        let n = conn.execute("DELETE FROM knowledge_books WHERE id=?1", params![id])?;
+        if n == 0 {
+            anyhow::bail!("knowledge book not found");
+        }
+        Ok(())
+    }
+
+    /// 从所有小说的 knowledge_ids 里摘掉已删书目。
+    pub fn unlink_knowledge_from_novels(&self, book_id: &str) -> Result<()> {
+        let novels = self.list_novels()?;
+        for mut n in novels {
+            let before = n.knowledge_ids.len();
+            n.knowledge_ids.retain(|id| id != book_id);
+            if n.knowledge_ids.len() != before {
+                self.upsert_novel(&n)?;
+            }
+        }
+        Ok(())
+    }
+
+    pub fn rename_knowledge(&self, id: &str, title: &str) -> Result<()> {
+        let title = title.trim();
+        if title.is_empty() {
+            anyhow::bail!("title empty");
+        }
+        let conn = self.conn.lock().unwrap();
+        let n = conn.execute(
+            "UPDATE knowledge_books SET title=?1 WHERE id=?2",
+            params![title, id],
+        )?;
+        if n == 0 {
+            anyhow::bail!("knowledge book not found");
+        }
+        Ok(())
+    }
+
+    pub fn list_knowledge_chunks(
+        &self,
+        book_id: &str,
+    ) -> Result<Vec<crate::models::KnowledgeChunk>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT idx, content FROM knowledge_chunks WHERE book_id=?1 ORDER BY idx ASC",
+        )?;
+        let rows = stmt.query_map(params![book_id], |row| {
+            Ok(crate::models::KnowledgeChunk {
+                idx: row.get::<_, i64>(0)? as u32,
+                content: row.get(1)?,
             })
         })?;
         Ok(rows.filter_map(|r| r.ok()).collect())

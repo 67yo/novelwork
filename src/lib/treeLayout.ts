@@ -68,6 +68,14 @@ export function applyAutoLayout(nodes: LayoutNode[], edges: LayoutEdge[]): void 
       n.position = { x: CHAR_X, y: TOP + i * CHAR_DY };
     });
 
+  const charCount = nodes.filter((n) => n.kind === "character").length;
+  nodes
+    .filter((n) => n.kind === "knowledge")
+    .sort(byY)
+    .forEach((n, i) => {
+      n.position = { x: CHAR_X, y: TOP + (charCount + i) * CHAR_DY };
+    });
+
   const plotHost = new Map<string, string>();
   for (const ch of chapters) {
     for (const pid of ch.linked_side_plot_ids ?? []) plotHost.set(pid, ch.id);

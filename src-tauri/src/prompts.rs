@@ -144,67 +144,108 @@ impl PromptLocale {
 
 pub fn knowledge_extract_system(loc: PromptLocale) -> &'static str {
     if loc.is_zh() {
-        "你是小说知识库分析助手。根据用户提取需求，用两行输出：书名：xxx\\n作者：xxx"
+        "你是小说知识库分析助手。根据目录与正文抽样，输出 Markdown，必须包含这些小节（用二级标题）：\n\
+         ## 书名\n## 作者\n## 章节大纲\n（按目录逐章：章名 + 一两句情节要点；目录很长时可合并卷/篇）\n\
+         ## 写作手法\n（叙事视角、节奏、文风措辞、人物塑造、章法结构、伏笔与转折习惯等，写具体可模仿的要点）\n\
+         不要写客套话。"
     } else {
-        "You are a novel knowledge-base analyst. From the user's extract request, output exactly two lines:\nTitle: xxx\nAuthor: xxx"
+        "You are a novel knowledge-base analyst. From the TOC and text samples, output Markdown with these H2 sections:\n\
+         ## Title\n## Author\n## Chapter outline\n(one short beat per chapter; merge volumes if the TOC is huge)\n\
+         ## Writing craft\n(POV, pacing, diction, characterization, structure, foreshadowing habits—concrete and imitable)\n\
+         No pleasantries."
     }
 }
 
-pub fn knowledge_extract_user(loc: PromptLocale, extract_prompt: &str, excerpt: &str) -> String {
+pub fn knowledge_extract_user(
+    loc: PromptLocale,
+    extract_prompt: &str,
+    title: &str,
+    author: &str,
+    toc: &str,
+    samples: &str,
+) -> String {
     if loc.is_zh() {
-        format!("提取需求：{extract_prompt}\n\n正文开头：\n{excerpt}")
+        format!(
+            "提取需求：{extract_prompt}\n\n已知书名：{title}\n已知作者：{author}\n\n目录：\n{toc}\n\n正文抽样：\n{samples}"
+        )
     } else {
-        format!("Extract focus: {extract_prompt}\n\nText opening:\n{excerpt}")
+        format!(
+            "Extract focus: {extract_prompt}\n\nKnown title: {title}\nKnown author: {author}\n\nTOC:\n{toc}\n\nSamples:\n{samples}"
+        )
     }
 }
 
-pub fn parse_title_author(loc: PromptLocale, line: &str) -> (Option<String>, Option<String>) {
+pub fn parse_title_author(_loc: PromptLocale, line: &str) -> (Option<String>, Option<String>) {
     let mut title = None;
     let mut author = None;
-    if loc.is_zh() {
-        if let Some(v) = line
-            .strip_prefix("书名：")
-            .or_else(|| line.strip_prefix("书名:"))
-        {
-            title = Some(v.trim().to_string());
-        }
-        if let Some(v) = line
-            .strip_prefix("作者：")
-            .or_else(|| line.strip_prefix("作者:"))
-        {
-            author = Some(v.trim().to_string());
-        }
-    }
-    if let Some(v) = line
-        .strip_prefix("Title:")
-        .or_else(|| line.strip_prefix("title:"))
-    {
-        title = Some(v.trim().to_string());
-    }
-    if let Some(v) = line
-        .strip_prefix("Author:")
-        .or_else(|| line.strip_prefix("author:"))
-    {
-        author = Some(v.trim().to_string());
-    }
-    // Always accept Chinese labels too (model may mix)
-    if title.is_none() {
-        if let Some(v) = line
-            .strip_prefix("书名：")
-            .or_else(|| line.strip_prefix("书名:"))
-        {
-            title = Some(v.trim().to_string());
-        }
-    }
-    if author.is_none() {
-        if let Some(v) = line
-            .strip_prefix("作者：")
-            .or_else(|| line.strip_prefix("作者:"))
-        {
-            author = Some(v.trim().to_string());
+    let t = line.trim();
+    for (keys, slot) in [
+        (
+            [
+                "## 书名",
+                "## Title",
+                "书名：",
+                "书名:",
+                "Title:",
+                "title:",
+            ]
+            .as_slice(),
+            &mut title,
+        ),
+        (
+            [
+                "## 作者",
+                "## Author",
+                "作者：",
+                "作者:",
+                "Author:",
+                "author:",
+            ]
+            .as_slice(),
+            &mut author,
+        ),
+    ] {
+        for k in keys {
+            if let Some(v) = t.strip_prefix(k) {
+                let v = v.trim().trim_start_matches(['：', ':']).trim();
+                if !v.is_empty() {
+                    *slot = Some(v.to_string());
+                }
+                break;
+            }
         }
     }
     (title, author)
+}
+
+/// Fill title/author from analysis markdown (heading may put value on the next line).
+pub fn apply_analysis_meta(analysis: &str, title: &mut String, author: &mut String) {
+    let mut expect_title = false;
+    let mut expect_author = false;
+    for line in analysis.lines() {
+        let trimmed = line.trim();
+        let (t, a) = parse_title_author(PromptLocale::ZhCn, trimmed);
+        if expect_title && !trimmed.is_empty() && !trimmed.starts_with('#') {
+            *title = trimmed.trim_start_matches(['*', '-', ' ']).to_string();
+            expect_title = false;
+        }
+        if expect_author && !trimmed.is_empty() && !trimmed.starts_with('#') {
+            *author = trimmed.trim_start_matches(['*', '-', ' ']).to_string();
+            expect_author = false;
+        }
+        if let Some(v) = t {
+            *title = v;
+            expect_title = false;
+        } else if trimmed == "## 书名" || trimmed == "## Title" {
+            expect_title = true;
+        }
+        if let Some(v) = a {
+            *author = v;
+            expect_author = false;
+        } else if trimmed == "## 作者" || trimmed == "## Author" {
+            expect_author = true;
+        }
+    }
 }
 
 pub fn create_novel_system(loc: PromptLocale, force: bool) -> String {
@@ -290,6 +331,9 @@ pub struct ChapterContextLabels {
     pub relations_header: &'static str,
     pub relation_unset: &'static str,
     pub plots_header: &'static str,
+    pub knowledge_header: &'static str,
+    pub no_knowledge: &'static str,
+    pub empty_knowledge: &'static str,
 }
 
 pub fn chapter_context_labels(loc: PromptLocale) -> ChapterContextLabels {
@@ -314,6 +358,9 @@ pub fn chapter_context_labels(loc: PromptLocale) -> ChapterContextLabels {
             relations_header: "【人物关系——互动与称呼须符合；含根节点人物之间及与本章人物的关系】",
             relation_unset: "（关系未标注）",
             plots_header: "【链接剧情卡——须融入本章或与之呼应】",
+            knowledge_header: "【知识卡——写作必须参考的特征与约束】",
+            no_knowledge: "（未链接知识卡）\n",
+            empty_knowledge: "（尚未提取特征，请仅按提取需求约束）",
         }
     } else {
         ChapterContextLabels {
@@ -336,6 +383,9 @@ pub fn chapter_context_labels(loc: PromptLocale) -> ChapterContextLabels {
             relations_header: "[Character relations — incl. among root cast and with chapter characters]",
             relation_unset: "(relation not set)",
             plots_header: "[Linked plot cards — weave in or echo in this chapter]",
+            knowledge_header: "[Knowledge cards — features/constraints writing MUST follow]",
+            no_knowledge: "(no knowledge cards linked)\n",
+            empty_knowledge: "(features not extracted yet — honor the extract request only)",
         }
     }
 }
@@ -356,8 +406,9 @@ pub fn generate_chapter_system(
              2）本章默认大纲（主线走向，不可丢弃关键情节点）；\n\
              3）本章已链接人物卡（性格、身份、行事风格、关系，言行不得出戏）；\n\
              4）本章已链接剧情卡（支线要点须自然融入或与本章呼应）。\n\
-             5）全书计划共 {chapter_count} 章：本章信息量与悬念投放须符合所处位置，勿按无限连载节奏注水。\n\
-             未链接到本章的设定不要硬塞；冲突时以本章大纲为主线，人物为行为约束，剧情为支线补强，简介定调。\n\
+             5）已链接知识卡（提取特征与知识约束必须遵守，勿与之矛盾）。\n\
+             6）全书计划共 {chapter_count} 章：本章信息量与悬念投放须符合所处位置，勿按无限连载节奏注水。\n\
+             未链接到本章的设定不要硬塞；冲突时以本章大纲为主线，人物为行为约束，剧情为支线补强，知识卡定技法/设定边界，简介定调。\n\
              小说：《{title}》\n简介：{synopsis}\n知识库策略：{knowledge_strategy}\n\
              【硬性篇幅】本章正文非空白字符数必须落在 {wmin}–{wmax} 字；若上下限相同，尽量贴近该目标（可略超，禁止明显偏短）。写不够请继续写到接近目标再结束。"
         )
@@ -368,8 +419,9 @@ pub fn generate_chapter_system(
              2) The default chapter outline (main arc — do not drop key beats);\n\
              3) Chapter-linked character cards (traits, role, style — stay in character);\n\
              4) Chapter-linked plot cards (side-plot beats must be woven in or echoed).\n\
-             5) Planned total: {chapter_count} chapters—pace info/suspense for this chapter’s place in that arc; do not pad as endless serial.\n\
-             Do not force unlinked lore. On conflicts: chapter outline drives the arc, characters constrain behavior, plots reinforce side threads, synopsis sets tone.\n\
+             5) Linked knowledge cards (extracted features/constraints — do not contradict).\n\
+             6) Planned total: {chapter_count} chapters—pace info/suspense for this chapter’s place in that arc; do not pad as endless serial.\n\
+             Do not force unlinked lore. On conflicts: chapter outline drives the arc, characters constrain behavior, plots reinforce side threads, knowledge cards bound craft/setting, synopsis sets tone.\n\
              Novel: “{title}”\nSynopsis: {synopsis}\nKnowledge strategy: {knowledge_strategy}\n\
              [Hard length] Non-whitespace character count MUST land in {wmin}–{wmax}. If min equals max, stay near that target (slightly over OK; clearly short is not)."
         )
@@ -387,11 +439,11 @@ pub fn generate_chapter_user(
 ) -> String {
     if loc.is_zh() {
         format!(
-            "{root_ref}\n\n{chapter_info}\n\n{cards}\n\n请生成本章正文（Markdown），篇幅目标 {wmin}–{wmax} 字（非空白）。写完后自检：简介与根节点人物、大纲要点、本章链接人物/剧情，以及字数是否达标。"
+             "{root_ref}\n\n{chapter_info}\n\n{cards}\n\n请生成本章正文（Markdown），篇幅目标 {wmin}–{wmax} 字（非空白）。写完后自检：简介与根节点人物、大纲要点、本章链接人物/剧情/知识卡，以及字数是否达标。"
         )
     } else {
         format!(
-            "{root_ref}\n\n{chapter_info}\n\n{cards}\n\nWrite this chapter’s body (Markdown), length target {wmin}–{wmax} non-whitespace characters. Then self-check synopsis/root characters, outline, linked cards, and length."
+            "{root_ref}\n\n{chapter_info}\n\n{cards}\n\nWrite this chapter’s body (Markdown), length target {wmin}–{wmax} non-whitespace characters. Then self-check synopsis/root characters, outline, linked character/plot/knowledge cards, and length."
         )
     }
 }
@@ -399,11 +451,11 @@ pub fn generate_chapter_user(
 pub fn generate_footer(loc: PromptLocale, node_id: &str, model: &str) -> String {
     if loc.is_zh() {
         format!(
-            "\n\n---\n> 节点约束校验摘要：已按大纲、人物卡与剧情卡生成。章节节点 `{node_id}`。模型：{model}。\n"
+             "\n\n---\n> 节点约束校验摘要：已按大纲、人物卡、剧情卡与知识卡生成。章节节点 `{node_id}`。模型：{model}。\n"
         )
     } else {
         format!(
-            "\n\n---\n> Constraint check: generated from outline, character cards, and plot cards. Node `{node_id}`. Model: {model}.\n"
+            "\n\n---\n> Constraint check: generated from outline, character, plot, and knowledge cards. Node `{node_id}`. Model: {model}.\n"
         )
     }
 }
@@ -435,7 +487,7 @@ pub fn refine_chapter_system(
              【精修目的】不大改剧情：在已生成正文的情节骨架上做小幅梳理与润色；必须结合「参考前 N 章」的完整正文来核对历史因果，再梳理当前章，使衔接合理、人物关系正确、结构正常、语句通顺；禁止另起炉灶或大幅改写主线。\n\
              【必须同时使用的材料】\n\
              1）参考前 {linked_n} 章的完整正文（全文已导入：标题+大纲+正文；只作历史依据来梳理当前章，禁止改写这些历史章）；\n\
-             2）当前章全部链接卡片（大纲、人物卡、剧情卡、人物关系等）；\n\
+             2）当前章全部链接卡片（大纲、人物卡、剧情卡、知识卡、人物关系等）；\n\
              3）当前章已生成的完整正文（精修对象：尽量保留原有情节与段落顺序，只改与历史矛盾、不合理、不通顺之处）。\n\
              【必须确保】当前章与上述历史章节内容衔接合理；无异常/突兀情节；无剧情错误与时间线矛盾；人物关系与卡面一致；结构清楚；语句通顺。\n\
              本章目标字数约 {wmin}–{wmax} 字；精修后篇幅仍须贴近该目标，篇幅波动应小。"
@@ -671,6 +723,30 @@ pub fn gen_chapter_plots_user(
              Existing characters:\n{chars}\n\n\
              Output the plots JSON."
         )
+    }
+}
+
+pub fn knowledge_card_extract_system(loc: PromptLocale) -> &'static str {
+    if loc.is_zh() {
+        "你是小说写作知识提炼助手。根据用户的提取需求与知识库抽样，提炼出「写作时必须遵守」的主要特征。\n\
+         输出简洁 Markdown 要点（可含：文风技法、叙事节奏、人物塑造习惯、世界观/设定边界、禁忌与可模仿句式等）。\n\
+         不要复述大段原文，不要客套。"
+    } else {
+        "You distill novel-writing knowledge. From the user’s extract request and knowledge-base samples, list features writing MUST obey.\n\
+         Concise Markdown bullets (craft, pacing, characterization habits, setting bounds, taboos, imitable patterns).\n\
+         Do not paste long source text. No pleasantries."
+    }
+}
+
+pub fn knowledge_card_extract_user(
+    loc: PromptLocale,
+    extract_prompt: &str,
+    corpus: &str,
+) -> String {
+    if loc.is_zh() {
+        format!("提取需求：\n{extract_prompt}\n\n知识库抽样：\n{corpus}")
+    } else {
+        format!("Extract request:\n{extract_prompt}\n\nKnowledge samples:\n{corpus}")
     }
 }
 

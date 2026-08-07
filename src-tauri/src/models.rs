@@ -14,6 +14,7 @@ pub struct AppSettings {
     pub generate_model: String,
     pub chat_model: String,
     pub refine_model: String,
+    pub knowledge_model: String,
     /// UI 语言：system | en | zh-CN | zh-TW | ja | de | fr
     pub ui_locale: String,
 }
@@ -77,6 +78,7 @@ impl Default for AppSettings {
             generate_model: "deepseek-v4-flash".into(),
             chat_model: "deepseek-v4-flash".into(),
             refine_model: "deepseek-reasoner".into(),
+            knowledge_model: "deepseek-v4-flash".into(),
             ui_locale: "system".into(),
         }
     }
@@ -100,6 +102,7 @@ pub struct SettingsView {
     pub generate_model: String,
     pub chat_model: String,
     pub refine_model: String,
+    pub knowledge_model: String,
     pub model_catalog: ModelCatalog,
     pub ui_locale: String,
 }
@@ -129,6 +132,8 @@ pub struct SaveSettingsInput {
     pub chat_model: Option<String>,
     #[serde(default, alias = "refine_model")]
     pub refine_model: Option<String>,
+    #[serde(default, alias = "knowledge_model")]
+    pub knowledge_model: Option<String>,
     #[serde(default, alias = "ui_locale")]
     pub ui_locale: Option<String>,
 }
@@ -143,6 +148,14 @@ pub struct KnowledgeBook {
     pub extract_prompt: String,
     pub created_at: String,
     pub chunk_count: i64,
+    #[serde(default)]
+    pub archived: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KnowledgeChunk {
+    pub idx: u32,
+    pub content: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -219,6 +232,7 @@ pub enum NodeKind {
     Chapter,
     Character,
     SidePlot,
+    Knowledge,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -228,8 +242,14 @@ pub struct TreeNode {
     pub label: String,
     pub outline: String,
     pub character: Option<CharacterCard>,
+    /// 知识卡载荷（仅 kind=knowledge）
+    #[serde(default)]
+    pub knowledge: Option<KnowledgeCardPayload>,
     pub linked_character_ids: Vec<String>,
     pub linked_side_plot_ids: Vec<String>,
+    /// 本章/根节点挂载的知识卡 id
+    #[serde(default)]
+    pub linked_knowledge_ids: Vec<String>,
     pub position: NodePosition,
     /// 本章已生成正文的字数（非空白字符）
     #[serde(default)]
@@ -259,6 +279,18 @@ pub struct CharacterCard {
     pub gender: String,
     pub style: String,
     pub alignment: String,
+}
+
+/// 树上的知识卡：选中若干知识库 + 提取需求 → AI 写出可参考特征。
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct KnowledgeCardPayload {
+    #[serde(default)]
+    pub book_ids: Vec<String>,
+    #[serde(default)]
+    pub extract_prompt: String,
+    /// AI 提取后的主要特征（写作时注入）
+    #[serde(default)]
+    pub extracted: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

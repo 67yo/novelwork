@@ -26,6 +26,7 @@ export type SettingsView = {
   generate_model: string;
   chat_model: string;
   refine_model: string;
+  knowledge_model: string;
   model_catalog: ModelCatalog;
   ui_locale: string;
 };
@@ -39,6 +40,12 @@ export type KnowledgeBook = {
   extract_prompt: string;
   created_at: string;
   chunk_count: number;
+  archived: boolean;
+};
+
+export type KnowledgeChunk = {
+  idx: number;
+  content: string;
 };
 
 export type NovelProject = {
@@ -65,14 +72,22 @@ export type CharacterCard = {
   alignment: string;
 };
 
+export type KnowledgeCardPayload = {
+  book_ids: string[];
+  extract_prompt: string;
+  extracted: string;
+};
+
 export type TreeNode = {
   id: string;
-  kind: "novel" | "chapter" | "character" | "side_plot";
+  kind: "novel" | "chapter" | "character" | "side_plot" | "knowledge";
   label: string;
   outline: string;
   character: CharacterCard | null;
+  knowledge: KnowledgeCardPayload | null;
   linked_character_ids: string[];
   linked_side_plot_ids: string[];
+  linked_knowledge_ids: string[];
   position: { x: number; y: number };
   word_count: number;
   word_count_min: number;
@@ -160,6 +175,11 @@ export type NovelCreateChatResult = {
   novel: NovelProject | null;
 };
 
+/** 知识卡：按所选知识库与提取需求提炼特征并写回树节点 */
+export function extractKnowledgeCard(novelId: string, nodeId: string) {
+  return invoke<NovelTree>("extract_knowledge_card", { novelId, nodeId });
+}
+
 export const api = {
   getSettings: () => invoke<SettingsView>("get_settings"),
   refreshModelCatalog: () => invoke<ModelCatalog>("refresh_model_catalog"),
@@ -175,6 +195,7 @@ export const api = {
     generate_model?: string | null;
     chat_model?: string | null;
     refine_model?: string | null;
+    knowledge_model?: string | null;
     ui_locale?: string | null;
   }) =>
     invoke<SettingsView>("save_settings", {
@@ -190,11 +211,19 @@ export const api = {
         generateModel: input.generate_model ?? null,
         chatModel: input.chat_model ?? null,
         refineModel: input.refine_model ?? null,
+        knowledgeModel: input.knowledge_model ?? null,
         uiLocale: input.ui_locale ?? null,
       },
     }),
   listGenres: () => invoke<string[]>("list_genres"),
   listKnowledge: () => invoke<KnowledgeBook[]>("list_knowledge_bases"),
+  renameKnowledge: (id: string, title: string) =>
+    invoke<void>("rename_knowledge", { id, title }),
+  listKnowledgeChunks: (bookId: string) =>
+    invoke<KnowledgeChunk[]>("list_knowledge_chunks", { bookId }),
+  archiveKnowledge: (id: string, archived: boolean) =>
+    invoke<KnowledgeBook>("archive_knowledge", { id, archived }),
+  deleteKnowledge: (id: string) => invoke<void>("delete_knowledge", { id }),
   importKnowledge: (path: string, extract_prompt: string, genres: string[]) =>
     invoke<KnowledgeBook>("import_knowledge_text", { path, extractPrompt: extract_prompt, genres }),
   listNovels: () => invoke<NovelProject[]>("list_novels"),
@@ -222,6 +251,8 @@ export const api = {
     }),
   getTree: (novelId: string) => invoke<NovelTree>("get_tree", { novelId }),
   saveTree: (tree: NovelTree) => invoke<void>("save_tree", { tree }),
+  deleteTreeCard: (novelId: string, nodeId: string) =>
+    invoke<NovelTree>("delete_tree_card", { novelId, nodeId }),
   getChapter: (novelId: string, nodeId: string) =>
     invoke<string>("get_chapter", { novelId, nodeId }),
   generateChapter: (novelId: string, nodeId: string) =>
@@ -235,6 +266,7 @@ export const api = {
   chatCancel: (novelId: string) => invoke<void>("chat_cancel", { novelId }),
   cardChatSend: (novelId: string, nodeId: string, content: string) =>
     invoke<CardChatResult>("card_chat_send", { novelId, nodeId, content }),
+  extractKnowledgeCard,
   pickCover: () => invoke<string | null>("pick_cover"),
   setCover: (novelId: string, sourcePath: string) =>
     invoke<NovelProject>("set_cover", { novelId, sourcePath }),

@@ -17,7 +17,9 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import {
   api,
+  extractKnowledgeCard,
   type ChatMessage,
+  type KnowledgeBook,
   type NovelProject,
   type NovelTree,
   type TreeEdge,
@@ -38,11 +40,18 @@ import { applyAutoLayout } from "@/lib/treeLayout";
 
 const props = defineProps<{ id: string }>();
 const { t, locale } = useI18n();
-const { fitView } = useVueFlow({ id: "nove-workspace" });
+const { fitView, setNodes, setEdges, removeNodes, findNode } = useVueFlow({
+  id: "nove-workspace",
+});
+
+/** 禁用 Vue Flow 自带 Delete（只改画布不落盘）；改由 onCanvasKeydown 走后端删除。 */
+const flowDeleteKeyCode = null as null;
 
 const novel = ref<NovelProject | null>(null);
 const tree = ref<NovelTree | null>(null);
 const selected = ref<TreeNode | null>(null);
+const knowledgeBooks = ref<KnowledgeBook[]>([]);
+const knowledgeExtractBusy = ref(false);
 const chapterMd = ref("");
 const messages = ref<ChatMessage[]>([]);
 const chatInput = ref("");
@@ -72,42 +81,80 @@ const coverUrl = computed(() =>
   novel.value?.cover_path ? convertFileSrc(novel.value.cover_path) : "",
 );
 
+function cloneTreeNodeData(n: TreeNode): TreeNode {
+  return {
+    ...n,
+    character: n.character ? { ...n.character } : null,
+    knowledge: n.knowledge
+      ? {
+          ...n.knowledge,
+          book_ids: [...(n.knowledge.book_ids ?? [])],
+        }
+      : null,
+    linked_character_ids: [...(n.linked_character_ids ?? [])],
+    linked_side_plot_ids: [...(n.linked_side_plot_ids ?? [])],
+    linked_knowledge_ids: [...(n.linked_knowledge_ids ?? [])],
+    position: { ...n.position },
+  };
+}
+
+/** 丢掉指向已删节点的边与 linked_*，避免幽灵关联。 */
+function pruneTreeRefs(tr: NovelTree) {
+  const alive = new Set(tr.nodes.map((n) => n.id));
+  tr.edges = tr.edges.filter((e) => alive.has(e.source) && alive.has(e.target));
+  for (const n of tr.nodes) {
+    n.linked_character_ids = (n.linked_character_ids ?? []).filter((id) => alive.has(id));
+    n.linked_side_plot_ids = (n.linked_side_plot_ids ?? []).filter((id) => alive.has(id));
+    n.linked_knowledge_ids = (n.linked_knowledge_ids ?? []).filter((id) => alive.has(id));
+  }
+}
+
 function syncFlowFromTree() {
   const tr = tree.value;
   if (!tr) {
     flowNodes.value = [];
     flowEdges.value = [];
+    setNodes([]);
+    setEdges([]);
     return;
   }
-  flowNodes.value = tr.nodes.map((n) => {
+  const nodes = tr.nodes.map((n) => {
+    const base = cloneTreeNodeData(n);
     const data =
       n.kind === "novel" && novel.value
         ? {
-            ...n,
-            word_count_min: n.word_count_min || novel.value.word_count_min,
-            word_count_max: n.word_count_max || novel.value.word_count_max,
-            chapter_count: n.chapter_count || novel.value.chapter_count,
+            ...base,
+            word_count_min: base.word_count_min || novel.value.word_count_min,
+            word_count_max: base.word_count_max || novel.value.word_count_max,
+            chapter_count: base.chapter_count || novel.value.chapter_count,
           }
-        : n;
+        : base;
     return {
       id: n.id,
-      type: "story",
+      type: "story" as const,
       position: { ...n.position },
       data,
       selected: n.id === selected.value?.id,
+      // 禁止 Vue Flow 内置删除；统一走 deleteTreeCard
+      deletable: false,
     };
   });
-  flowEdges.value = tr.edges.map((e) => ({
+  const edges = tr.edges.map((e) => ({
     id: e.id,
     source: e.source,
     target: e.target,
     sourceHandle: e.source_handle ?? edgeDefaultSource(e.kind),
     targetHandle: e.target_handle ?? edgeDefaultTarget(e.kind),
-    animated: e.kind === "side_plot",
+    animated: e.kind === "side_plot" || e.kind === "knowledge",
     updatable: true,
     label: edgeDisplayLabel(e),
     style: edgeStyle(e.kind),
   }));
+  // 用 setNodes/setEdges 全量替换，避免 v-model 合并导致已删节点「复活」
+  setNodes(nodes);
+  setEdges(edges);
+  flowNodes.value = nodes;
+  flowEdges.value = edges;
 }
 
 function nodeKind(id: string) {
@@ -122,24 +169,28 @@ function edgeDisplayLabel(e: TreeEdge) {
   if (isCharCharEdge(e)) return e.label?.trim() || t("workspace.relationHint");
   if (e.kind === "character") return t("workspace.role");
   if (e.kind === "side_plot") return t("workspace.plot");
+  if (e.kind === "knowledge") return t("workspace.knowledgeCard");
   return "";
 }
 
 function edgeDefaultSource(kind: string) {
   if (kind === "character") return "left";
   if (kind === "side_plot") return "right";
+  if (kind === "knowledge") return "left";
   return "bottom";
 }
 
 function edgeDefaultTarget(kind: string) {
   if (kind === "character") return "right";
   if (kind === "side_plot") return "left";
+  if (kind === "knowledge") return "right";
   return "top";
 }
 
 function edgeStyle(kind: string): Record<string, string> {
   if (kind === "character") return { stroke: "#d97706" };
   if (kind === "side_plot") return { stroke: "#0284c7" };
+  if (kind === "knowledge") return { stroke: "#0f766e" };
   return { stroke: "#3d6b4f" };
 }
 
@@ -150,8 +201,10 @@ function kindFromNodes(sourceId: string, targetId: string): string {
   if (a === "character" && b === "character") return "character";
   const hasChar = a === "character" || b === "character";
   const hasPlot = a === "side_plot" || b === "side_plot";
+  const hasKnowledge = a === "knowledge" || b === "knowledge";
   const hasChapter = a === "chapter" || b === "chapter";
   const hasNovel = a === "novel" || b === "novel";
+  if (hasKnowledge && (hasChapter || hasNovel)) return "knowledge";
   if (hasChar && (hasPlot || hasChapter || hasNovel)) return "character";
   if (hasPlot && (hasChapter || hasNovel)) return "side_plot";
   return "chapter";
@@ -160,6 +213,7 @@ function kindFromNodes(sourceId: string, targetId: string): string {
 async function loadAll() {
   novel.value = await api.getNovel(props.id);
   tree.value = await api.getTree(props.id);
+  knowledgeBooks.value = (await api.listKnowledge()).filter((b) => !b.archived);
   syncFlowFromTree();
   messages.value = await api.listChat(props.id);
   const root = tree.value.nodes.find((n) => n.kind === "novel");
@@ -211,6 +265,11 @@ function unlinkEdgeRefs(e: TreeEdge) {
     const host = src.kind === "side_plot" ? tgt : src;
     if (plotId) host.linked_side_plot_ids = host.linked_side_plot_ids.filter((id) => id !== plotId);
   }
+  if (e.kind === "knowledge") {
+    const kid = src.kind === "knowledge" ? src.id : tgt.kind === "knowledge" ? tgt.id : null;
+    const host = src.kind === "knowledge" ? tgt : src;
+    if (kid) host.linked_knowledge_ids = (host.linked_knowledge_ids ?? []).filter((id) => id !== kid);
+  }
 }
 
 function linkEdgeRefs(e: TreeEdge) {
@@ -233,6 +292,14 @@ function linkEdgeRefs(e: TreeEdge) {
       host.linked_side_plot_ids.push(plot.id);
     }
   }
+  if (e.kind === "knowledge") {
+    const k = src.kind === "knowledge" ? src : tgt.kind === "knowledge" ? tgt : null;
+    const host = src.kind === "knowledge" ? tgt : src;
+    host.linked_knowledge_ids = host.linked_knowledge_ids ?? [];
+    if (k && !host.linked_knowledge_ids.includes(k.id)) {
+      host.linked_knowledge_ids.push(k.id);
+    }
+  }
 }
 
 function linkedNotice(kind: string) {
@@ -242,7 +309,9 @@ function linkedNotice(kind: string) {
         ? t("workspace.role")
         : kind === "side_plot"
           ? t("workspace.plotCard")
-          : t("workspace.plot"),
+          : kind === "knowledge"
+            ? t("workspace.knowledgeCard")
+            : t("workspace.plot"),
   });
 }
 
@@ -278,7 +347,7 @@ async function saveRelation() {
     return;
   }
   te.label = relationDraft.value.trim();
-  await api.saveTree(tree.value);
+  tree.value = await persistTree(tree.value);
   syncFlowFromTree();
   closeRelationEditor();
 }
@@ -300,7 +369,7 @@ async function onConnect(conn: Connection) {
   }
   tree.value.edges.push(edge);
   linkEdgeRefs(edge);
-  await api.saveTree(tree.value);
+  tree.value = await persistTree(tree.value);
   syncFlowFromTree();
   if (isCharCharEdge(edge)) openRelationEditor(edge);
   else linkedNotice(kind);
@@ -319,7 +388,7 @@ async function onEdgeUpdate(ev: EdgeUpdateEvent) {
   te.kind = kind;
   if (!isCharCharEdge(te)) te.label = "";
   linkEdgeRefs(te);
-  await api.saveTree(tree.value);
+  tree.value = await persistTree(tree.value);
   syncFlowFromTree();
   linkedNotice(kind);
 }
@@ -338,7 +407,7 @@ async function onEdgeDoubleClick(ev: { edge: { id: string } }) {
   if (relationEdgeId.value === te.id) closeRelationEditor();
   unlinkEdgeRefs(te);
   tree.value.edges = tree.value.edges.filter((e) => e.id !== te.id);
-  await api.saveTree(tree.value);
+  tree.value = await persistTree(tree.value);
   syncFlowFromTree();
   notice.value = t("workspace.edgeRemoved");
 }
@@ -567,16 +636,38 @@ function emptyCharacter(): NonNullable<TreeNode["character"]> {
   return { role: "", personality: "", motto: "", gender: "", style: "", alignment: "" };
 }
 
+function emptyKnowledge(): NonNullable<TreeNode["knowledge"]> {
+  return { book_ids: [], extract_prompt: "", extracted: "" };
+}
+
+function plainTree(tr: NovelTree): NovelTree {
+  return JSON.parse(JSON.stringify(tr)) as NovelTree;
+}
+
+async function persistTree(tr: NovelTree) {
+  const plain = plainTree(tr);
+  // 保证写入路径与当前小说一致
+  plain.novel_id = props.id;
+  await api.saveTree(plain);
+  return plain;
+}
+
 async function autoLayout() {
   if (!tree.value || autoAll.value) return;
+  // 从 Vue Flow 内部状态取最新坐标（单向 :nodes 时 flowNodes 可能是旧的）
+  for (const n of tree.value.nodes) {
+    const gn = findNode(n.id);
+    if (gn) n.position = { x: gn.position.x, y: gn.position.y };
+  }
+  pruneTreeRefs(tree.value);
   applyAutoLayout(tree.value.nodes, tree.value.edges);
-  await api.saveTree(tree.value);
+  tree.value = await persistTree(tree.value);
   syncFlowFromTree();
   await nextTick();
   void fitView({ padding: 0.18, duration: 280 });
 }
 
-async function addCard(kind: "chapter" | "character" | "side_plot") {
+async function addCard(kind: "chapter" | "character" | "side_plot" | "knowledge") {
   if (!tree.value) return;
   const root = tree.value.nodes.find((n) => n.kind === "novel");
   if (!root) return;
@@ -596,8 +687,10 @@ async function addCard(kind: "chapter" | "character" | "side_plot") {
       label: t("workspace.newChapter"),
       outline: "",
       character: null,
+      knowledge: null,
       linked_character_ids: [],
       linked_side_plot_ids: [],
+      linked_knowledge_ids: [],
       position: { x: root.position.x, y: maxY + 140 },
       word_count: 0,
       word_count_min: 0,
@@ -620,8 +713,10 @@ async function addCard(kind: "chapter" | "character" | "side_plot") {
       label: t("workspace.newCharacter"),
       outline: "",
       character: emptyCharacter(),
+      knowledge: null,
       linked_character_ids: [],
       linked_side_plot_ids: [],
+      linked_knowledge_ids: [],
       position: { x: 40, y: 80 + chars * 140 },
       word_count: 0,
       word_count_min: 0,
@@ -637,6 +732,35 @@ async function addCard(kind: "chapter" | "character" | "side_plot") {
       source_handle: "left",
       target_handle: "right",
     };
+  } else if (kind === "knowledge") {
+    const kn = tree.value.nodes.filter((n) => n.kind === "knowledge").length;
+    const chars = tree.value.nodes.filter((n) => n.kind === "character").length;
+    node = {
+      id,
+      kind,
+      label: t("workspace.newKnowledge"),
+      outline: "",
+      character: null,
+      knowledge: emptyKnowledge(),
+      linked_character_ids: [],
+      linked_side_plot_ids: [],
+      linked_knowledge_ids: [],
+      position: { x: 40, y: 80 + (chars + kn) * 140 },
+      word_count: 0,
+      word_count_min: 0,
+      word_count_max: 0,
+      chapter_count: 0,
+    };
+    root.linked_knowledge_ids = root.linked_knowledge_ids ?? [];
+    root.linked_knowledge_ids.push(id);
+    edge = {
+      id: `e-${root.id}-${id}`,
+      source: root.id,
+      target: id,
+      kind: "knowledge",
+      source_handle: "left",
+      target_handle: "right",
+    };
   } else {
     const plots = tree.value.nodes.filter((n) => n.kind === "side_plot").length;
     node = {
@@ -645,8 +769,10 @@ async function addCard(kind: "chapter" | "character" | "side_plot") {
       label: t("workspace.newPlot"),
       outline: "",
       character: null,
+      knowledge: null,
       linked_character_ids: [],
       linked_side_plot_ids: [],
+      linked_knowledge_ids: [],
       position: { x: root.position.x + 280, y: 80 + plots * 140 },
       word_count: 0,
       word_count_min: 0,
@@ -666,7 +792,7 @@ async function addCard(kind: "chapter" | "character" | "side_plot") {
 
   tree.value.nodes.push(node);
   tree.value.edges.push(edge);
-  await api.saveTree(tree.value);
+  tree.value = await persistTree(tree.value);
   syncFlowFromTree();
   await selectNode(node);
 }
@@ -766,6 +892,113 @@ async function onDropCover(ev: DragEvent) {
 
 const selectedIsChapter = computed(() => selected.value?.kind === "chapter");
 const selectedIsCharacter = computed(() => selected.value?.kind === "character");
+const selectedIsKnowledge = computed(() => selected.value?.kind === "knowledge");
+const canDeleteSelectedCard = computed(() => {
+  const k = selected.value?.kind;
+  return !!k && k !== "novel";
+});
+
+/** 删除非根节点：后端原子删节点+边+linked_*，再刷新画布。根节点无删除入口。 */
+async function deleteSelectedCard() {
+  if (!tree.value || !selected.value || selected.value.kind === "novel" || autoAll.value) return;
+  if (!canDeleteSelectedCard.value) return;
+  const id = selected.value.id;
+  const title = selected.value.label || id;
+  if (!window.confirm(t("workspace.deleteCardConfirm", { title }))) return;
+
+  try {
+    tree.value = await api.deleteTreeCard(props.id, id);
+    pruneTreeRefs(tree.value);
+    removeNodes([id], true);
+    syncFlowFromTree();
+
+    if (cardChats.value[id]) {
+      const next = { ...cardChats.value };
+      delete next[id];
+      cardChats.value = next;
+    }
+    if (refineBeforeByNode.value[id] !== undefined) {
+      const next = { ...refineBeforeByNode.value };
+      delete next[id];
+      refineBeforeByNode.value = next;
+    }
+
+    const root = tree.value.nodes.find((n) => n.kind === "novel");
+    if (root) await selectNode(root);
+    else selected.value = null;
+    notice.value = t("workspace.cardDeleted");
+  } catch (e) {
+    notice.value = String(e);
+  }
+}
+
+/** Delete/Backspace：根节点忽略；其他节点走落盘删除。 */
+function onCanvasKeydown(ev: KeyboardEvent) {
+  if (ev.key !== "Delete" && ev.key !== "Backspace") return;
+  const el = ev.target as HTMLElement | null;
+  if (el) {
+    const tag = el.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || el.isContentEditable) return;
+  }
+  // 根节点：明确不响应
+  if (!selected.value || selected.value.kind === "novel") {
+    ev.preventDefault();
+    ev.stopPropagation();
+    return;
+  }
+  if (!canDeleteSelectedCard.value || autoAll.value) return;
+  ev.preventDefault();
+  ev.stopPropagation();
+  void deleteSelectedCard();
+}
+
+const knowledgeDraft = computed(() => selected.value?.knowledge ?? emptyKnowledge());
+
+function ensureKnowledgePayload() {
+  if (!selected.value || selected.value.kind !== "knowledge") return null;
+  if (!selected.value.knowledge) selected.value.knowledge = emptyKnowledge();
+  return selected.value.knowledge;
+}
+
+function toggleKnowledgeBook(bookId: string) {
+  const k = ensureKnowledgePayload();
+  if (!k) return;
+  if (k.book_ids.includes(bookId)) {
+    k.book_ids = k.book_ids.filter((id) => id !== bookId);
+  } else {
+    k.book_ids = [...k.book_ids, bookId];
+  }
+  void persistSelectedKnowledge();
+}
+
+async function persistSelectedKnowledge() {
+  if (!tree.value || !selected.value || selected.value.kind !== "knowledge") return;
+  const n = tree.value.nodes.find((x) => x.id === selected.value!.id);
+  if (n) {
+    n.knowledge = selected.value.knowledge;
+    n.label = selected.value.label;
+  }
+  tree.value = await persistTree(tree.value);
+  syncFlowFromTree();
+}
+
+async function runExtractKnowledge() {
+  if (!selected.value || selected.value.kind !== "knowledge") return;
+  await persistSelectedKnowledge();
+  knowledgeExtractBusy.value = true;
+  notice.value = "";
+  try {
+    tree.value = await extractKnowledgeCard(props.id, selected.value.id);
+    const updated = tree.value.nodes.find((n) => n.id === selected.value!.id);
+    if (updated) selected.value = updated;
+    syncFlowFromTree();
+    notice.value = t("workspace.knowledgeExtracted");
+  } catch (e) {
+    notice.value = String(e);
+  } finally {
+    knowledgeExtractBusy.value = false;
+  }
+}
 
 const hasRefineDiff = computed(() => {
   const id = selected.value?.id;
@@ -979,7 +1212,7 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
   const n = tree.value.nodes.find((x) => x.id === ev.node.id);
   if (!n) return;
   n.position = { x: ev.node.position.x, y: ev.node.position.y };
-  await api.saveTree(tree.value);
+  tree.value = await persistTree(tree.value);
 }
 </script>
 
@@ -1009,9 +1242,21 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
       <!-- 左：章节预览 -->
       <div class="flex min-h-0 flex-col border-r" :style="{ width: leftW + 'px', flex: '0 0 auto' }">
         <div class="shrink-0 space-y-2 border-b p-3">
-          <div class="text-sm font-medium">{{ selected?.label ?? t("workspace.selectNode") }}</div>
+          <div class="flex items-start justify-between gap-2">
+            <div class="text-sm font-medium">{{ selected?.label ?? t("workspace.selectNode") }}</div>
+            <Button
+              v-if="canDeleteSelectedCard"
+              size="sm"
+              variant="destructive"
+              class="h-7 shrink-0 text-xs"
+              :disabled="autoAll"
+              @click="deleteSelectedCard"
+            >
+              {{ t("workspace.deleteCard") }}
+            </Button>
+          </div>
           <p
-            v-if="selected && !selectedIsCharacter && selected.outline"
+            v-if="selected && !selectedIsCharacter && !selectedIsKnowledge && selected.outline"
             class="max-h-24 overflow-y-auto whitespace-pre-wrap text-xs text-muted-foreground"
           >
             {{ selected.outline }}
@@ -1095,6 +1340,56 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
             :name="selected?.label ?? ''"
             :card="selected?.character ?? emptyCharacter()"
           />
+          <div v-else-if="selectedIsKnowledge" class="space-y-4 text-sm">
+            <div>
+              <label class="mb-1 block text-xs text-muted-foreground">{{ t("workspace.knowledgeLabel") }}</label>
+              <Input
+                :model-value="selected?.label ?? ''"
+                class="h-8"
+                @update:model-value="(v) => { if (selected) selected.label = String(v); }"
+                @change="persistSelectedKnowledge"
+              />
+            </div>
+            <div>
+              <label class="mb-1 block text-xs text-muted-foreground">{{ t("workspace.knowledgePickBooks") }}</label>
+              <p v-if="!knowledgeBooks.length" class="text-xs text-muted-foreground">{{ t("workspace.knowledgeNoBooks") }}</p>
+              <div v-else class="flex max-h-36 flex-wrap gap-1.5 overflow-y-auto">
+                <button
+                  v-for="b in knowledgeBooks"
+                  :key="b.id"
+                  type="button"
+                  class="rounded-md border px-2 py-1 text-xs"
+                  :class="knowledgeDraft.book_ids.includes(b.id) ? 'border-teal-700 bg-teal-50 text-teal-900' : 'border-border'"
+                  @click="toggleKnowledgeBook(b.id)"
+                >
+                  {{ b.title }}
+                </button>
+              </div>
+            </div>
+            <div>
+              <label class="mb-1 block text-xs text-muted-foreground">{{ t("workspace.knowledgeExtractPrompt") }}</label>
+              <Textarea
+                :model-value="knowledgeDraft.extract_prompt"
+                rows="4"
+                :placeholder="t('workspace.knowledgeExtractPh')"
+                @update:model-value="(v) => { const k = ensureKnowledgePayload(); if (k) k.extract_prompt = String(v); }"
+                @change="persistSelectedKnowledge"
+              />
+            </div>
+            <Button
+              size="sm"
+              :disabled="knowledgeExtractBusy || !knowledgeDraft.book_ids.length || !knowledgeDraft.extract_prompt.trim()"
+              @click="runExtractKnowledge"
+            >
+              <Loader2 v-if="knowledgeExtractBusy" class="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              {{ knowledgeExtractBusy ? t("workspace.knowledgeExtracting") : t("workspace.knowledgeExtract") }}
+            </Button>
+            <div v-if="knowledgeDraft.extracted" class="rounded-md border bg-muted/30 p-3">
+              <div class="mb-1 text-[10px] uppercase text-muted-foreground">{{ t("workspace.knowledgeFeatures") }}</div>
+              <pre class="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed">{{ knowledgeDraft.extracted }}</pre>
+            </div>
+            <p v-else class="text-xs text-muted-foreground">{{ t("workspace.knowledgeHint") }}</p>
+          </div>
           <template v-else-if="chapterMd">
             <div
               v-if="selectedIsChapter && hasRefineDiff"
@@ -1168,7 +1463,11 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
       />
 
       <!-- 中：树图（缩放 / 拖动画布） -->
-      <div class="relative min-h-0 min-w-0 flex-1">
+      <div
+        class="relative min-h-0 min-w-0 flex-1"
+        tabindex="0"
+        @keydown="onCanvasKeydown"
+      >
         <div class="absolute left-2 top-2 z-10 flex flex-wrap items-center gap-1">
           <Button size="sm" variant="secondary" class="h-7 text-xs" :disabled="autoAll" @click="addCard('chapter')">
             + {{ t("workspace.addChapter") }}
@@ -1178,6 +1477,9 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
           </Button>
           <Button size="sm" variant="secondary" class="h-7 text-xs" :disabled="autoAll" @click="addCard('side_plot')">
             + {{ t("workspace.addPlot") }}
+          </Button>
+          <Button size="sm" variant="secondary" class="h-7 text-xs" :disabled="autoAll" @click="addCard('knowledge')">
+            + {{ t("workspace.addKnowledge") }}
           </Button>
           <Button
             size="sm"
@@ -1233,11 +1535,12 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
         </div>
         <VueFlow
           id="nove-workspace"
-          v-model:nodes="flowNodes"
-          v-model:edges="flowEdges"
+          :nodes="flowNodes"
+          :edges="flowEdges"
           :node-types="nodeTypes"
           :connection-mode="ConnectionMode.Loose"
           :edges-updatable="true"
+          :delete-key-code="flowDeleteKeyCode"
           :default-viewport="{ x: 40, y: 20, zoom: 0.85 }"
           :min-zoom="0.15"
           :max-zoom="2.5"

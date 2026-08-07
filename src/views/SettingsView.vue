@@ -21,6 +21,7 @@ const createModel = ref("deepseek-v4-flash");
 const generateModel = ref("deepseek-v4-flash");
 const chatModel = ref("deepseek-v4-flash");
 const refineModel = ref("deepseek-reasoner");
+const knowledgeModel = ref("deepseek-v4-flash");
 const show = ref<Record<string, boolean>>({});
 const msg = ref("");
 const err = ref("");
@@ -53,6 +54,7 @@ async function load() {
   generateModel.value = s.generate_model || "deepseek-v4-flash";
   chatModel.value = s.chat_model || "deepseek-v4-flash";
   refineModel.value = s.refine_model || "deepseek-reasoner";
+  knowledgeModel.value = s.knowledge_model || "deepseek-v4-flash";
   uiLocale.value = (s.ui_locale || "system") as LocalePreference;
   setLocalePreference(uiLocale.value);
   deepseekKey.value = "";
@@ -104,6 +106,7 @@ async function save() {
       generate_model: generateModel.value.trim(),
       chat_model: chatModel.value.trim(),
       refine_model: refineModel.value.trim(),
+      knowledge_model: knowledgeModel.value.trim(),
       ui_locale: uiLocale.value,
     });
     settings.value = s;
@@ -237,6 +240,16 @@ const catalogHint = computed(() => {
             <option v-for="m in optionsFor(refineModel)" :key="m.id" :value="m.id">{{ m.label }}</option>
           </select>
           <p class="mt-1 text-xs text-muted-foreground">{{ t("settings.refineHint") }}</p>
+        </div>
+        <div>
+          <label class="mb-1 block text-sm">{{ t("settings.knowledgeModel") }}</label>
+          <select
+            v-model="knowledgeModel"
+            class="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+          >
+            <option v-for="m in optionsFor(knowledgeModel)" :key="m.id" :value="m.id">{{ m.label }}</option>
+          </select>
+          <p class="mt-1 text-xs text-muted-foreground">{{ t("settings.knowledgeHint") }}</p>
         </div>
       </CardContent>
     </Card>
