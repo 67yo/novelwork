@@ -331,6 +331,30 @@ pub struct GenerateResult {
     pub message: String,
 }
 
+/// 左侧「生成章节卡 / 生成下一章」确认框：可编辑的考虑材料 + 期望。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OutlineGenBrief {
+    pub brief: String,
+    pub from: u32,
+    pub to: u32,
+}
+
+/// 预生成确认：可选作记忆参考的前序章节。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GenerateMemoryPick {
+    pub node_id: String,
+    pub label: String,
+    pub has_memory: bool,
+}
+
+/// 全书记忆面板：按章节分组的记忆条目。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChapterMemoryGroup {
+    pub node_id: String,
+    pub label: String,
+    pub items: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CardChatResult {
     pub reply: String,
@@ -350,7 +374,11 @@ pub struct TokenUsageHourRow {
 pub struct TokenUsageNovelRow {
     pub novel_id: String,
     pub title: String,
+    pub day_prompt_tokens: i64,
+    pub day_completion_tokens: i64,
     pub day_tokens: i64,
+    pub total_prompt_tokens: i64,
+    pub total_completion_tokens: i64,
     pub total_tokens: i64,
 }
 
@@ -360,11 +388,16 @@ pub struct TokenUsageDay {
     pub rows: Vec<TokenUsageHourRow>,
     pub models: Vec<String>,
     pub novels: Vec<TokenUsageNovelRow>,
+    pub prompt_tokens: i64,
+    pub completion_tokens: i64,
+    pub total_tokens: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TokenUsageModelRow {
     pub model: String,
+    pub prompt_tokens: i64,
+    pub completion_tokens: i64,
     pub total_tokens: i64,
 }
 
@@ -372,6 +405,8 @@ pub struct TokenUsageModelRow {
 pub struct TokenUsageMonth {
     /// YYYY-MM
     pub month: String,
+    pub prompt_tokens: i64,
+    pub completion_tokens: i64,
     pub total_tokens: i64,
     pub models: Vec<TokenUsageModelRow>,
 }

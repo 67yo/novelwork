@@ -51,9 +51,11 @@ const MODEL_COLORS = [
   "#db2777",
 ];
 
-function colorFor(model: string, models: string[]) {
-  const i = Math.max(0, models.indexOf(model));
-  return MODEL_COLORS[i % MODEL_COLORS.length];
+function colorFor(model: string) {
+  // Stable across charts: hash name → palette slot (not list index).
+  let h = 0;
+  for (let i = 0; i < model.length; i++) h = (h * 31 + model.charCodeAt(i)) >>> 0;
+  return MODEL_COLORS[h % MODEL_COLORS.length];
 }
 
 function fmtTok(n: number) {
@@ -127,9 +129,9 @@ const maxStack = computed(() => {
   return Math.max(max, 1);
 });
 
-const dayTotal = computed(() =>
-  (data.value?.rows ?? []).reduce((a, r) => a + r.total_tokens, 0),
-);
+const dayTotal = computed(() => data.value?.total_tokens ?? 0);
+const dayPrompt = computed(() => data.value?.prompt_tokens ?? 0);
+const dayCompletion = computed(() => data.value?.completion_tokens ?? 0);
 
 const W = 720;
 const H = 340;
@@ -157,7 +159,7 @@ const bars = computed(() => {
         y,
         h: Math.max(h, tokens > 0 ? 1 : 0),
         tokens,
-        color: colorFor(model, models.value),
+        color: colorFor(model),
       });
     }
     const total = hourTotals.value.get(hour) ?? 0;
@@ -179,6 +181,7 @@ const yTicks = computed(() => {
 const tip = ref<{ x: number; y: number; text: string } | null>(null);
 
 function onSegEnter(ev: MouseEvent, hour: number, seg: Seg, hourTotal: number) {
+  const row = (data.value?.rows ?? []).find((r) => r.hour === hour && r.model === seg.model);
   tip.value = {
     x: ev.clientX,
     y: ev.clientY,
@@ -186,6 +189,8 @@ function onSegEnter(ev: MouseEvent, hour: number, seg: Seg, hourTotal: number) {
       h: String(hour).padStart(2, "0"),
       hour: hourTotal.toLocaleString(),
       model: seg.model,
+      prompt: (row?.prompt_tokens ?? 0).toLocaleString(),
+      completion: (row?.completion_tokens ?? 0).toLocaleString(),
       n: seg.tokens.toLocaleString(),
     }),
   };
@@ -194,14 +199,13 @@ function onSegLeave() {
   tip.value = null;
 }
 
-const monthModels = computed(() => monthData.value?.models.map((r) => r.model) ?? []);
 const monthMax = computed(() =>
   Math.max(1, ...(monthData.value?.models.map((r) => r.total_tokens) ?? [0])),
 );
 </script>
 
 <template>
-  <div class="mx-auto max-w-4xl space-y-6 p-6">
+  <div class="mx-auto h-full max-w-4xl space-y-6 overflow-y-auto overscroll-contain p-6">
     <div class="flex flex-wrap items-end justify-between gap-4">
       <div>
         <h1 class="text-2xl font-semibold tracking-tight">{{ t("stats.title") }}</h1>
@@ -223,16 +227,27 @@ const monthMax = computed(() =>
 
     <div class="rounded-xl border bg-card p-4">
       <div class="mb-3 flex flex-wrap items-center justify-between gap-2 text-sm">
-        <span class="font-medium">
-          {{ t("stats.dayTotal", { n: dayTotal.toLocaleString() }) }}
-        </span>
+        <div class="space-y-0.5">
+          <p class="font-medium">
+            {{ t("stats.dayTotal", { n: dayTotal.toLocaleString() }) }}
+          </p>
+          <p class="text-xs text-muted-foreground">
+            {{
+              t("stats.dayBreakdown", {
+                prompt: dayPrompt.toLocaleString(),
+                completion: dayCompletion.toLocaleString(),
+                total: dayTotal.toLocaleString(),
+              })
+            }}
+          </p>
+        </div>
         <div class="flex flex-wrap gap-3">
           <span
             v-for="m in models"
             :key="m"
             class="inline-flex items-center gap-1.5 text-xs"
           >
-            <span class="inline-block h-2.5 w-2.5 rounded-sm" :style="{ background: colorFor(m, models) }" />
+            <span class="inline-block h-2.5 w-2.5 rounded-sm" :style="{ background: colorFor(m) }" />
             {{ m }}
           </span>
           <span v-if="!models.length" class="text-xs text-muted-foreground">{{ t("stats.noData") }}</span>
@@ -338,31 +353,48 @@ const monthMax = computed(() =>
       </div>
       <p v-if="monthBusy" class="text-sm text-muted-foreground">{{ t("stats.loading") }}</p>
       <template v-else>
-        <p class="mb-3 text-sm font-medium">
-          {{ t("stats.monthTotal", { n: (monthData?.total_tokens ?? 0).toLocaleString() }) }}
-        </p>
+        <div class="mb-3 space-y-0.5">
+          <p class="text-sm font-medium">
+            {{ t("stats.monthTotal", { n: (monthData?.total_tokens ?? 0).toLocaleString() }) }}
+          </p>
+          <p class="text-xs text-muted-foreground">
+            {{
+              t("stats.monthBreakdown", {
+                prompt: (monthData?.prompt_tokens ?? 0).toLocaleString(),
+                completion: (monthData?.completion_tokens ?? 0).toLocaleString(),
+                total: (monthData?.total_tokens ?? 0).toLocaleString(),
+              })
+            }}
+          </p>
+        </div>
         <div v-if="!(monthData?.models.length)" class="text-sm text-muted-foreground">
           {{ t("stats.monthNoData") }}
         </div>
-        <div v-else class="space-y-2">
+        <div v-else class="space-y-3">
           <div
             v-for="row in monthData?.models"
             :key="row.model"
-            class="grid grid-cols-[minmax(0,9rem)_1fr_auto] items-center gap-2 text-sm"
+            class="space-y-1"
           >
-            <span class="truncate text-xs" :title="row.model">{{ row.model }}</span>
-            <div class="h-3 overflow-hidden rounded-sm bg-muted">
-              <div
-                class="h-full rounded-sm"
-                :style="{
-                  width: `${(row.total_tokens / monthMax) * 100}%`,
-                  background: colorFor(row.model, monthModels),
-                }"
-              />
+            <div class="grid grid-cols-[minmax(0,9rem)_1fr_auto] items-center gap-2 text-sm">
+              <span class="truncate text-xs" :title="row.model">{{ row.model }}</span>
+              <div class="h-3 overflow-hidden rounded-sm bg-muted">
+                <div
+                  class="h-full rounded-sm"
+                  :style="{
+                    width: `${(row.total_tokens / monthMax) * 100}%`,
+                    background: colorFor(row.model),
+                  }"
+                />
+              </div>
+              <span class="tabular-nums text-xs text-muted-foreground">
+                {{ row.total_tokens.toLocaleString() }}
+              </span>
             </div>
-            <span class="tabular-nums text-xs text-muted-foreground">
-              {{ row.total_tokens.toLocaleString() }}
-            </span>
+            <p class="pl-0 text-[11px] text-muted-foreground sm:pl-[9rem]">
+              {{ t("stats.promptTokens") }} {{ row.prompt_tokens.toLocaleString() }}
+              · {{ t("stats.completionTokens") }} {{ row.completion_tokens.toLocaleString() }}
+            </p>
           </div>
         </div>
       </template>
@@ -373,18 +405,26 @@ const monthMax = computed(() =>
       <p class="mt-0.5 text-xs text-muted-foreground">{{ t("stats.novelReportHint") }}</p>
       <div v-if="!novels.length" class="mt-3 text-sm text-muted-foreground">{{ t("stats.novelNoData") }}</div>
       <div v-else class="mt-3 overflow-x-auto">
-        <table class="w-full min-w-[420px] text-left text-sm">
+        <table class="w-full min-w-[640px] text-left text-sm">
           <thead class="border-b text-xs text-muted-foreground">
             <tr>
               <th class="py-2 pr-3 font-medium">{{ t("stats.novelTitle") }}</th>
+              <th class="py-2 pr-3 font-medium tabular-nums">{{ t("stats.novelDayPrompt") }}</th>
+              <th class="py-2 pr-3 font-medium tabular-nums">{{ t("stats.novelDayCompletion") }}</th>
               <th class="py-2 pr-3 font-medium tabular-nums">{{ t("stats.novelDay") }}</th>
+              <th class="py-2 pr-3 font-medium tabular-nums">{{ t("stats.novelTotalPrompt") }}</th>
+              <th class="py-2 pr-3 font-medium tabular-nums">{{ t("stats.novelTotalCompletion") }}</th>
               <th class="py-2 font-medium tabular-nums">{{ t("stats.novelTotal") }}</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="n in novels" :key="n.novel_id" class="border-b border-border/60 last:border-0">
               <td class="py-2 pr-3">{{ n.title }}</td>
+              <td class="py-2 pr-3 tabular-nums">{{ n.day_prompt_tokens.toLocaleString() }}</td>
+              <td class="py-2 pr-3 tabular-nums">{{ n.day_completion_tokens.toLocaleString() }}</td>
               <td class="py-2 pr-3 tabular-nums">{{ n.day_tokens.toLocaleString() }}</td>
+              <td class="py-2 pr-3 tabular-nums">{{ n.total_prompt_tokens.toLocaleString() }}</td>
+              <td class="py-2 pr-3 tabular-nums">{{ n.total_completion_tokens.toLocaleString() }}</td>
               <td class="py-2 tabular-nums font-medium">{{ n.total_tokens.toLocaleString() }}</td>
             </tr>
           </tbody>

@@ -31,43 +31,53 @@ function navClass(path: string) {
   const active =
     path === "/novels" ? route.path.startsWith("/novels") : route.path === path || route.path.startsWith(`${path}/`);
   return [
-    "flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
+    "flex w-full flex-col items-center gap-0.5 rounded-md px-1 py-2 text-[11px] leading-tight transition-colors",
     active ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
   ];
 }
 </script>
 
 <template>
-  <div class="flex h-screen flex-col overflow-hidden">
-    <header class="z-50 flex h-14 shrink-0 items-center justify-between border-b bg-[linear-gradient(120deg,oklch(0.97_0.02_155),oklch(0.99_0.01_85))] px-4">
-      <div class="flex items-center gap-6">
-        <RouterLink to="/novels" class="flex items-center gap-2">
-          <Sparkles class="h-5 w-5 text-primary" />
-          <span class="text-lg font-semibold tracking-tight">Nove Work</span>
+  <div class="flex h-screen overflow-hidden">
+    <aside
+      class="z-50 flex w-16 shrink-0 flex-col border-r bg-[linear-gradient(180deg,oklch(0.97_0.02_155),oklch(0.99_0.01_85))]"
+    >
+      <RouterLink
+        to="/novels"
+        class="flex flex-col items-center gap-0.5 border-b px-1 py-3 text-primary"
+        :title="'Nove Work'"
+      >
+        <Sparkles class="h-5 w-5" />
+        <span class="text-[10px] font-semibold leading-tight tracking-tight">Nove</span>
+      </RouterLink>
+      <nav class="flex flex-1 flex-col gap-1 p-1.5">
+        <RouterLink :to="'/novels'" :class="navClass('/novels')" :title="t('nav.novels')">
+          <BookOpen class="h-4 w-4" />
+          <span>{{ t("nav.novels") }}</span>
         </RouterLink>
-        <nav class="flex items-center gap-1">
-          <RouterLink :to="'/novels'" :class="navClass('/novels')">
-            <BookOpen class="h-4 w-4" /> {{ t("nav.novels") }}
-          </RouterLink>
-          <RouterLink :to="'/library'" :class="navClass('/library')">
-            <Library class="h-4 w-4" /> {{ t("nav.library") }}
-          </RouterLink>
-          <RouterLink :to="'/stats'" :class="navClass('/stats')">
-            <ChartColumnStacked class="h-4 w-4" /> {{ t("nav.stats") }}
-          </RouterLink>
-          <RouterLink :to="'/settings'" :class="navClass('/settings')">
-            <Settings class="h-4 w-4" /> {{ t("nav.settings") }}
-          </RouterLink>
-        </nav>
+        <RouterLink :to="'/library'" :class="navClass('/library')" :title="t('nav.library')">
+          <Library class="h-4 w-4" />
+          <span>{{ t("nav.library") }}</span>
+        </RouterLink>
+        <RouterLink :to="'/stats'" :class="navClass('/stats')" :title="t('nav.stats')">
+          <ChartColumnStacked class="h-4 w-4" />
+          <span>{{ t("nav.stats") }}</span>
+        </RouterLink>
+        <RouterLink :to="'/settings'" :class="navClass('/settings')" :title="t('nav.settings')">
+          <Settings class="h-4 w-4" />
+          <span>{{ t("nav.settings") }}</span>
+        </RouterLink>
+      </nav>
+      <div
+        class="flex flex-col items-center gap-0.5 border-t px-1 py-2 text-[10px] leading-tight"
+        :class="keyOk ? 'text-primary' : 'text-destructive'"
+        :title="keyOk ? t('ai.connected') : t('ai.disconnected')"
+      >
+        <Bot class="h-3.5 w-3.5" />
+        <span class="text-center">{{ keyOk ? t("ai.connected") : t("ai.disconnected") }}</span>
       </div>
-      <div class="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <Bot class="h-3.5 w-3.5" :class="keyOk ? 'text-primary' : 'text-destructive'" />
-        <span :class="keyOk ? 'text-primary' : 'text-destructive'">
-          {{ keyOk ? t("ai.connected") : t("ai.disconnected") }}
-        </span>
-      </div>
-    </header>
-    <main class="min-h-0 flex-1 overflow-auto">
+    </aside>
+    <main class="min-h-0 min-w-0 flex-1 overflow-hidden">
       <RouterView />
     </main>
   </div>

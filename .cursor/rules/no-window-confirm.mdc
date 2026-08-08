@@ -1,0 +1,41 @@
+---
+description: Ban window.confirm for confirmations; use in-app modals (Tauri/WebKit).
+alwaysApply: true
+---
+
+# No `window.confirm` / `window.prompt` / `window.alert` for UX
+
+Tauri’s WKWebView often breaks **nested or sequential** `window.confirm` (second dialog missing or auto-dismissed). Do not use browser dialogs for user confirmation.
+
+## Required pattern
+
+Use an **in-app modal** (fixed overlay + dialog), same family as:
+
+- `NovelsView.vue` / `LibraryView.vue` — `pendingDelete` modal
+- `WorkspaceView.vue` — `pendingCardDelete` two-step modal for chapter body
+
+### Two-step (“二次确认”) when data loss is high
+
+1. Step 1: explain what will be removed; primary button = Continue / 继续  
+2. Step 2: stronger irreversible warning; primary button = Delete / destructive action  
+3. Cancel always closes without side effects  
+4. Copy goes through i18n (`zhCN` + all locales)
+
+### One-step is OK when
+
+- Soft / reversible actions, or low-risk deletes with a single clear warning in the modal body (still **no** `window.confirm`).
+
+## Forbidden
+
+```ts
+window.confirm(...)
+window.prompt(...)
+window.alert(...)   // for confirmations; prefer toast/inline notice for status
+```
+
+## Checklist when adding delete / overwrite / clear flows
+
+1. State: `pendingX` + optional `step: 1 | 2`  
+2. Template: overlay dialog, not native dialogs  
+3. i18n keys for title, body, continue, confirm, cancel, busy  
+4. Never rely on `window.confirm` even “just once” for destructive ops in this app  

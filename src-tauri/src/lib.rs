@@ -1,4 +1,6 @@
 mod catalog;
+mod chapter_constraints;
+mod chapter_memory;
 mod chunk;
 mod commands;
 mod db;
@@ -65,12 +67,16 @@ pub fn run() {
             commands::list_genres,
             commands::list_knowledge_bases,
             commands::rename_knowledge,
+            commands::update_knowledge,
             commands::list_knowledge_chunks,
             commands::archive_knowledge,
             commands::delete_knowledge,
             commands::import_knowledge_text,
+            commands::import_knowledge_url,
+            commands::reextract_knowledge,
             commands::list_novels,
             commands::get_novel,
+            commands::update_novel_plan,
             commands::archive_novel,
             commands::delete_novel,
             commands::create_novel,
@@ -79,8 +85,18 @@ pub fn run() {
             commands::save_tree,
             commands::delete_tree_card,
             commands::get_chapter,
+            commands::save_chapter,
+            commands::get_chapter_memory,
+            commands::list_all_chapter_memory,
+            commands::set_chapter_memory,
+            commands::regenerate_chapter_memory,
+            commands::preview_generate_chapter,
             commands::generate_chapter,
             commands::refine_chapter,
+            commands::preview_chapter_outline_brief,
+            commands::plan_next_chapters,
+            commands::generate_chapter_plots,
+            commands::generate_chapter_cards,
             commands::list_chat_messages,
             commands::chat_send,
             commands::chat_cancel,

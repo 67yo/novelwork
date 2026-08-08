@@ -1,11 +1,17 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { api, type ChatTurn, type NovelProject } from "@/lib/api";
+import { formatChatContent } from "@/lib/chatFormat";
 import { useI18n } from "@/i18n";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+function coverSrc(n: NovelProject) {
+  return n.cover_path ? convertFileSrc(n.cover_path) : "";
+}
 
 const { t } = useI18n();
 const router = useRouter();
@@ -144,7 +150,7 @@ async function confirmDelete() {
 </script>
 
 <template>
-  <div class="mx-auto max-w-5xl space-y-6 p-6">
+  <div class="mx-auto h-full max-w-5xl space-y-6 overflow-y-auto overscroll-contain p-6">
     <div class="flex items-end justify-between gap-4">
       <div>
         <h1 class="text-2xl font-semibold tracking-tight">{{ t("novels.title") }}</h1>
@@ -186,7 +192,9 @@ async function confirmDelete() {
             :class="m.role === 'user' ? 'ml-8 bg-accent' : 'mr-6 bg-background'"
           >
             <div class="mb-0.5 text-[10px] uppercase text-muted-foreground">{{ m.role }}</div>
-            <div class="whitespace-pre-wrap">{{ m.content }}</div>
+            <div class="whitespace-pre-wrap break-words leading-relaxed">
+              {{ formatChatContent(m.content) }}
+            </div>
           </div>
         </div>
         <Textarea
@@ -219,19 +227,32 @@ async function confirmDelete() {
         class="cursor-pointer transition hover:border-primary/40"
         @click="router.push(`/novels/${n.id}`)"
       >
-        <CardHeader>
-          <CardTitle class="text-base">{{ n.title }}</CardTitle>
-          <p class="text-xs text-muted-foreground">
-            {{ t("novels.wordsPerChapter", { min: n.word_count_min, max: n.word_count_max }) }} ·
-            {{ t("novels.chapterCount", { n: n.chapter_count || 20 }) }} ·
-            {{ t("novels.updated") }}
-            {{ n.updated_at.slice(0, 19).replace("T", " ") }}
-          </p>
-        </CardHeader>
-        <CardContent class="space-y-3">
-          <p class="line-clamp-3 text-sm text-muted-foreground">
-            {{ n.synopsis || t("novels.noSynopsis") }}
-          </p>
+        <div class="flex gap-3 p-4 pb-0">
+          <div
+            class="flex h-24 w-16 shrink-0 items-center justify-center overflow-hidden rounded border bg-muted text-[10px] text-muted-foreground"
+          >
+            <img
+              v-if="coverSrc(n)"
+              :src="coverSrc(n)"
+              class="h-full w-full object-cover"
+              alt=""
+            />
+            <span v-else>{{ t("workspace.cover") }}</span>
+          </div>
+          <div class="min-w-0 flex-1 space-y-1">
+            <CardTitle class="text-base leading-tight">{{ n.title }}</CardTitle>
+            <p class="text-xs text-muted-foreground">
+              {{ t("novels.wordsPerChapter", { min: n.word_count_min, max: n.word_count_max }) }} ·
+              {{ t("novels.chapterCount", { n: n.chapter_count || 20 }) }} ·
+              {{ t("novels.updated") }}
+              {{ n.updated_at.slice(0, 19).replace("T", " ") }}
+            </p>
+            <p class="line-clamp-2 text-sm text-muted-foreground">
+              {{ n.synopsis || t("novels.noSynopsis") }}
+            </p>
+          </div>
+        </div>
+        <CardContent class="pt-3">
           <div class="flex flex-wrap gap-2" @click.stop>
             <Button
               v-if="!n.archived"

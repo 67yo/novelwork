@@ -62,6 +62,15 @@ impl Db {
               total_tokens INTEGER NOT NULL DEFAULT 0,
               PRIMARY KEY (day, hour, model, novel_id)
             );
+            CREATE TABLE IF NOT EXISTS chapter_memory (
+              id TEXT PRIMARY KEY,
+              novel_id TEXT NOT NULL,
+              node_id TEXT NOT NULL,
+              idx INTEGER NOT NULL,
+              content TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_chapter_memory_novel ON chapter_memory(novel_id);
+            CREATE INDEX IF NOT EXISTS idx_chapter_memory_node ON chapter_memory(novel_id, node_id);
             "#,
         )?;
         // ponytail: additive migrate; ignore if column exists
@@ -295,6 +304,35 @@ impl Db {
         Ok(())
     }
 
+    pub fn update_knowledge(
+        &self,
+        id: &str,
+        title: &str,
+        author: &str,
+        extract_prompt: &str,
+        genres: &[String],
+    ) -> Result<()> {
+        let title = title.trim();
+        if title.is_empty() {
+            anyhow::bail!("title empty");
+        }
+        let conn = self.conn.lock().unwrap();
+        let n = conn.execute(
+            "UPDATE knowledge_books SET title=?1, author=?2, extract_prompt=?3, genres=?4 WHERE id=?5",
+            params![
+                title,
+                author.trim(),
+                extract_prompt,
+                serde_json::to_string(genres)?,
+                id
+            ],
+        )?;
+        if n == 0 {
+            anyhow::bail!("knowledge book not found");
+        }
+        Ok(())
+    }
+
     pub fn list_knowledge_chunks(
         &self,
         book_id: &str,
@@ -333,6 +371,46 @@ impl Db {
             tx.execute(
                 "INSERT INTO knowledge_chunks(id, book_id, idx, content) VALUES(?1,?2,?3,?4)",
                 params![uuid::Uuid::new_v4().to_string(), book.id, i as i64, c],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Replace stored chunks + refresh book meta (keeps id / created_at / archived).
+    pub fn replace_knowledge_content(
+        &self,
+        id: &str,
+        title: &str,
+        author: &str,
+        genres: &[String],
+        source_path: &str,
+        extract_prompt: &str,
+        chunks: &[String],
+    ) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let tx = conn.unchecked_transaction()?;
+        let n = tx.execute(
+            "UPDATE knowledge_books SET title=?1, author=?2, genres=?3, source_path=?4,
+             extract_prompt=?5, chunk_count=?6 WHERE id=?7",
+            params![
+                title,
+                author,
+                serde_json::to_string(genres)?,
+                source_path,
+                extract_prompt,
+                chunks.len() as i64,
+                id
+            ],
+        )?;
+        if n == 0 {
+            anyhow::bail!("knowledge book not found");
+        }
+        tx.execute("DELETE FROM knowledge_chunks WHERE book_id=?1", params![id])?;
+        for (i, c) in chunks.iter().enumerate() {
+            tx.execute(
+                "INSERT INTO knowledge_chunks(id, book_id, idx, content) VALUES(?1,?2,?3,?4)",
+                params![uuid::Uuid::new_v4().to_string(), id, i as i64, c],
             )?;
         }
         tx.commit()?;
@@ -399,9 +477,84 @@ impl Db {
 
     pub fn delete_novel(&self, id: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
+        conn.execute("DELETE FROM chapter_memory WHERE novel_id=?1", params![id])?;
         conn.execute("DELETE FROM chat_messages WHERE novel_id=?1", params![id])?;
         conn.execute("DELETE FROM novels WHERE id=?1", params![id])?;
         Ok(())
+    }
+
+    pub fn replace_chapter_memory(
+        &self,
+        novel_id: &str,
+        node_id: &str,
+        chunks: &[String],
+    ) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let tx = conn.unchecked_transaction()?;
+        tx.execute(
+            "DELETE FROM chapter_memory WHERE novel_id=?1 AND node_id=?2",
+            params![novel_id, node_id],
+        )?;
+        for (i, c) in chunks.iter().enumerate() {
+            tx.execute(
+                "INSERT INTO chapter_memory(id, novel_id, node_id, idx, content) VALUES(?1,?2,?3,?4,?5)",
+                params![
+                    uuid::Uuid::new_v4().to_string(),
+                    novel_id,
+                    node_id,
+                    i as i64,
+                    c
+                ],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn delete_chapter_memory(&self, novel_id: &str, node_id: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "DELETE FROM chapter_memory WHERE novel_id=?1 AND node_id=?2",
+            params![novel_id, node_id],
+        )?;
+        Ok(())
+    }
+
+    /// `(node_id, content)` ordered by idx within each node.
+    pub fn list_chapter_memory_for_nodes(
+        &self,
+        novel_id: &str,
+        node_ids: &[String],
+    ) -> Result<Vec<(String, String)>> {
+        if node_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let conn = self.conn.lock().unwrap();
+        let mut out = Vec::new();
+        for nid in node_ids {
+            let mut stmt = conn.prepare(
+                "SELECT node_id, content FROM chapter_memory WHERE novel_id=?1 AND node_id=?2 ORDER BY idx ASC",
+            )?;
+            let rows = stmt.query_map(params![novel_id, nid], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })?;
+            for r in rows {
+                out.push(r?);
+            }
+        }
+        Ok(out)
+    }
+
+    /// All memory rows for a novel (for keyword ranking within that novel only).
+    pub fn list_chapter_memory(&self, novel_id: &str) -> Result<Vec<(String, String)>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT node_id, content FROM chapter_memory WHERE novel_id=?1 ORDER BY node_id, idx",
+        )?;
+        let rows = stmt.query_map(params![novel_id], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?;
+        Ok(rows.filter_map(|r| r.ok()).collect())
     }
 
     pub fn list_chat(&self, novel_id: &str) -> Result<Vec<ChatMessage>> {
@@ -500,48 +653,82 @@ impl Db {
                 titles.insert(id, title);
             }
         }
-        let mut totals = std::collections::HashMap::<String, (i64, i64)>::new();
+        // novel_id -> (day_prompt, day_completion, day_total, total_prompt, total_completion, total)
+        let mut totals =
+            std::collections::HashMap::<String, (i64, i64, i64, i64, i64, i64)>::new();
         {
             let mut stmt = conn.prepare(
-                "SELECT novel_id, SUM(total_tokens) FROM token_usage
+                "SELECT novel_id,
+                        SUM(prompt_tokens), SUM(completion_tokens), SUM(total_tokens)
+                 FROM token_usage
                  WHERE novel_id != '' GROUP BY novel_id",
             )?;
             let rows = stmt.query_map([], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, i64>(3)?,
+                ))
             })?;
             for row in rows {
-                let (id, total) = row?;
-                totals.insert(id, (0, total));
+                let (id, p, c, t) = row?;
+                totals.insert(id, (0, 0, 0, p, c, t));
             }
         }
         {
             let mut stmt = conn.prepare(
-                "SELECT novel_id, SUM(total_tokens) FROM token_usage
+                "SELECT novel_id,
+                        SUM(prompt_tokens), SUM(completion_tokens), SUM(total_tokens)
+                 FROM token_usage
                  WHERE novel_id != '' AND day=?1 GROUP BY novel_id",
             )?;
             let rows = stmt.query_map(params![day], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, i64>(3)?,
+                ))
             })?;
             for row in rows {
-                let (id, day_tok) = row?;
-                let e = totals.entry(id).or_insert((0, 0));
-                e.0 = day_tok;
+                let (id, p, c, t) = row?;
+                let e = totals.entry(id).or_insert((0, 0, 0, 0, 0, 0));
+                e.0 = p;
+                e.1 = c;
+                e.2 = t;
             }
         }
         let mut out: Vec<crate::models::TokenUsageNovelRow> = totals
             .into_iter()
-            .map(|(novel_id, (day_tokens, total_tokens))| {
-                let title = titles
-                    .get(&novel_id)
-                    .cloned()
-                    .unwrap_or_else(|| format!("({novel_id})"));
-                crate::models::TokenUsageNovelRow {
+            .map(
+                |(
                     novel_id,
-                    title,
-                    day_tokens,
-                    total_tokens,
-                }
-            })
+                    (
+                        day_prompt_tokens,
+                        day_completion_tokens,
+                        day_tokens,
+                        total_prompt_tokens,
+                        total_completion_tokens,
+                        total_tokens,
+                    ),
+                )| {
+                    let title = titles
+                        .get(&novel_id)
+                        .cloned()
+                        .unwrap_or_else(|| format!("({novel_id})"));
+                    crate::models::TokenUsageNovelRow {
+                        novel_id,
+                        title,
+                        day_prompt_tokens,
+                        day_completion_tokens,
+                        day_tokens,
+                        total_prompt_tokens,
+                        total_completion_tokens,
+                        total_tokens,
+                    }
+                },
+            )
             .collect();
         out.sort_by(|a, b| b.total_tokens.cmp(&a.total_tokens));
         Ok(out)
@@ -555,7 +742,9 @@ impl Db {
         let like = format!("{month}-%");
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT model, SUM(total_tokens) FROM token_usage
+            "SELECT model,
+                    SUM(prompt_tokens), SUM(completion_tokens), SUM(total_tokens)
+             FROM token_usage
              WHERE day LIKE ?1
              GROUP BY model
              ORDER BY SUM(total_tokens) DESC",
@@ -563,7 +752,9 @@ impl Db {
         let rows = stmt.query_map(params![like], |row| {
             Ok(crate::models::TokenUsageModelRow {
                 model: row.get(0)?,
-                total_tokens: row.get(1)?,
+                prompt_tokens: row.get(1)?,
+                completion_tokens: row.get(2)?,
+                total_tokens: row.get(3)?,
             })
         })?;
         Ok(rows.filter_map(|r| r.ok()).collect())

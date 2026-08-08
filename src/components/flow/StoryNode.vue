@@ -1,13 +1,18 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, type Component } from "vue";
 import { Handle, Position, type NodeProps } from "@vue-flow/core";
+import { BookOpen, GitBranch, Library, User } from "@lucide/vue";
 import type { TreeNode } from "@/lib/api";
 import { useI18n } from "@/i18n";
 
-const props = defineProps<NodeProps<TreeNode>>();
+/** 根节点可附带封面 URL（来自 NovelProject，不进树 JSON） */
+type StoryNodeData = TreeNode & { cover_url?: string };
+
+const props = defineProps<NodeProps<StoryNodeData>>();
 const { t } = useI18n();
 
 const n = computed(() => props.data);
+const coverUrl = computed(() => n.value?.cover_url?.trim() || "");
 const kind = computed(() => n.value?.kind ?? "chapter");
 const wordTarget = computed(() =>
   t("workspace.wordTarget", {
@@ -19,6 +24,21 @@ const chapterTarget = computed(() =>
   t("workspace.chapterTarget", { n: n.value?.chapter_count ?? 0 }),
 );
 const wordWritten = computed(() => t("workspace.wordWritten", { n: n.value?.word_count ?? 0 }));
+
+const kindIcon = computed((): { icon: Component; class: string } | null => {
+  switch (kind.value) {
+    case "chapter":
+      return { icon: BookOpen, class: "text-muted-foreground" };
+    case "character":
+      return { icon: User, class: "text-amber-700" };
+    case "side_plot":
+      return { icon: GitBranch, class: "text-sky-700" };
+    case "knowledge":
+      return { icon: Library, class: "text-teal-700" };
+    default:
+      return null;
+  }
+});
 
 const shellClass = computed(() => {
   switch (kind.value) {
@@ -96,7 +116,15 @@ const rightHandleClass = computed(
 
     <template v-if="kind === 'character' && n?.character">
       <div class="mb-1 flex items-center justify-between gap-2">
-        <span class="text-sm font-semibold leading-tight">{{ n.label }}</span>
+        <span class="flex min-w-0 items-center gap-1.5 text-sm font-semibold leading-tight">
+          <component
+            v-if="kindIcon"
+            :is="kindIcon.icon"
+            class="h-3.5 w-3.5 shrink-0"
+            :class="kindIcon.class"
+          />
+          <span class="truncate">{{ n.label }}</span>
+        </span>
         <span class="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px]">{{ n.character.gender || "—" }}</span>
       </div>
       <div class="mb-1 flex flex-wrap gap-1">
@@ -109,12 +137,28 @@ const rightHandleClass = computed(
     </template>
 
     <template v-else-if="kind === 'side_plot'">
-      <div class="font-medium leading-tight">{{ n?.label }}</div>
+      <div class="flex items-center gap-1.5 font-medium leading-tight">
+        <component
+          v-if="kindIcon"
+          :is="kindIcon.icon"
+          class="h-3.5 w-3.5 shrink-0"
+          :class="kindIcon.class"
+        />
+        <span class="truncate">{{ n?.label }}</span>
+      </div>
       <p class="mt-1 line-clamp-2 text-[11px] text-muted-foreground">{{ n?.outline }}</p>
     </template>
 
     <template v-else-if="kind === 'knowledge'">
-      <div class="mb-1 text-sm font-semibold leading-tight">{{ n?.label }}</div>
+      <div class="mb-1 flex items-center gap-1.5 text-sm font-semibold leading-tight">
+        <component
+          v-if="kindIcon"
+          :is="kindIcon.icon"
+          class="h-3.5 w-3.5 shrink-0"
+          :class="kindIcon.class"
+        />
+        <span class="truncate">{{ n?.label }}</span>
+      </div>
       <div class="mb-1 text-[10px] text-teal-800">
         {{ t("workspace.knowledgeBooksCount", { n: n?.knowledge?.book_ids?.length ?? 0 }) }}
       </div>
@@ -124,24 +168,37 @@ const rightHandleClass = computed(
     </template>
 
     <template v-else-if="kind === 'novel'">
-      <div class="text-sm font-medium leading-tight">{{ n?.label }}</div>
-      <p
-        v-if="n?.word_count_min || n?.word_count_max"
-        class="mt-1 text-[11px] font-medium text-primary"
-      >
-        {{ wordTarget }}
-      </p>
-      <p
-        v-if="n?.chapter_count"
-        class="mt-0.5 text-[11px] font-medium text-primary"
-      >
-        {{ chapterTarget }}
-      </p>
+      <div class="flex gap-2">
+        <div
+          v-if="coverUrl"
+          class="h-16 w-11 shrink-0 overflow-hidden rounded border border-primary/20 bg-muted"
+        >
+          <img :src="coverUrl" class="h-full w-full object-cover" alt="" />
+        </div>
+        <div class="min-w-0 flex-1">
+          <div class="text-sm font-medium leading-tight">{{ n?.label }}</div>
+          <p
+            v-if="n?.word_count_min || n?.word_count_max"
+            class="mt-1 text-[11px] font-medium text-primary"
+          >
+            {{ wordTarget }}
+          </p>
+          <p
+            v-if="n?.chapter_count"
+            class="mt-0.5 text-[11px] font-medium text-primary"
+          >
+            {{ chapterTarget }}
+          </p>
+        </div>
+      </div>
       <p v-if="n?.outline" class="mt-1 line-clamp-2 text-[11px] text-muted-foreground">{{ n.outline }}</p>
     </template>
 
     <template v-else>
-      <div class="font-medium leading-tight">{{ n?.label }}</div>
+      <div class="flex items-center gap-1.5 font-medium leading-tight">
+        <component v-if="kindIcon" :is="kindIcon.icon" class="h-3.5 w-3.5 shrink-0" :class="kindIcon.class" />
+        <span class="truncate">{{ n?.label }}</span>
+      </div>
       <p v-if="n?.word_count" class="mt-0.5 text-[10px] text-muted-foreground">{{ wordWritten }}</p>
       <p v-if="n?.outline" class="mt-1 line-clamp-2 text-[11px] text-muted-foreground">{{ n.outline }}</p>
     </template>
@@ -149,50 +206,30 @@ const rightHandleClass = computed(
 </template>
 
 <style scoped>
+/* Static selection chrome — no pulse (avoids idle GPU + blink). */
 .story-node-glow {
   --glow: 61 107 79;
   z-index: 1;
-  animation: story-node-halo 1.8s ease-in-out infinite;
+  border-width: 2px;
+  box-shadow:
+    0 0 0 2px rgb(var(--glow) / 0.45),
+    0 0 12px 2px rgb(var(--glow) / 0.28),
+    0 2px 8px rgb(0 0 0 / 0.08);
 }
 .story-node-glow--primary {
   --glow: 61 107 79;
-  border-color: rgb(61 107 79 / 0.55);
+  border-color: rgb(61 107 79 / 0.7);
 }
 .story-node-glow--amber {
   --glow: 217 119 6;
-  border-color: rgb(217 119 6 / 0.55);
+  border-color: rgb(217 119 6 / 0.7);
 }
 .story-node-glow--sky {
   --glow: 2 132 199;
-  border-color: rgb(2 132 199 / 0.55);
+  border-color: rgb(2 132 199 / 0.7);
 }
 .story-node-glow--teal {
   --glow: 15 118 110;
-  border-color: rgb(15 118 110 / 0.55);
-}
-
-@keyframes story-node-halo {
-  0%,
-  100% {
-    box-shadow:
-      0 0 0 1px rgb(var(--glow) / 0.35),
-      0 0 10px 2px rgb(var(--glow) / 0.28),
-      0 0 22px 6px rgb(var(--glow) / 0.12);
-  }
-  50% {
-    box-shadow:
-      0 0 0 2px rgb(var(--glow) / 0.55),
-      0 0 16px 4px rgb(var(--glow) / 0.4),
-      0 0 32px 10px rgb(var(--glow) / 0.18);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .story-node-glow {
-    animation: none;
-    box-shadow:
-      0 0 0 2px rgb(var(--glow) / 0.5),
-      0 0 14px 3px rgb(var(--glow) / 0.35);
-  }
+  border-color: rgb(15 118 110 / 0.7);
 }
 </style>

@@ -1,0 +1,323 @@
+//! Per-novel chapter memory (Lance + helpers). Isolated by `novel_id`.
+//! Public knowledge books stay in `knowledge_chunks`; chapter facts never mix.
+
+use crate::chunk::chunk_text;
+use crate::paths::lancedb_dir;
+use anyhow::Result;
+use arrow_array::{ArrayRef, Int32Array, RecordBatch, RecordBatchIterator, StringArray};
+use arrow_schema::{DataType, Field, Schema};
+use std::sync::Arc;
+
+const TABLE: &str = "chapter_memory";
+
+/// Persist chapter fact chunks into LanceDB (text columns; scoped by novel_id).
+pub async fn upsert_lance(novel_id: &str, node_id: &str, chunks: &[String]) -> Result<()> {
+    if chunks.is_empty() {
+        return Ok(());
+    }
+    let _ = delete_lance(novel_id, node_id).await;
+
+    let db = lancedb::connect(lancedb_dir().to_str().unwrap_or("./lancedb"))
+        .execute()
+        .await?;
+
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("novel_id", DataType::Utf8, false),
+        Field::new("node_id", DataType::Utf8, false),
+        Field::new("idx", DataType::Int32, false),
+        Field::new("content", DataType::Utf8, false),
+    ]));
+
+    let novel_ids: StringArray = chunks.iter().map(|_| Some(novel_id)).collect();
+    let node_ids: StringArray = chunks.iter().map(|_| Some(node_id)).collect();
+    let idxs: Int32Array = (0..chunks.len() as i32).map(Some).collect();
+    let contents: StringArray = chunks.iter().map(|c| Some(c.as_str())).collect();
+
+    let batch = RecordBatch::try_new(
+        schema.clone(),
+        vec![
+            Arc::new(novel_ids) as ArrayRef,
+            Arc::new(node_ids) as ArrayRef,
+            Arc::new(idxs) as ArrayRef,
+            Arc::new(contents) as ArrayRef,
+        ],
+    )?;
+    let batches = RecordBatchIterator::new(vec![Ok(batch)].into_iter(), schema.clone());
+    let reader: Box<dyn arrow_array::RecordBatchReader + Send> = Box::new(batches);
+
+    let names = db.table_names().execute().await.unwrap_or_default();
+    if names.iter().any(|n| n == TABLE) {
+        let table = db.open_table(TABLE).execute().await?;
+        table.add(reader).execute().await?;
+    } else {
+        db.create_table(TABLE, reader).execute().await?;
+    }
+    Ok(())
+}
+
+pub async fn delete_lance(novel_id: &str, node_id: &str) -> Result<()> {
+    let db = lancedb::connect(lancedb_dir().to_str().unwrap_or("./lancedb"))
+        .execute()
+        .await?;
+    let names = db.table_names().execute().await.unwrap_or_default();
+    if !names.iter().any(|n| n == TABLE) {
+        return Ok(());
+    }
+    let table = db.open_table(TABLE).execute().await?;
+    let n = novel_id.replace('\'', "''");
+    let c = node_id.replace('\'', "''");
+    let _ = table
+        .delete(&format!("novel_id = '{n}' AND node_id = '{c}'"))
+        .await;
+    Ok(())
+}
+
+pub async fn delete_lance_novel(novel_id: &str) -> Result<()> {
+    let db = lancedb::connect(lancedb_dir().to_str().unwrap_or("./lancedb"))
+        .execute()
+        .await?;
+    let names = db.table_names().execute().await.unwrap_or_default();
+    if !names.iter().any(|n| n == TABLE) {
+        return Ok(());
+    }
+    let table = db.open_table(TABLE).execute().await?;
+    let n = novel_id.replace('\'', "''");
+    let _ = table.delete(&format!("novel_id = '{n}'")).await;
+    Ok(())
+}
+
+fn is_section_header(line: &str) -> bool {
+    let t = line.trim();
+    if t.starts_with('【') && t.contains('】') {
+        return true;
+    }
+    if t.starts_with('#') {
+        return true;
+    }
+    let lower = t.to_lowercase();
+    lower.starts_with("[overall")
+        || lower.starts_with("[facts")
+        || lower == "[plot]"
+        || t == "整体情节"
+        || t == "要点"
+}
+
+fn is_bullet(line: &str) -> bool {
+    let t = line.trim_start();
+    t.starts_with('-') || t.starts_with('•') || t.starts_with('*')
+}
+
+/// Split LLM extraction into storage chunks (plot summary + fact bullets).
+pub fn split_memory_text(text: &str) -> Vec<String> {
+    let t = text.trim();
+    if t.is_empty() {
+        return Vec::new();
+    }
+
+    let mut out = Vec::new();
+    let mut plot_buf = String::new();
+    let mut in_plot = false;
+
+    let flush_plot = |buf: &mut String, out: &mut Vec<String>| {
+        let s = buf.trim().to_string();
+        buf.clear();
+        if s.chars().count() >= 4 {
+            if s.contains("整体情节") || s.to_lowercase().contains("overall plot") {
+                out.push(s);
+            } else {
+                out.push(format!("【整体情节】\n{s}"));
+            }
+        }
+    };
+
+    for line in t.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if is_section_header(trimmed) {
+            let lower = trimmed.to_lowercase();
+            let plot_hdr = trimmed.contains("整体情节")
+                || lower.contains("overall plot")
+                || lower.contains("[overall");
+            let facts_hdr = trimmed.contains("要点")
+                || lower.contains("[facts")
+                || lower.contains("facts]");
+            if plot_hdr && !facts_hdr {
+                if in_plot {
+                    flush_plot(&mut plot_buf, &mut out);
+                }
+                in_plot = true;
+                continue;
+            }
+            if facts_hdr || (in_plot && !plot_hdr) {
+                if in_plot {
+                    flush_plot(&mut plot_buf, &mut out);
+                    in_plot = false;
+                }
+                continue;
+            }
+        }
+        if in_plot {
+            if is_bullet(trimmed) {
+                flush_plot(&mut plot_buf, &mut out);
+                in_plot = false;
+            } else {
+                if !plot_buf.is_empty() {
+                    plot_buf.push('\n');
+                }
+                plot_buf.push_str(trimmed);
+                continue;
+            }
+        }
+        if is_bullet(trimmed) {
+            let fact = trimmed
+                .trim_start_matches(['-', '*', '•', ' '])
+                .trim()
+                .to_string();
+            if fact.chars().count() >= 4 {
+                out.push(fact);
+            }
+        }
+    }
+    if in_plot {
+        flush_plot(&mut plot_buf, &mut out);
+    }
+
+    if out.len() >= 1 {
+        return out;
+    }
+    // Fallback: old-style bullet-only or free text
+    let bullets: Vec<String> = t
+        .lines()
+        .map(|l| l.trim())
+        .filter(|l| !l.is_empty() && is_bullet(l))
+        .map(|l| l.trim_start_matches(['-', '*', '•', ' ']).trim().to_string())
+        .filter(|l| l.chars().count() >= 4)
+        .collect();
+    if bullets.len() >= 2 {
+        return bullets;
+    }
+    chunk_text(t, 400, 40)
+}
+
+/// Keyword score for retrieval without embeddings (ponytail: upgrade to real vectors later).
+pub fn score_memory(content: &str, query_terms: &[String]) -> usize {
+    if query_terms.is_empty() {
+        return 0;
+    }
+    let hay = content.to_lowercase();
+    query_terms
+        .iter()
+        .filter(|t| !t.is_empty() && hay.contains(t.as_str()))
+        .count()
+}
+
+pub fn query_terms(text: &str) -> Vec<String> {
+    let mut terms = Vec::new();
+    let push = |t: String, terms: &mut Vec<String>| {
+        if t.chars().count() >= 2 && !terms.iter().any(|x| x == &t) {
+            terms.push(t);
+        }
+    };
+    let mut latin = String::new();
+    let mut cjk = String::new();
+    for ch in text.chars() {
+        if ('\u{4e00}'..='\u{9fff}').contains(&ch) {
+            if !latin.is_empty() {
+                push(latin.to_lowercase(), &mut terms);
+                latin.clear();
+            }
+            cjk.push(ch);
+        } else if ch.is_alphanumeric() {
+            if !cjk.is_empty() {
+                push(cjk.clone(), &mut terms);
+                let chars: Vec<char> = cjk.chars().collect();
+                if chars.len() > 2 {
+                    for w in chars.windows(2) {
+                        push(w.iter().collect(), &mut terms);
+                    }
+                }
+                cjk.clear();
+            }
+            latin.push(ch);
+        } else {
+            if !latin.is_empty() {
+                push(latin.to_lowercase(), &mut terms);
+                latin.clear();
+            }
+            if !cjk.is_empty() {
+                push(cjk.clone(), &mut terms);
+                let chars: Vec<char> = cjk.chars().collect();
+                if chars.len() > 2 {
+                    for w in chars.windows(2) {
+                        push(w.iter().collect(), &mut terms);
+                    }
+                }
+                cjk.clear();
+            }
+        }
+    }
+    if !latin.is_empty() {
+        push(latin.to_lowercase(), &mut terms);
+    }
+    if !cjk.is_empty() {
+        push(cjk.clone(), &mut terms);
+        let chars: Vec<char> = cjk.chars().collect();
+        if chars.len() > 2 {
+            for w in chars.windows(2) {
+                push(w.iter().collect(), &mut terms);
+            }
+        }
+    }
+    terms.truncate(48);
+    terms
+}
+
+/// Rank novel-scoped memory rows by keyword overlap; returns top `(node_id, content)`.
+pub fn rank_memory(rows: &[(String, String)], query: &str, limit: usize) -> Vec<(String, String)> {
+    let terms = query_terms(query);
+    if terms.is_empty() || limit == 0 {
+        return Vec::new();
+    }
+    let mut scored: Vec<(usize, &String, &String)> = rows
+        .iter()
+        .map(|(nid, c)| (score_memory(c, &terms), nid, c))
+        .filter(|(s, _, _)| *s > 0)
+        .collect();
+    scored.sort_by(|a, b| b.0.cmp(&a.0));
+    scored
+        .into_iter()
+        .take(limit)
+        .map(|(_, nid, c)| (nid.clone(), c.clone()))
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn splits_bullets() {
+        let t = "- 人物：甲｜行为：离开｜目标：寻人\n- 人物：乙｜承诺：三日后见\n杂文忽略";
+        let c = split_memory_text(t);
+        assert!(c.len() >= 2);
+        assert!(c[0].contains("甲"));
+    }
+
+    #[test]
+    fn splits_plot_and_facts() {
+        let t = "【整体情节】\n甲在雾港发现旧地图，与乙约定三日后出海寻人。\n中途遭遇阻拦但脱险。\n【要点】\n- 人物：甲｜行为：发现地图｜目标：寻人\n- 人物：乙｜承诺：三日后见";
+        let c = split_memory_text(t);
+        assert!(c.iter().any(|x| x.contains("整体情节") && x.contains("旧地图")), "{c:?}");
+        assert!(c.iter().any(|x| x.contains("甲") && x.contains("寻人")), "{c:?}");
+        assert!(c.len() >= 3, "{c:?}");
+    }
+
+    #[test]
+    fn scores_overlap() {
+        let terms = query_terms("林潮 寻人 旧地图");
+        let s = score_memory("林潮离开港口，目标是寻人并带回旧地图。", &terms);
+        assert!(s >= 2, "score={s} terms={terms:?}");
+    }
+}

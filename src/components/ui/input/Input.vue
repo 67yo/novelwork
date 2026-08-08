@@ -20,6 +20,7 @@ const emit = defineEmits<{ "update:modelValue": [string | number] }>();
 
 <template>
   <input
+    v-bind="$attrs"
     :type="type ?? 'text'"
     :value="modelValue ?? ''"
     :placeholder="placeholder"

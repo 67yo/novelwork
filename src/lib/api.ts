@@ -126,6 +126,12 @@ export type GenerateResult = {
   message: string;
 };
 
+export type ChapterMemoryGroup = {
+  node_id: string;
+  label: string;
+  items: string[];
+};
+
 export type CardChatResult = {
   reply: string;
   tree: NovelTree;
@@ -142,7 +148,11 @@ export type TokenUsageHourRow = {
 export type TokenUsageNovelRow = {
   novel_id: string;
   title: string;
+  day_prompt_tokens: number;
+  day_completion_tokens: number;
   day_tokens: number;
+  total_prompt_tokens: number;
+  total_completion_tokens: number;
   total_tokens: number;
 };
 
@@ -151,15 +161,22 @@ export type TokenUsageDay = {
   rows: TokenUsageHourRow[];
   models: string[];
   novels: TokenUsageNovelRow[];
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
 };
 
 export type TokenUsageModelRow = {
   model: string;
+  prompt_tokens: number;
+  completion_tokens: number;
   total_tokens: number;
 };
 
 export type TokenUsageMonth = {
   month: string;
+  prompt_tokens: number;
+  completion_tokens: number;
   total_tokens: number;
   models: TokenUsageModelRow[];
 };
@@ -219,6 +236,20 @@ export const api = {
   listKnowledge: () => invoke<KnowledgeBook[]>("list_knowledge_bases"),
   renameKnowledge: (id: string, title: string) =>
     invoke<void>("rename_knowledge", { id, title }),
+  updateKnowledge: (
+    id: string,
+    title: string,
+    author: string,
+    extract_prompt: string,
+    genres: string[],
+  ) =>
+    invoke<KnowledgeBook>("update_knowledge", {
+      id,
+      title,
+      author,
+      extractPrompt: extract_prompt,
+      genres,
+    }),
   listKnowledgeChunks: (bookId: string) =>
     invoke<KnowledgeChunk[]>("list_knowledge_chunks", { bookId }),
   archiveKnowledge: (id: string, archived: boolean) =>
@@ -226,8 +257,24 @@ export const api = {
   deleteKnowledge: (id: string) => invoke<void>("delete_knowledge", { id }),
   importKnowledge: (path: string, extract_prompt: string, genres: string[]) =>
     invoke<KnowledgeBook>("import_knowledge_text", { path, extractPrompt: extract_prompt, genres }),
+  importKnowledgeUrl: (url: string, extract_prompt: string, genres: string[]) =>
+    invoke<KnowledgeBook>("import_knowledge_url", { url, extractPrompt: extract_prompt, genres }),
+  reextractKnowledge: (id: string, path?: string | null) =>
+    invoke<KnowledgeBook>("reextract_knowledge", { id, path: path ?? null }),
   listNovels: () => invoke<NovelProject[]>("list_novels"),
   getNovel: (id: string) => invoke<NovelProject | null>("get_novel", { id }),
+  updateNovelPlan: (
+    novelId: string,
+    word_count_min: number,
+    word_count_max: number,
+    chapter_count: number,
+  ) =>
+    invoke<NovelProject>("update_novel_plan", {
+      novelId,
+      wordCountMin: word_count_min,
+      wordCountMax: word_count_max,
+      chapterCount: chapter_count,
+    }),
   archiveNovel: (id: string, archived: boolean) =>
     invoke<NovelProject>("archive_novel", { id, archived }),
   deleteNovel: (id: string) => invoke<void>("delete_novel", { id }),
@@ -255,10 +302,96 @@ export const api = {
     invoke<NovelTree>("delete_tree_card", { novelId, nodeId }),
   getChapter: (novelId: string, nodeId: string) =>
     invoke<string>("get_chapter", { novelId, nodeId }),
-  generateChapter: (novelId: string, nodeId: string) =>
-    invoke<GenerateResult>("generate_chapter", { novelId, nodeId }),
-  refineChapter: (novelId: string, nodeId: string, prevN: number) =>
-    invoke<GenerateResult>("refine_chapter", { novelId, nodeId, prevN }),
+  /** 手动保存章节正文；返回字数。空内容清空文件 */
+  saveChapter: (novelId: string, nodeId: string, content: string) =>
+    invoke<number>("save_chapter", { novelId, nodeId, content }),
+  getChapterMemory: (novelId: string, nodeId: string) =>
+    invoke<string[]>("get_chapter_memory", { novelId, nodeId }),
+  listAllChapterMemory: (novelId: string) =>
+    invoke<ChapterMemoryGroup[]>("list_all_chapter_memory", { novelId }),
+  /** `items` 为空则清除该章全部记忆 */
+  setChapterMemory: (novelId: string, nodeId: string, items: string[]) =>
+    invoke<void>("set_chapter_memory", { novelId, nodeId, items }),
+  regenerateChapterMemory: (
+    novelId: string,
+    nodeId: string,
+    userNotes = "",
+    memoryNodeIds: string[] = [],
+  ) =>
+    invoke<string[]>("regenerate_chapter_memory", {
+      novelId,
+      nodeId,
+      userNotes,
+      memoryNodeIds,
+    }),
+  /** 预生成确认：前序章列表（是否已有记忆） */
+  previewGenerateChapter: (novelId: string, nodeId: string) =>
+    invoke<{ node_id: string; label: string; has_memory: boolean }[]>(
+      "preview_generate_chapter",
+      { novelId, nodeId },
+    ),
+  generateChapter: (
+    novelId: string,
+    nodeId: string,
+    memoryNodeIds: string[],
+    userBrief: string,
+  ) =>
+    invoke<GenerateResult>("generate_chapter", {
+      novelId,
+      nodeId,
+      memoryNodeIds,
+      userBrief,
+    }),
+  refineChapter: (
+    novelId: string,
+    nodeId: string,
+    prevN: number,
+    mode?: "memory" | "full",
+    userBrief?: string,
+  ) =>
+    invoke<GenerateResult>("refine_chapter", {
+      novelId,
+      nodeId,
+      prevN,
+      mode: mode ?? "memory",
+      userBrief: userBrief ?? "",
+    }),
+  /** 左侧生成确认框：根大纲→前序大纲+记忆 + 期望占位 */
+  previewChapterOutlineBrief: (
+    novelId: string,
+    mode: "root" | "plan_next",
+    count: number,
+    nodeId?: string,
+  ) =>
+    invoke<{ brief: string; from: number; to: number }>("preview_chapter_outline_brief", {
+      novelId,
+      mode,
+      count,
+      nodeId: nodeId ?? null,
+    }),
+  planNextChapters: (novelId: string, nodeId: string, count: number, userBrief: string) =>
+    invoke<GenerateResult>("plan_next_chapters", {
+      novelId,
+      nodeId,
+      count,
+      userBrief,
+    }),
+  /** 章节卡：按大纲+用户补充生成剧情卡 */
+  generateChapterPlots: (
+    novelId: string,
+    nodeId: string,
+    outline: string,
+    userNotes: string,
+  ) =>
+    invoke<GenerateResult>("generate_chapter_plots", {
+      novelId,
+      nodeId,
+      outline,
+      userNotes,
+    }),
+  /** 根节点：生成第 1–count 章章节卡（同号覆盖） */
+  generateChapterCards: (novelId: string, count: number, userBrief: string) =>
+    invoke<GenerateResult>("generate_chapter_cards", { novelId, count, userBrief }),
   listChat: (novelId: string) => invoke<ChatMessage[]>("list_chat_messages", { novelId }),
   chatSend: (novelId: string, content: string) =>
     invoke<ChatMessage[]>("chat_send", { novelId, content }),

@@ -159,7 +159,7 @@ const catalogHint = computed(() => {
 </script>
 
 <template>
-  <div class="mx-auto max-w-xl space-y-6 p-6">
+  <div class="mx-auto h-full max-w-xl space-y-6 overflow-y-auto overscroll-contain p-6">
     <div class="flex items-start justify-between gap-4">
       <div>
         <h1 class="text-2xl font-semibold tracking-tight">{{ t("settings.title") }}</h1>
