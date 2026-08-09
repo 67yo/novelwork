@@ -1,6 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
-import { api, type KnowledgeBook, type KnowledgeChunk } from "@/lib/api";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
+import {
+  api,
+  type ChatTurn,
+  type KnowledgeBook,
+  type KnowledgeChunk,
+  type SkillPreviewItem,
+} from "@/lib/api";
+import { formatChatContent } from "@/lib/chatFormat";
 import { useI18n } from "@/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,10 +23,20 @@ const path = ref("");
 const url = ref("");
 const prompt = ref("");
 const busy = ref(false);
+const chatBusy = ref(false);
 const error = ref("");
 const showImport = ref(false);
 const tab = ref<"active" | "archived">("active");
 const importMode = ref<"file" | "url">("file");
+const fileDropHover = ref(false);
+let unlistenFileDrop: (() => void) | null = null;
+
+const extractMessages = ref<ChatTurn[]>([]);
+const extractChatInput = ref("");
+const extractListEl = ref<HTMLElement | null>(null);
+const chatSkills = ref<SkillPreviewItem[]>([]);
+type SlashCmd = { cmd: string; insert: string; hint: string };
+const slashActive = ref(0);
 
 const editing = ref<KnowledgeBook | null>(null);
 const editTitle = ref("");
@@ -45,10 +63,28 @@ const chunksError = ref("");
 const pendingDelete = ref<KnowledgeBook | null>(null);
 const deleting = ref(false);
 const reextractId = ref("");
+const reextractTarget = ref<KnowledgeBook | null>(null);
+const reextractPrompt = ref("");
+const reextractError = ref("");
 
 const visible = computed(() =>
   books.value.filter((b) => (tab.value === "archived" ? b.archived : !b.archived)),
 );
+
+function resetExtractChat() {
+  extractMessages.value = [{ role: "assistant", content: t("library.extractChatWelcome") }];
+  extractChatInput.value = "";
+  slashActive.value = 0;
+}
+
+function toggleImport() {
+  showImport.value = !showImport.value;
+  error.value = "";
+  if (showImport.value) {
+    syncDefaultPrompt();
+    resetExtractChat();
+  }
+}
 
 async function refresh() {
   books.value = await api.listKnowledge();
@@ -64,17 +100,174 @@ function syncDefaultPrompt() {
   }
 }
 
-watch(importMode, syncDefaultPrompt);
+watch(importMode, () => {
+  syncDefaultPrompt();
+  if (showImport.value && extractMessages.value.length <= 1) {
+    resetExtractChat();
+  }
+});
 
-onMounted(refresh);
+function acceptImportPath(p: string) {
+  const lower = p.toLowerCase();
+  if (lower.endsWith(".pdf")) {
+    error.value = t("library.noPdf");
+    return;
+  }
+  if (!lower.endsWith(".txt") && !lower.endsWith(".epub")) {
+    error.value = t("library.badFileType");
+    return;
+  }
+  path.value = p;
+  importMode.value = "file";
+  error.value = "";
+}
 
 async function pick() {
   const p = await api.pickTextFile();
-  if (p) {
-    path.value = p;
-    importMode.value = "file";
+  if (p) acceptImportPath(p);
+}
+
+const fileName = computed(() => {
+  const p = path.value;
+  if (!p) return "";
+  const parts = p.split(/[/\\]/);
+  return parts[parts.length - 1] || p;
+});
+
+async function loadChatSkills() {
+  try {
+    const p = await api.listChatSkills();
+    chatSkills.value = p.skills;
+  } catch {
+    chatSkills.value = [];
   }
 }
+
+const skillSlashCmds = computed<SlashCmd[]>(() =>
+  chatSkills.value.map((s) => {
+    const line = (s.description || "").split(/\n/)[0]?.trim() || t("workspace.slashHintSkill");
+    const hint = line.length > 72 ? `${line.slice(0, 72)}…` : line;
+    return { cmd: `/${s.name}`, insert: `/${s.name} `, hint };
+  }),
+);
+
+const slashSuggestions = computed(() => {
+  const cmds = skillSlashCmds.value;
+  if (!cmds.length) return [];
+  const v = extractChatInput.value;
+  if (!v.startsWith("/") || /\s/.test(v)) return [];
+  const q = v.toLowerCase();
+  return cmds.filter((c) => c.cmd.toLowerCase().startsWith(q) || c.cmd.startsWith(v));
+});
+
+watch(slashSuggestions, () => {
+  slashActive.value = 0;
+});
+
+function applySlashCmd(cmd: SlashCmd) {
+  extractChatInput.value = cmd.insert;
+  slashActive.value = 0;
+}
+
+async function scrollExtractBottom() {
+  await nextTick();
+  if (extractListEl.value) extractListEl.value.scrollTop = extractListEl.value.scrollHeight;
+}
+
+function onExtractChatKeydown(ev: KeyboardEvent) {
+  const list = slashSuggestions.value;
+  if (list.length) {
+    if (ev.key === "ArrowDown") {
+      ev.preventDefault();
+      slashActive.value = (slashActive.value + 1) % list.length;
+    } else if (ev.key === "ArrowUp") {
+      ev.preventDefault();
+      slashActive.value = (slashActive.value - 1 + list.length) % list.length;
+    } else if (ev.key === "Enter" || ev.key === "Tab") {
+      ev.preventDefault();
+      applySlashCmd(list[slashActive.value] ?? list[0]);
+    } else if (ev.key === "Escape") {
+      ev.preventDefault();
+      extractChatInput.value = "";
+    }
+    return;
+  }
+  if (ev.key === "Enter" && !ev.shiftKey) {
+    ev.preventDefault();
+    void sendExtractChat();
+  }
+}
+
+async function sendExtractChat() {
+  const text = extractChatInput.value.trim();
+  if (!text || chatBusy.value || busy.value) return;
+  error.value = "";
+  chatBusy.value = true;
+  try {
+    const next = [...extractMessages.value, { role: "user", content: text }];
+    extractMessages.value = next;
+    extractChatInput.value = "";
+    await scrollExtractBottom();
+    const r = await api.knowledgeExtractChat(next, importMode.value === "url");
+    extractMessages.value = [...extractMessages.value, { role: "assistant", content: r.reply }];
+    await scrollExtractBottom();
+    if (r.extract_prompt) {
+      prompt.value = r.extract_prompt;
+    }
+    if (r.used_mock) {
+      error.value = t("library.extractChatMock");
+    }
+  } catch (e) {
+    const msg = String(e);
+    if (msg.toLowerCase().includes("cancelled")) {
+      extractMessages.value = [
+        ...extractMessages.value,
+        { role: "assistant", content: t("workspace.chatStopped") },
+      ];
+    } else {
+      error.value = msg;
+    }
+  } finally {
+    chatBusy.value = false;
+  }
+}
+
+async function stopExtractChat() {
+  if (!chatBusy.value) return;
+  try {
+    await api.chatCancel("__knowledge_extract__");
+  } catch {
+    /* ignore */
+  }
+}
+
+onMounted(async () => {
+  await refresh();
+  void loadChatSkills();
+  unlistenFileDrop = await getCurrentWebview().onDragDropEvent((ev) => {
+    if (!showImport.value || tab.value !== "active" || importMode.value !== "file") {
+      fileDropHover.value = false;
+      return;
+    }
+    const payload = ev.payload;
+    if (payload.type === "enter" || payload.type === "over") {
+      fileDropHover.value = true;
+      return;
+    }
+    if (payload.type === "leave") {
+      fileDropHover.value = false;
+      return;
+    }
+    fileDropHover.value = false;
+    const dropped = payload.paths[0];
+    if (dropped) acceptImportPath(dropped);
+  });
+});
+
+onUnmounted(() => {
+  unlistenFileDrop?.();
+  unlistenFileDrop = null;
+});
 
 function toggleGenre(g: string) {
   if (selectedGenres.value.includes(g)) {
@@ -105,6 +298,10 @@ async function doImport() {
       error.value = t("library.noPdf");
       return;
     }
+  }
+  if (!prompt.value.trim()) {
+    error.value = t("library.needExtractPrompt");
+    return;
   }
   busy.value = true;
   error.value = "";
@@ -250,28 +447,52 @@ function isHttpSource(p: string) {
   return s.startsWith("http://") || s.startsWith("https://");
 }
 
-async function reextract(b: KnowledgeBook) {
+function openReextract(b: KnowledgeBook) {
   if (reextractId.value || busy.value) return;
+  reextractTarget.value = b;
+  reextractPrompt.value = b.extract_prompt || "";
+  reextractError.value = "";
+  error.value = "";
+}
+
+function cancelReextract() {
+  if (reextractId.value) return;
+  reextractTarget.value = null;
+  reextractPrompt.value = "";
+  reextractError.value = "";
+}
+
+async function confirmReextract() {
+  const b = reextractTarget.value;
+  if (!b || reextractId.value || busy.value) return;
+  const focus = reextractPrompt.value.trim();
+  if (!focus) {
+    reextractError.value = t("library.needExtractPrompt");
+    return;
+  }
   reextractId.value = b.id;
+  reextractError.value = "";
   error.value = "";
   try {
     let updated: KnowledgeBook;
     try {
-      updated = await api.reextractKnowledge(b.id);
+      updated = await api.reextractKnowledge(b.id, null, focus);
     } catch (e) {
       const msg = String(e);
       if (isHttpSource(b.source_path) || !msg.includes("源文件不存在")) throw e;
       const p = await api.pickTextFile();
       if (!p) return;
-      updated = await api.reextractKnowledge(b.id, p);
+      updated = await api.reextractKnowledge(b.id, p, focus);
     }
+    reextractTarget.value = null;
+    reextractPrompt.value = "";
     await refresh();
     if (viewing.value?.id === updated.id) {
       viewing.value = updated;
       await openChunks(updated);
     }
   } catch (e) {
-    error.value = String(e);
+    reextractError.value = String(e);
   } finally {
     reextractId.value = "";
   }
@@ -285,7 +506,7 @@ async function reextract(b: KnowledgeBook) {
         <h1 class="text-2xl font-semibold tracking-tight">{{ t("library.title") }}</h1>
         <p class="mt-1 text-sm text-muted-foreground">{{ t("library.subtitle") }}</p>
       </div>
-      <Button @click="showImport = !showImport">
+      <Button @click="toggleImport">
         {{ showImport ? t("library.cancel") : t("library.import") }}
       </Button>
     </div>
@@ -330,9 +551,26 @@ async function reextract(b: KnowledgeBook) {
             {{ t("library.importModeUrl") }}
           </button>
         </div>
-        <div v-if="importMode === 'file'" class="flex gap-2">
-          <Input v-model="path" :placeholder="t('library.path')" readonly class="flex-1" />
-          <Button variant="outline" @click="pick">{{ t("library.pick") }}</Button>
+        <div v-if="importMode === 'file'" class="space-y-2">
+          <button
+            type="button"
+            class="flex w-full flex-col items-center justify-center gap-1 rounded-lg border border-dashed px-4 py-8 text-center transition-colors"
+            :class="
+              fileDropHover
+                ? 'border-primary bg-accent text-foreground'
+                : 'border-border bg-muted/30 text-muted-foreground hover:border-primary/50 hover:bg-muted/50'
+            "
+            @click="pick"
+          >
+            <span class="text-sm">{{ t("library.dropOrPick") }}</span>
+            <span v-if="path" class="max-w-full truncate text-xs text-foreground" :title="path">
+              {{ t("library.fileSelected", { name: fileName }) }}
+            </span>
+          </button>
+          <div class="flex gap-2">
+            <Input v-model="path" :placeholder="t('library.path')" readonly class="flex-1" />
+            <Button variant="outline" @click="pick">{{ t("library.pick") }}</Button>
+          </div>
         </div>
         <div v-else>
           <label class="mb-1 block text-sm">{{ t("library.url") }}</label>
@@ -340,7 +578,63 @@ async function reextract(b: KnowledgeBook) {
           <p class="mt-1 text-xs text-muted-foreground">{{ t("library.urlHint") }}</p>
         </div>
         <div>
+          <label class="mb-1 block text-sm">{{ t("library.extractChat") }}</label>
+          <p class="mb-2 text-xs text-muted-foreground">{{ t("library.extractChatHint") }}</p>
+          <div
+            ref="extractListEl"
+            class="mb-2 h-48 space-y-2 overflow-y-auto rounded-md border bg-muted/30 p-3"
+          >
+            <div
+              v-for="(m, i) in extractMessages"
+              :key="i"
+              class="rounded-lg px-3 py-2 text-sm"
+              :class="m.role === 'user' ? 'ml-8 bg-accent' : 'mr-6 bg-background'"
+            >
+              <div class="mb-0.5 text-[10px] uppercase text-muted-foreground">{{ m.role }}</div>
+              <div class="whitespace-pre-wrap break-words leading-relaxed">
+                {{ formatChatContent(m.content) }}
+              </div>
+            </div>
+          </div>
+          <div class="relative">
+            <ul
+              v-if="slashSuggestions.length"
+              class="absolute bottom-full left-0 right-0 z-20 mb-1 max-h-48 overflow-auto rounded-md border bg-popover py-1 text-sm shadow-md"
+              role="listbox"
+            >
+              <li
+                v-for="(s, i) in slashSuggestions"
+                :key="s.cmd"
+                class="cursor-pointer px-3 py-1.5"
+                :class="i === slashActive ? 'bg-accent text-accent-foreground' : 'hover:bg-muted'"
+                role="option"
+                :aria-selected="i === slashActive"
+                @mousedown.prevent="applySlashCmd(s)"
+              >
+                <span class="font-medium">{{ s.cmd }}</span>
+                <span class="ml-2 text-xs text-muted-foreground">{{ s.hint }}</span>
+              </li>
+            </ul>
+            <Textarea
+              v-model="extractChatInput"
+              rows="2"
+              :placeholder="t('library.extractChatPlaceholder')"
+              :disabled="chatBusy || busy"
+              @keydown="onExtractChatKeydown"
+            />
+          </div>
+          <div class="mt-2 flex flex-wrap gap-2">
+            <Button v-if="chatBusy" variant="destructive" @click="stopExtractChat">
+              {{ t("workspace.stop") }}
+            </Button>
+            <Button v-else :disabled="busy" @click="sendExtractChat">
+              {{ t("library.extractChatSend") }}
+            </Button>
+          </div>
+        </div>
+        <div>
           <label class="mb-1 block text-sm">{{ t("library.extractPrompt") }}</label>
+          <p class="mb-1 text-xs text-muted-foreground">{{ t("library.extractPromptHint") }}</p>
           <Textarea v-model="prompt" rows="3" />
         </div>
         <div>
@@ -359,7 +653,7 @@ async function reextract(b: KnowledgeBook) {
           </div>
         </div>
         <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
-        <Button :disabled="busy" @click="doImport">
+        <Button :disabled="busy || chatBusy" @click="doImport">
           {{ busy ? t("library.importing") : t("library.doImport") }}
         </Button>
       </CardContent>
@@ -390,7 +684,7 @@ async function reextract(b: KnowledgeBook) {
               variant="outline"
               :disabled="!!reextractId || busy"
               :title="t('library.reextractHint')"
-              @click="reextract(b)"
+              @click="openReextract(b)"
             >
               {{ reextractId === b.id ? t("library.reextracting") : t("library.reextract") }}
             </Button>
@@ -520,6 +814,45 @@ async function reextract(b: KnowledgeBook) {
           </div>
         </CardContent>
       </Card>
+    </div>
+
+    <div
+      v-if="reextractTarget"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      @click.self="cancelReextract"
+    >
+      <div
+        class="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-lg border bg-background shadow-lg"
+        role="dialog"
+        aria-modal="true"
+      >
+        <div class="shrink-0 border-b px-5 py-4">
+          <h2 class="text-base font-semibold">{{ t("library.reextract") }}</h2>
+          <p class="mt-1 text-xs text-muted-foreground">
+            {{ t("library.reextractPanelHint", { title: reextractTarget.title }) }}
+          </p>
+        </div>
+        <div class="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
+          <div>
+            <label class="mb-1 block text-sm">{{ t("library.extractPrompt") }}</label>
+            <Textarea
+              v-model="reextractPrompt"
+              rows="6"
+              :disabled="!!reextractId"
+              :placeholder="t('library.extractChatPlaceholder')"
+            />
+          </div>
+          <p v-if="reextractError" class="text-sm text-destructive">{{ reextractError }}</p>
+        </div>
+        <div class="flex shrink-0 justify-end gap-2 border-t px-5 py-3">
+          <Button variant="outline" :disabled="!!reextractId" @click="cancelReextract">
+            {{ t("library.cancel") }}
+          </Button>
+          <Button :disabled="!!reextractId" @click="confirmReextract">
+            {{ reextractId ? t("library.reextracting") : t("library.reextractConfirm") }}
+          </Button>
+        </div>
+      </div>
     </div>
 
     <div

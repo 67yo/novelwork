@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from "vue";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { RouterLink, RouterView, useRoute } from "vue-router";
 import { api } from "@/lib/api";
 import { setLocalePreference, useI18n, type LocalePreference } from "@/i18n";
 import { BookOpen, Bot, ChartColumnStacked, Library, Settings, Sparkles } from "@lucide/vue";
 
+const BASE_TITLE = "Nove Work";
 const route = useRoute();
 const keyOk = ref(false);
 const { t } = useI18n();
@@ -24,8 +26,32 @@ async function refreshKey() {
   }
 }
 
-onMounted(refreshKey);
+async function syncWindowTitle() {
+  try {
+    const id = route.params.id;
+    if (route.name === "workspace" && typeof id === "string" && id) {
+      const novel = await api.getNovel(id);
+      const name = novel?.title?.trim();
+      await getCurrentWindow().setTitle(name ? `${BASE_TITLE} - ${name}` : BASE_TITLE);
+    } else {
+      await getCurrentWindow().setTitle(BASE_TITLE);
+    }
+  } catch {
+    // 非 Tauri 环境忽略
+  }
+}
+
+onMounted(() => {
+  void refreshKey();
+  void syncWindowTitle();
+});
 watch(() => route.path, refreshKey);
+watch(
+  () => [route.name, route.params.id] as const,
+  () => {
+    void syncWindowTitle();
+  },
+);
 
 function navClass(path: string) {
   const active =

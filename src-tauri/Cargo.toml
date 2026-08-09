@@ -28,7 +28,7 @@ anyhow = "1"
 parking_lot = "0.12"
 dirs = "6"
 rig-core = "0.41"
-adk-rust = "1"
+adk-rust = { version = "1", features = ["skills"] }
 lancedb = "0.33"
 futures = "0.3"
 arrow-array = "58"

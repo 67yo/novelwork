@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { api, type ModelCatalog, type SettingsView } from "@/lib/api";
+import {
+  api,
+  type ModelCatalog,
+  type SettingsView,
+  type SkillMatchPreview,
+  type SkillPreviewItem,
+} from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,6 +33,16 @@ const msg = ref("");
 const err = ref("");
 const saving = ref(false);
 const catalogBusy = ref(false);
+
+const skillsRoot = ref("");
+const skillsExists = ref(false);
+const skills = ref<SkillPreviewItem[]>([]);
+const skillsBusy = ref(false);
+const skillsErr = ref("");
+const expandedSkill = ref<string | null>(null);
+const skillQuery = ref("");
+const skillMatchBusy = ref(false);
+const skillMatch = ref<SkillMatchPreview | null>(null);
 
 const liveIds = computed(() => {
   const c = catalog.value;
@@ -75,10 +91,59 @@ async function refreshCatalog() {
   }
 }
 
+async function loadSkills() {
+  skillsBusy.value = true;
+  skillsErr.value = "";
+  skillMatch.value = null;
+  try {
+    const p = await api.listChatSkills();
+    skillsRoot.value = p.root;
+    skillsExists.value = p.exists;
+    skills.value = p.skills;
+    if (expandedSkill.value && !p.skills.some((s) => s.name === expandedSkill.value)) {
+      expandedSkill.value = null;
+    }
+  } catch (e) {
+    skillsErr.value = String(e);
+  } finally {
+    skillsBusy.value = false;
+  }
+}
+
+function toggleSkill(name: string) {
+  expandedSkill.value = expandedSkill.value === name ? null : name;
+}
+
+async function trySkillMatch() {
+  skillMatchBusy.value = true;
+  try {
+    skillMatch.value = await api.previewChatSkillMatch(skillQuery.value);
+  } catch (e) {
+    skillsErr.value = String(e);
+  } finally {
+    skillMatchBusy.value = false;
+  }
+}
+
+function skillMatchText(m: SkillMatchPreview): string {
+  if (m.via === "empty") return t("settings.skillsMatchEmpty");
+  if (m.via === "no_dir") return t("settings.skillsMatchNoDir");
+  if (m.via === "trigger_only" && m.name) {
+    return t("settings.skillsMatchTriggerOnly", { name: m.name });
+  }
+  if (m.matched && m.name) {
+    if (m.via === "at") return t("settings.skillsMatchAt", { name: m.name });
+    const score = m.score != null ? m.score.toFixed(1) : "–";
+    return t("settings.skillsMatchHit", { name: m.name, score });
+  }
+  return t("settings.skillsMatchNone");
+}
+
 onMounted(async () => {
   await load();
   // 打开设置页再拉一次，覆盖启动任务尚未完成的情况
   refreshCatalog().then(() => load());
+  void loadSkills();
 });
 
 function toggle(id: string) {
@@ -187,6 +252,68 @@ const catalogHint = computed(() => {
         >
           <option v-for="opt in LOCALE_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
         </select>
+      </CardContent>
+    </Card>
+
+    <Card>
+      <CardHeader>
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <CardTitle>{{ t("settings.skills") }}</CardTitle>
+            <p class="mt-1 text-sm text-muted-foreground">{{ t("settings.skillsHint") }}</p>
+            <p class="mt-1 truncate font-mono text-xs text-muted-foreground" :title="skillsRoot">
+              {{ skillsRoot || "…" }}
+            </p>
+          </div>
+          <Button variant="outline" size="sm" class="shrink-0" :disabled="skillsBusy" @click="loadSkills">
+            {{ skillsBusy ? t("settings.skillsRefreshing") : t("settings.skillsRefresh") }}
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent class="space-y-4">
+        <p v-if="skillsErr" class="text-sm text-destructive">{{ skillsErr }}</p>
+        <p v-else-if="skillsBusy" class="text-sm text-muted-foreground">{{ t("settings.skillsLoading") }}</p>
+        <p v-else-if="!skillsExists" class="text-sm text-muted-foreground">{{ t("settings.skillsMissingDir") }}</p>
+        <p v-else-if="skills.length === 0" class="text-sm text-muted-foreground">{{ t("settings.skillsEmpty") }}</p>
+        <ul v-else class="max-h-80 space-y-2 overflow-y-auto overscroll-contain">
+          <li
+            v-for="s in skills"
+            :key="s.name"
+            class="rounded-md border border-border px-3 py-2"
+          >
+            <button type="button" class="w-full text-left" @click="toggleSkill(s.name)">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="font-mono text-sm font-medium">@{{ s.name }}</span>
+                <span
+                  v-if="s.trigger"
+                  class="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                >
+                  {{ t("settings.skillsTrigger") }}
+                </span>
+              </div>
+              <p class="mt-1 line-clamp-2 text-xs text-muted-foreground">{{ s.description }}</p>
+            </button>
+            <pre
+              v-if="expandedSkill === s.name"
+              class="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded bg-muted/40 p-2 text-xs text-foreground"
+            >{{ s.body_preview }}</pre>
+          </li>
+        </ul>
+        <div class="space-y-2 border-t pt-4">
+          <label class="block text-sm">{{ t("settings.skillsMatchLabel") }}</label>
+          <div class="flex gap-2">
+            <Input
+              v-model="skillQuery"
+              :placeholder="t('settings.skillsMatchPh')"
+              class="flex-1"
+              @keydown.enter.prevent="trySkillMatch"
+            />
+            <Button variant="outline" :disabled="skillMatchBusy" @click="trySkillMatch">
+              {{ skillMatchBusy ? t("settings.skillsMatching") : t("settings.skillsMatch") }}
+            </Button>
+          </div>
+          <p v-if="skillMatch" class="text-sm text-muted-foreground">{{ skillMatchText(skillMatch) }}</p>
+        </div>
       </CardContent>
     </Card>
 

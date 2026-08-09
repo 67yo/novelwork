@@ -8,7 +8,9 @@
 
 - 命令入口、流程步骤、取消/进度阶段  
 - Prompt 约束、输入材料、冲突优先级  
+- **大纲 brief 材料**（根人物/剧情/知识卡、绑定知识库检索、`assemble_outline_gen_brief` / `root_linked_plots_and_knowledge` / `build_canon_context`）  
 - 字数规则、落地检查、记忆抽取时机  
+- 根节点「游戏设定」绑定 / 同步设定卡  
 - 根节点 / Chat 斜杠 / UI 行为差异  
 
 实现入口总表：
@@ -51,21 +53,39 @@
 
 ### 1.0 须考虑材料（左侧入口共用）
 
-左侧「生成章节卡」「生成下一章」在调用 LLM 前：
+左侧「生成章节卡」「生成下一章」「刷新大纲」在调用 LLM 前：
 
 1. `preview_chapter_outline_brief` 组装可编辑 brief（`outline_gen_brief`）。  
 2. UI 弹出确认框：展示全部材料 +「对本批的期望」占位，用户可改。  
-3. 确认后把编辑后的 `user_brief` 原样交给 `generate_chapter_cards` / `plan_next_chapters`。  
+3. 确认后把编辑后的 `user_brief` 原样交给 `generate_chapter_cards` / `plan_next_chapters` / `regenerate_chapter_outline`。  
 
 **组装规则（`assemble_outline_gen_brief`）**
 
 | 情形 | 材料 |
 |------|------|
-| 仅根节点（生成第 1 章起） | 根参考：简介 + 根大纲 + 根关联人物 |
-| 已有前序章（编号 &lt; 本批 from） | 上项 + 各前序章**大纲 + 章节记忆**（`build_refine_memory_context`） |
-| 生成下一章 | 上项且 **含当前章**（from = 当前章号+1 ⇒ 编号 &lt; from）+ 可选当前章正文截断 |
+| **根参考（始终）** | 见下表「根参考明细」 |
+| 仅根节点（生成第 1 章起） | 根参考 |
+| 已有前序章（编号 &lt; 本批 from） | 根参考 + 各前序章**大纲 + 章节记忆**（`build_refine_memory_context`） |
+| 生成下一章 | 上项且 **含当前章**（from = 当前章号+1 ⇒ 编号 &lt; from）+ 可选当前章正文截断；user 另附 `knowledge_strategy` |
+| 刷新本章大纲 | 根参考 + 编号 &lt; 本章的大纲/记忆 + 当前旧大纲（标注将被覆盖）+ 用户期望 |
 
 Chat `/章节卡` 无确认框；`user_brief` 为空时后端按同一规则自动组装。
+
+#### 1.0.1 根参考明细（大纲 AI 必含）
+
+组装入口：`assemble_outline_gen_brief`。
+
+| 块 | 函数 / 来源 | 内容 | 大纲侧约束 |
+|----|-------------|------|------------|
+| 简介 + 根说明 + 人物 | `root_generate_reference` | `synopsis`、根 `outline`、根链接/边关联的**人物卡** | 定调与人设 |
+| **剧情卡** | `root_linked_plots_and_knowledge` | 根 `linked_side_plot_ids` + 根边上的 `side_plot`；只注入**要点**（`outline`），不塞剧情卡全文 | **本批须为其安排合理推进，禁止只点名** |
+| **知识卡** | 同上 | 根 `linked_knowledge_ids` + 根边上的 `knowledge`；优先 `extracted`（截断），否则提取需求 / 节点 outline | **专名与规则勿与之冲突** |
+| **绑定公共知识库** | `build_canon_context`（当 `novel.knowledge_ids` 非空） | 根上 `from_canon` 设定卡摘要 + 绑定库关键词检索片段；文案随 `canon_mode`（reference / strict） | strict：**硬设定**，禁止发明冲突设定；reference：参考、勿明显矛盾 |
+
+说明：
+
+- 预生成正文另有 `chapter_context`（含根贯穿卡）；**故意不**把剧情/知识并进 `root_generate_reference`，以免预生成 user 里重复两份。大纲路径单独拼 `root_linked_plots_and_knowledge`。  
+- Prompt：`gen_chapter_cards_system` / `plan_next_chapters_system` 须写明「根剧情卡须推进；知识卡/绑定设定勿冲突」。  
 
 ### 1.1 根节点「生成章节卡」
 
@@ -77,7 +97,7 @@ Chat `/章节卡` 无确认框；`user_brief` 为空时后端按同一规则自�
 | 模型 | `chat_model` |
 | 范围 | 第 **1–count** 章；`count` clamp 到 `1..=100`，且若 `novel.chapter_count > 0` 则不超过全书章数 |
 | 冲突模式 | **Overwrite**：同号覆盖标题与大纲；无则新建并挂到章节链 |
-| AI 策略 | 按总章数分配本批位置；章间衔接；不得推翻 brief 中既定事实；尊重用户期望 |
+| AI 策略 | 按总章数分配本批位置；章间衔接；不得推翻 brief 中既定事实；**推进根剧情卡**；**遵守根知识卡与绑定设定**；尊重用户期望 |
 | UI | 根节点左侧：数量 → 确认框 → 生成；进度 3 步：context → planning → saving |
 
 ### 1.2 Chat `/章节卡`
@@ -85,7 +105,7 @@ Chat `/章节卡` 无确认框；`user_brief` 为空时后端按同一规则自�
 | 项 | 说明 |
 |----|------|
 | 解析 | `parse_gen_chapter_cards`：`/章节卡 1-10`、`/章节卡 覆盖\|跳过\|强制追加 3-5` 等 |
-| 实现 | 与根节点共用 `apply_llm_chapter_cards`（自动组装 brief，无弹窗） |
+| 实现 | 与根节点共用 `apply_llm_chapter_cards`（自动组装 brief，无弹窗；材料规则同 §1.0） |
 | 默认模式 | 未指定模式且无冲突 → **ForceAppend**；有冲突且未指定模式 → **先提示**，不调用 LLM |
 | 模式 | Overwrite / Skip / ForceAppend |
 | 进度 | `chat-progress`（thinking / apply_outlines / saving） |
@@ -100,9 +120,23 @@ Chat `/章节卡` 无确认框；`user_brief` 为空时后端按同一规则自�
 | 模型 | `chat_model` |
 | 范围 | 当前章编号之后连续 `count` 章（1–12），且不超过全书计划章数 |
 | 冲突模式 | **Overwrite** |
-| 输入材料 | 见 §1.0（根 → 截至当前章大纲+记忆 + 可选正文 + 用户期望）；另附知识策略 |
-| AI 策略 | 承接当前局势与期望；不得推翻记忆；多章递进；只输出本批编号 |
+| 输入材料 | 见 §1.0（含根剧情卡/知识卡/绑定库）；另附 `knowledge_strategy` |
+| AI 策略 | 承接当前局势与期望；不得推翻记忆；多章递进；**根剧情卡须推进**；**知识卡/绑定设定勿冲突**；只输出本批编号 |
 | UI | 章节卡按钮 + 数量 → 确认框 → 生成；进度 chapter-progress |
+
+### 1.3a 章节卡「刷新大纲」
+
+| 项 | 说明 |
+|----|------|
+| 预览 | `preview_chapter_outline_brief(novel_id, "regen_outline", 1, node_id)` |
+| 命令 | `regenerate_chapter_outline(novel_id, node_id, user_brief)` |
+| 实现 | 共用 `apply_llm_chapter_cards`（与根节点「生成章节卡」同源） |
+| Prompt | `gen_chapter_cards_system` / `gen_chapter_cards_user`（单章、`replace=true`） |
+| 模型 | `chat_model` |
+| 范围 | **仅当前章**编号；冲突模式 **Overwrite**（覆盖标题+大纲） |
+| 输入材料 | 见 §1.0「刷新本章大纲」（含根剧情卡/知识卡/绑定库） |
+| 不改 | 正文、章节记忆、剧情卡关联 |
+| UI | 章节大纲旁「刷新大纲」→ 确认框 → 生成；进度 chapter-progress |
 
 ### 1.3b 章节卡「生成剧情卡」
 
@@ -120,10 +154,11 @@ Chat `/章节卡` 无确认框；`user_brief` 为空时后端按同一规则自�
 
 改大纲 / 剧情卡生成时：
 
-1. [ ] 更新 `preview_chapter_outline_brief` / `generate_chapter_cards` / `plan_next_chapters` / `generate_chapter_plots` / Chat（若涉及）  
-2. [ ] 更新 `outline_gen_brief` / `gen_chapter_cards_*` / `plan_next_chapters_*` / `gen_chapter_plots_*`  
-3. [ ] **同步本文 §1**（含确认框与材料规则）  
-4. [ ] UI 文案：`messages.ts` 全语言  
+1. [ ] 更新 `preview_chapter_outline_brief` / `generate_chapter_cards` / `plan_next_chapters` / `regenerate_chapter_outline` / `generate_chapter_plots` / Chat（若涉及）  
+2. [ ] 更新 `assemble_outline_gen_brief` / `root_linked_plots_and_knowledge` / `build_canon_context`（若改材料）  
+3. [ ] 更新 `outline_gen_brief` / `gen_chapter_cards_*` / `plan_next_chapters_*` / `gen_chapter_plots_*`  
+4. [ ] **同步本文 §1.0 / §1.0.1**（含根剧情卡、知识卡、绑定库规则）  
+5. [ ] UI 文案：`messages.ts` 全语言  
 
 ---
 
@@ -144,11 +179,24 @@ Chat `/章节卡` 无确认框；`user_brief` 为空时后端按同一规则自�
 | **链接剧情卡**（含根贯穿） | 链接 / 边 | **须落地并推进** |
 | 链接人物卡 + 关系边 | 本章 / 剧情卡 / 根并集 | 言行合卡 |
 | 链接知识卡 | 提取特征 | 技法/设定边界 |
+| **绑定公共知识库** | `novel.knowledge_ids` + `canon_mode` | **reference**：参考；**strict**：硬设定，检索注入且冲突优先 |
 | 知识库策略 | `knowledge_strategy` | 补充 |
 | 全书计划章数 | `chapter_count` | 本章信息量与悬念 |
 | **每章目标字数** | §4 | **硬性篇幅（写进 Prompt）** |
 
-冲突时：**前序记忆/大纲 → 本章大纲 → 剧情卡 → 人物 → 知识卡 → 简介**。未链接设定勿硬塞。
+冲突时（`canon_mode=reference`）：**前序记忆/大纲 → 本章大纲 → 剧情卡 → 人物 → 知识卡 → 简介**。  
+冲突时（`canon_mode=strict`）：**前序记忆/大纲 → 绑定知识库设定 → 本章大纲 → 剧情卡 → 人物 → 知识卡 → 简介**。未链接设定勿硬塞。
+
+### 2.2b 根节点「游戏设定」绑定
+
+| 项 | 说明 |
+|----|------|
+| 字段 | `knowledge_ids`（绑定书）、`canon_mode`（`reference`/`strict`）、`knowledge_strategy` |
+| 保存 | `update_novel_canon` |
+| 注入（预生成 / 精修 / **大纲 brief**） | `build_canon_context`：根上 `from_canon` 设定卡摘要 + 绑定库关键词检索片段 |
+| 同步设定卡 | `sync_canon_settings`：每本绑定库提炼一张 `from_canon` 知识卡挂根（同书覆盖） |
+| 设定对齐 | 仅正文预生成：strict 且有检索材料时，大纲涉及的设定词未出现在正文 → `repair_canon_*` 一轮 |
+| 「禁止发明冲突设定」 | 不得自创与绑定库/设定卡矛盾的专名、规则、体系、禁忌；允许在设定范围内写剧情与润色表述 |
 
 ### 2.3 流程
 
@@ -160,12 +208,13 @@ Chat `/章节卡` 无确认框；`user_brief` 为空时后端按同一规则自�
 4. 代码生成「必须落地」契约（大纲节拍 / 剧情卡 / 本章焦点人物）写入 user。  
 5. 首轮 LLM 写正文。  
 6. **落地补写**（可选）：关键词未命中 → `repair_chapter_*` 再一轮（带字数约束）；Mock 跳过。  
-7. 写 `chapters/{node_id}.md`（附 footer），树上字数按正文（不含 footer）。偏目标仅 `word_count_off_note`。  
-8. **不**抽取章节记忆。  
+7. **设定对齐**（可选，`canon_mode=strict`）：大纲涉及的绑定设定词未命中 → `repair_canon_*`。  
+8. 写 `chapters/{node_id}.md`（附 footer），树上字数按正文（不含 footer）。偏目标仅 `word_count_off_note`。  
+9. **不**抽取章节记忆。  
 
 一键自动：跳过确认框，默认勾选有记忆的前序章 + 已存/缺省条件。  
 
-进度阶段（3）：`context` → `writing` → `repair_beats`（校验/必要时补写）。
+进度阶段（3）：`context` → `writing` → `repair_beats`（校验/必要时补写；strict 设定对齐同阶段内完成）。
 
 ### 2.4 落地检查（`chapter_constraints`）
 
@@ -203,7 +252,7 @@ UI：点「精修」→ 确认面板编辑条件 → 开始；`mode` = `memory` 
 
 命令：`refine_chapter(…, user_brief)` · Prompt：`refine_chapter_*` · 模型：`refine_model`
 
-1. 按模式组装前 N 章材料 + `chapter_context` + 当前正文 + 用户精修条件。  
+1. 按模式组装前 N 章材料 + `chapter_context` + 当前正文 + 用户精修条件；若绑定了知识库，将 `build_canon_context` 并入策略材料。  
 2. 字数目标写入 Prompt；**无**额外篇幅校准轮次。  
 3. 一轮 LLM 精修。  
 4. 写回正文、更新树上字数。  
@@ -265,8 +314,8 @@ UI：点「精修」→ 确认面板编辑条件 → 开始；`mode` = `memory` 
 ## 6. 相关 UI 与自动化
 
 - **设置**：预生成 / 精修 / Chat / 知识（记忆抽取）模型分栏。  
-- **根节点**：封面、每章字数、全书章数、根大纲、**生成章节卡（数量 → 确认材料/期望）**。  
-- **章节卡**：一行「生成剧情卡（两步确认）| 预生成（记忆章勾选 + 条件）| 精修（条件确认面板）」；精修参考模式 + 前 N；生成下一章（数量 → 确认材料/期望）；停止、**手动编辑正文**（`save_chapter`）、复制、**章节记忆**（面板内手动提取）。  
+- **根节点**：封面、每章字数、全书章数、**游戏设定绑定**（知识库多选 + 严格/参考 + 策略 + 同步设定卡）、根大纲、**生成章节卡（数量 → 确认材料/期望）**。  
+- **章节卡**：一行「生成剧情卡（两步确认）| 预生成（记忆章勾选 + 条件）| 精修（条件确认面板）」；精修参考模式 + 前 N；大纲旁「刷新大纲」（确认材料后覆盖标题+大纲）；生成下一章（数量 → 确认材料/期望）；停止、**手动编辑正文**（`save_chapter`）、复制、**章节记忆**（面板内手动提取）。  
 - **画布**：添加卡片、一键排版、查看全部章节记忆。  
 - **一键自动**：按章顺序预生成 → 精修，可中止并 cancel 在途 LLM。  
 - **等待界面**：阶段文案 + 进度条 + 每步耗时。  
@@ -277,8 +326,9 @@ UI：点「精修」→ 确认面板编辑条件 → 开始；`mode` = `memory` 
 
 | 改动类型 | 必须更新 |
 |----------|----------|
-| 章节卡 / 大纲生成 | §1 |
+| 章节卡 / 大纲生成 | §1（含 **§1.0.1** 根剧情卡/知识卡/绑定库） |
 | 预生成正文 | §2、§4 |
+| 游戏设定 / 知识库绑定 | §2.2b（并核对 §1.0.1 大纲注入） |
 | 精修 | §3、§4 |
 | 字数规则 | §4 + `WORD_COUNT_TOLERANCE` |
 | 记忆抽取/存储（手动、注意事项） | §5 |

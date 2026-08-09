@@ -19,6 +19,7 @@ pub fn ensure_sample(db: &Db) -> Result<()> {
         cover_path: None,
         knowledge_ids: vec![],
         knowledge_strategy: "参考知识库中的叙事节奏与人物出场节点。".into(),
+        canon_mode: "reference".into(),
         archived: false,
         word_count_min: 2000,
         word_count_max: 3000,

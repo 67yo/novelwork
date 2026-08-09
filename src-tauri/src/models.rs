@@ -164,8 +164,12 @@ pub struct NovelProject {
     pub title: String,
     pub synopsis: String,
     pub cover_path: Option<String>,
+    /// 绑定的公共知识库（设定源）
     pub knowledge_ids: Vec<String>,
     pub knowledge_strategy: String,
+    /// `reference`（可参考）| `strict`（严格遵循，禁止发明冲突设定）
+    #[serde(default = "default_canon_mode")]
+    pub canon_mode: String,
     #[serde(default)]
     pub archived: bool,
     /// 每章目标字数下限
@@ -179,6 +183,10 @@ pub struct NovelProject {
     pub chapter_count: u32,
     pub created_at: String,
     pub updated_at: String,
+}
+
+fn default_canon_mode() -> String {
+    "reference".into()
 }
 
 fn default_word_min() -> u32 {
@@ -223,6 +231,23 @@ pub struct NovelCreateChatResult {
     pub reply: String,
     pub used_mock: bool,
     pub novel: Option<NovelProject>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KnowledgeExtractChatInput {
+    pub messages: Vec<ChatTurn>,
+    /// 网址导入 vs 本地文件，影响默认提取侧重点说明
+    #[serde(default)]
+    pub from_url: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KnowledgeExtractChatResult {
+    pub reply: String,
+    pub used_mock: bool,
+    /// 模型输出 JSON 中的提取需求；无则 null
+    pub extract_prompt: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -291,6 +316,9 @@ pub struct KnowledgeCardPayload {
     /// AI 提取后的主要特征（写作时注入）
     #[serde(default)]
     pub extracted: String,
+    /// 由「同步游戏设定」从绑定知识库生成
+    #[serde(default)]
+    pub from_canon: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

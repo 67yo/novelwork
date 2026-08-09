@@ -142,6 +142,50 @@ impl PromptLocale {
     }
 }
 
+/// 知识库导入前：用 Chat 打磨「提取需求」，支持 /skill 与自动匹配 skill。
+pub fn knowledge_extract_chat_system(loc: PromptLocale, from_url: bool) -> String {
+    if loc.is_zh() {
+        let src = if from_url { "网页" } else { "书籍（txt/epub）" };
+        format!(
+            "你是 Nove Work 知识库导入助手。用户即将导入{src}，你的任务是通过对话帮他写清「提取需求」\
+             （导入时给分析 AI 的重点说明）。\n\
+             规则：\n\
+             1) 先问清用途（写作参考、设定约束、文风模仿等），再给出可执行的提取需求草案。\n\
+             2) 当需求已足够具体、可直接用于导入时，在回复中输出 JSON：\
+             {{\"extract_prompt\":\"完整提取需求正文\"}}（可多行或代码块）。\n\
+             3) 未就绪时不要输出该 JSON；用自然语言继续澄清。\n\
+             4) 用户可用 /skill-name 或 @skill-name 启用 ~/.agents/skills 中的 skill；有 skill 时优先按其方法整理提取需求。\n\
+             5) 不要开始分析具体书/网页正文（导入步骤才做）；只打磨提取需求本身。"
+        )
+    } else {
+        let src = if from_url { "a web page" } else { "a book (txt/epub)" };
+        format!(
+            "You are the Nove Work knowledge-import assistant. The user will import {src}. \
+             Help them write a clear extract_prompt (focus instructions for the analysis AI).\n\
+             Rules:\n\
+             1) Clarify purpose (writing reference, canon constraints, style mimicry), then draft a concrete extract prompt.\n\
+             2) When ready to import, include JSON: {{\"extract_prompt\":\"full prompt text\"}} (multi-line/fenced OK).\n\
+             3) If not ready, do not emit that JSON; keep clarifying in natural language.\n\
+             4) Users may enable ~/.agents/skills via /skill-name or @skill-name; prefer the skill’s method when active.\n\
+             5) Do not analyze the actual book/page yet—only refine the extract requirements."
+        )
+    }
+}
+
+pub fn knowledge_extract_chat_welcome(loc: PromptLocale, from_url: bool) -> &'static str {
+    if loc.is_zh() {
+        if from_url {
+            "这是知识库导入 Chat。说说你想从网页提炼什么（设定、规则、专有名词、禁忌…）。可用 / 调出 Skills。准备好后我会给出可导入的提取需求。"
+        } else {
+            "这是知识库导入 Chat。说说你想从书里提炼什么（大纲、文风、手法、节奏…）。可用 / 调出 Skills。准备好后我会给出可导入的提取需求。"
+        }
+    } else if from_url {
+        "Knowledge-import Chat. Tell me what to extract from the page (setting, rules, proper nouns, taboos…). Type / for Skills. When ready I’ll produce an importable extract prompt."
+    } else {
+        "Knowledge-import Chat. Tell me what to extract from the book (outline, craft, pacing…). Type / for Skills. When ready I’ll produce an importable extract prompt."
+    }
+}
+
 pub fn knowledge_extract_system(loc: PromptLocale) -> &'static str {
     if loc.is_zh() {
         "你是小说知识库分析助手。根据目录与正文抽样，输出 Markdown，必须包含这些小节（用二级标题）：\n\
@@ -545,9 +589,35 @@ pub fn generate_chapter_system(
     wmin: u32,
     wmax: u32,
     chapter_count: u32,
+    canon_mode: &str,
 ) -> String {
     let wmin_lo = wmin.saturating_sub(60);
     let wmax_hi = wmax.saturating_add(60);
+    let strict = canon_mode.eq_ignore_ascii_case("strict");
+    let conflict = if strict {
+        if loc.is_zh() {
+            "未链接到本章的设定不要硬塞；冲突时：前序记忆与大纲定历史事实 → **绑定知识库设定（严格）** → 本章大纲定主线 → 剧情卡补齐本章事件 → 人物约束行为 → 知识卡补充技法 → 简介定调。\
+             禁止发明与绑定知识库冲突的专有名词、规则、体系或禁忌。"
+        } else {
+            "Do not force unlinked lore. On conflicts: prior memory/outlines = history → **bound knowledge canon (strict)** → this chapter outline → plot cards → characters → knowledge cards (craft) → synopsis. \
+             Do not invent proper nouns, rules, systems, or taboos that contradict bound canon."
+        }
+    } else if loc.is_zh() {
+        "未链接到本章的设定不要硬塞；冲突时：前序记忆与大纲定历史事实 → 本章大纲定主线 → 剧情卡补齐本章事件 → 人物约束行为 → 知识卡定边界 → 简介定调。"
+    } else {
+        "Do not force unlinked lore. On conflicts: prior memory/outlines = history → this chapter outline drives the arc → plot cards supply events → characters constrain behavior → knowledge cards bound craft → synopsis sets tone."
+    };
+    let canon_line = if strict {
+        if loc.is_zh() {
+            "6b）绑定公共知识库（严格模式）：用户消息中的设定检索片段为硬约束，专名/规则/体系/禁忌须与之一致。\n"
+        } else {
+            "6b) Bound public knowledge (strict): retrieved canon snippets in the user message are hard constraints—names/rules/systems/taboos must match.\n"
+        }
+    } else if loc.is_zh() {
+        "6b）若提供绑定知识库检索片段：优先作设定参考，可润色表述但勿明显矛盾。\n"
+    } else {
+        "6b) If bound-knowledge snippets are provided: prefer them as setting reference; polish OK, do not clearly contradict.\n"
+    };
     let body = if loc.is_zh() {
         format!(
             "你是强约束小说写作引擎 Nove Work。生成本章时必须同时遵守：\n\
@@ -557,8 +627,9 @@ pub fn generate_chapter_system(
              4）本章已链接人物卡（性格、身份、行事风格、关系，言行不得出戏）；\n\
              5）本章已链接剧情卡（含根节点贯穿剧情）：卡内要点/补充正文是本章情节来源之一，须结合大纲写入正文，使事件落地，禁止只点名不推进。\n\
              6）已链接知识卡（提取特征与知识约束必须遵守，勿与之矛盾）。\n\
+             {canon_line}\
              7）全书计划共 {chapter_count} 章：本章信息量与悬念投放须符合所处位置，勿按无限连载节奏注水；勿抢写后续章大纲中才应发生的高潮。\n\
-             未链接到本章的设定不要硬塞；冲突时：前序记忆与大纲定历史事实 → 本章大纲定主线 → 剧情卡补齐本章事件 → 人物约束行为 → 知识卡定边界 → 简介定调。\n\
+             {conflict}\n\
              【契约】用户消息中的「必须落地」列表是硬性验收项：每一项都须在正文中实际发生或明确推进；写完在脑中逐项勾选，缺项则补写后再输出。\n\
              小说：《{title}》\n简介：{synopsis}\n知识库策略：{knowledge_strategy}\n\
              【硬性篇幅】以树根节点每章目标为准：正文非空白字符数必须落在 {wmin}–{wmax} 字，允许误差不超过 60 字\
@@ -573,8 +644,9 @@ pub fn generate_chapter_system(
              4) Chapter-linked character cards (traits, role, style — stay in character);\n\
              5) Linked plot cards (incl. root book-wide plots): their beats/extra text are chapter plot sources—combine with the outline and make events land in the body; do not name-drop without advancing them.\n\
              6) Linked knowledge cards (extracted features/constraints — do not contradict).\n\
+             {canon_line}\
              7) Planned total: {chapter_count} chapters—pace for this place in the arc; do not steal climaxes reserved for later chapter outlines.\n\
-             Do not force unlinked lore. On conflicts: prior memory/outlines = history → this chapter outline drives the arc → plot cards supply events → characters constrain behavior → knowledge cards bound craft → synopsis sets tone.\n\
+             {conflict}\n\
              [Contract] The “Must land” list in the user message is hard acceptance criteria—each item must occur or clearly advance; mentally check every item and fill gaps before outputting.\n\
              Novel: “{title}”\nSynopsis: {synopsis}\nKnowledge strategy: {knowledge_strategy}\n\
              [Hard length] Root per-chapter target: non-whitespace count MUST be in {wmin}–{wmax}, tolerance ≤60 \
@@ -588,6 +660,7 @@ pub fn generate_chapter_user(
     loc: PromptLocale,
     root_ref: &str,
     prior_hist: &str,
+    canon_block: &str,
     chapter_info: &str,
     cards: &str,
     contract: &str,
@@ -606,6 +679,11 @@ pub fn generate_chapter_user(
             "——— Prior outlines + chapter memory (established facts — continue strictly, do not overturn) ———\n{prior_hist}\n\n"
         )
     };
+    let canon = if canon_block.trim().is_empty() {
+        String::new()
+    } else {
+        format!("{canon_block}\n")
+    };
     let brief = if user_brief.trim().is_empty() {
         String::new()
     } else if loc.is_zh() {
@@ -617,14 +695,14 @@ pub fn generate_chapter_user(
     let wmax_hi = wmax.saturating_add(60);
     if loc.is_zh() {
         format!(
-            "{root_ref}\n\n{brief}{hist}{chapter_info}\n\n{cards}\n\n{contract}\n\
+            "{root_ref}\n\n{brief}{hist}{canon}{chapter_info}\n\n{cards}\n\n{contract}\n\
              请在衔接前序记忆/大纲与预生成条件的前提下，严格按「必须落地」列表生成本章正文（Markdown）。\n\
              篇幅硬约束：非空白字数 {wmin}–{wmax}，误差 ≤60（有效 {wmin_lo}–{wmax_hi}）。\n\
              只输出正文，不要输出清单或自我评分。缺项或字数超差禁止交卷。"
         )
     } else {
         format!(
-            "{root_ref}\n\n{brief}{hist}{chapter_info}\n\n{cards}\n\n{contract}\n\
+            "{root_ref}\n\n{brief}{hist}{canon}{chapter_info}\n\n{cards}\n\n{contract}\n\
              Continue prior memory/outlines and generate conditions, then write this chapter’s body (Markdown) covering every Must-land item.\n\
              Hard length: {wmin}–{wmax} non-whitespace chars, tolerance ≤60 (band {wmin_lo}–{wmax_hi}).\n\
              Output body only — no checklist or self-score. Do not submit with gaps or out-of-band length."
@@ -976,7 +1054,10 @@ pub fn workspace_chat_system(
              mode 用 overwrite（同号覆盖标题+大纲，推荐用于「重新生成第X–Y章」）或 append（强制追加新节点）；缺省按同号覆盖、缺号追加。\n\
              以上 JSON 均可多行或放在代码块中。\n\
              然后再用自然语言正常对话。可用章节节点：{chapter_list}\n\
-             若用户消息附带【网页正文】，以正文为准作答，勿臆造页面未提供的内容。"
+             若用户消息附带【网页正文】，以正文为准作答，勿臆造页面未提供的内容。\
+             {}\n"
+        ,
+            crate::chat_tools::tools_system_note(true)
         )
     } else {
         let status = if has_chapters { "has" } else { "has no" };
@@ -997,7 +1078,9 @@ pub fn workspace_chat_system(
              mode=overwrite replaces same-number title+outline (use for “regenerate chapters X–Y”); mode=append force-adds nodes; default upserts by chapter number.\n\
              JSON may be multi-line or fenced.\n\
              Then continue in natural language. Available chapter nodes: {chapter_list}\n\
-             If the user message includes fetched page text, rely on it; do not invent page content."
+             If the user message includes fetched page text, rely on it; do not invent page content.\
+             {}\n",
+            crate::chat_tools::tools_system_note(false)
         )
     };
     format!("{body}\n{}", loc.language_rule())
@@ -1036,6 +1119,7 @@ pub fn gen_chapter_cards_system(
              {replace_note}\n\
              任务：为第 {from}–{to} 章范围内需要生成的章节撰写大纲（编号列表：{nums_s}）。\n\
              要求：每章标题具体、大纲含关键情节点；章与章衔接合理；不要输出范围外的章。\n\
+             若材料含根节点剧情卡：本批须为其安排合理推进（勿只点名）；若含知识卡/绑定设定：专名与规则勿与之冲突。\n\
              回复中必须包含完整 JSON（可多行或代码块）：{{\"outlines\":[{{\"n\":1,\"label\":\"第一章 · 标题\",\"outline\":\"要点\"}}]}}\n\
              JSON 后可跟一句简短说明。"
         )
@@ -1046,6 +1130,7 @@ pub fn gen_chapter_cards_system(
              {replace_note}\n\
              Task: write outlines for chapters in {from}–{to} that need generation (numbers: {nums_s}).\n\
              Each chapter needs a concrete title and key beats; keep continuity; no chapters outside the list.\n\
+             If materials include root plot cards: advance them in this batch (no name-drops). If knowledge/canon is present: do not contradict names/rules.\n\
              Reply MUST include complete JSON (multi-line or fenced OK): {{\"outlines\":[{{\"n\":1,\"label\":\"Chapter 1 · title\",\"outline\":\"beats\"}}]}}\n\
              Then a short note is OK."
         )
@@ -1147,12 +1232,12 @@ pub fn plan_next_chapters_system(
     let body = if loc.is_zh() {
         format!(
             "你是 Nove Work 续章大纲引擎。小说《{title}》。简介：{synopsis}\n\
-             全书计划共 {chapter_count} 章。任务：根据「当前章全文 + 历史记忆 + 根大纲 + 人物设定」，\
+             全书计划共 {chapter_count} 章。任务：根据「当前章全文 + 历史记忆 + 根大纲 + 人物/剧情/知识卡设定」，\
              为第 {from}–{to} 章（编号：{nums_s}）撰写剧情大纲（标题+要点），顺着既有情节往前推。\n\
              规则：\n\
              - 承接当前章结尾的局势与悬念，不得推翻记忆中的既定事实；\n\
              - 多章时章与章衔接递进，节奏匹配全书总章数中的位置；\n\
-             - 人物言行符合设定；可呼应知识库/写作策略中的风格约束；\n\
+             - 人物言行符合设定；根剧情卡须安排推进；知识卡/绑定设定勿冲突；\n\
              - 只输出本批编号，同号视为覆盖重写标题与大纲。\n\
              回复中必须包含完整 JSON（可多行或代码块）：\
              {{\"outlines\":[{{\"n\":{from},\"label\":\"第{from}章 · 标题\",\"outline\":\"情节点\"}}]}}\n\
@@ -1161,10 +1246,10 @@ pub fn plan_next_chapters_system(
     } else {
         format!(
             "You are Nove Work’s next-chapter outline engine. Novel “{title}”. Synopsis: {synopsis}\n\
-             Planned total: {chapter_count} chapters. Task: from current chapter body + memory + root outline + characters, \
+             Planned total: {chapter_count} chapters. Task: from current chapter body + memory + root outline + character/plot/knowledge cards, \
              write plot outlines (title + beats) for chapters {from}–{to} (numbers: {nums_s}).\n\
              Rules: continue from the current chapter’s ending; do not overturn memory facts; \
-             multi-chapter batches must progress coherently within the planned length; respect character cards and knowledge strategy; \
+             multi-chapter batches must progress coherently within the planned length; advance root plot cards; respect knowledge/canon; \
              only listed numbers; same numbers overwrite title/outline.\n\
              Reply MUST include complete JSON (multi-line/fenced OK): \
              {{\"outlines\":[{{\"n\":{from},\"label\":\"Chapter {from} · title\",\"outline\":\"beats\"}}]}}\n\
@@ -1334,6 +1419,67 @@ pub fn knowledge_card_extract_user(
     }
 }
 
+/// 「同步游戏设定」默认提取需求。
+pub fn canon_sync_extract_prompt(loc: PromptLocale) -> &'static str {
+    if loc.is_zh() {
+        "从知识库提炼本书写作必须遵守的「游戏/世界观设定」：体系规则、数值或境界（若有）、势力与专有名词、流程与禁忌、不可违背的硬设定。条理清晰，便于严格参考。"
+    } else {
+        "From this knowledge base, distill game/world setting writers must obey: systems/rules, ranks if any, factions & proper nouns, flows & taboos, hard constraints. Clear bullets for strict reference."
+    }
+}
+
+pub fn format_canon_block(loc: PromptLocale, strict: bool, body: &str) -> String {
+    if body.trim().is_empty() {
+        return String::new();
+    }
+    if loc.is_zh() {
+        if strict {
+            format!(
+                "——— 绑定知识库设定（严格：专名/规则/体系/禁忌须一致，禁止发明冲突设定）———\n{body}\n\n"
+            )
+        } else {
+            format!("——— 绑定知识库设定（参考，勿明显矛盾）———\n{body}\n\n")
+        }
+    } else if strict {
+        format!(
+            "——— Bound knowledge canon (strict: match names/rules/systems/taboos; no conflicting invention) ———\n{body}\n\n"
+        )
+    } else {
+        format!("——— Bound knowledge (reference — do not clearly contradict) ———\n{body}\n\n")
+    }
+}
+
+pub fn repair_canon_system(loc: PromptLocale, wmin: u32, wmax: u32) -> String {
+    let wmin_lo = wmin.saturating_sub(60);
+    let wmax_hi = wmax.saturating_add(60);
+    let body = if loc.is_zh() {
+        format!(
+            "你是 Nove Work 设定对齐引擎。任务：在不大改情节骨架的前提下，把正文与绑定知识库设定对齐：\
+             修正冲突专名/规则表述，补上本章大纲已涉及但正文缺失的设定关键词；禁止另起炉灶。\n\
+             字数硬约束：非空白 {wmin}–{wmax}，误差 ≤60（有效 {wmin_lo}–{wmax_hi}）。只输出完整正文 Markdown。"
+        )
+    } else {
+        format!(
+            "You are Nove Work’s canon-alignment engine. Without overhauling the plot, align the body with bound knowledge: \
+             fix conflicting names/rules; weave in setting keywords required by this chapter’s outline when missing. Do not restart.\n\
+             Hard length: {wmin}–{wmax} non-whitespace, tolerance ≤60 (band {wmin_lo}–{wmax_hi}). Output full chapter Markdown only."
+        )
+    };
+    format!("{body}\n{}", loc.language_rule())
+}
+
+pub fn repair_canon_user(loc: PromptLocale, canon: &str, missing: &str, current: &str) -> String {
+    if loc.is_zh() {
+        format!(
+            "{canon}\n{missing}\n——— 当前正文 ———\n{current}\n\n请输出对齐设定后的完整本章正文。"
+        )
+    } else {
+        format!(
+            "{canon}\n{missing}\n——— Current body ———\n{current}\n\nOutput the full canon-aligned chapter body."
+        )
+    }
+}
+
 pub fn card_chat_system(
     loc: PromptLocale,
     kind: &str, // "chapter" | "character" | "side_plot"
@@ -1440,4 +1586,30 @@ pub fn prev_chapter_block(loc: PromptLocale, label: &str, outline: &str, body: &
         };
         format!("## {label}\nOutline: {outline}\n{body_part}\n\n")
     }
+}
+
+/// Cover T2I prompt: always English output (for image models).
+pub fn cover_t2i_prompt_system() -> &'static str {
+    "You write ONE English text-to-image prompt for a novel book cover.\n\
+     Rules:\n\
+     - Output ONLY the prompt text (no quotes, no markdown, no labels, no Chinese).\n\
+     - One dense paragraph, ~40–90 words, comma-separated visual phrases OK.\n\
+     - Emphasize: mood, main subject(s), setting, lighting, color palette, composition suitable for a vertical book cover.\n\
+     - Style: polished book-cover illustration / cinematic key art; avoid readable title text in the image.\n\
+     - No NSFW; no artist names; no camera brand spam."
+}
+
+pub fn cover_t2i_prompt_user(
+    title: &str,
+    synopsis: &str,
+    root_outline: &str,
+    characters: &str,
+) -> String {
+    format!(
+        "Novel title: {title}\n\n\
+         Synopsis:\n{synopsis}\n\n\
+         Root outline / premise:\n{root_outline}\n\n\
+         Key characters (for visual cues):\n{characters}\n\n\
+         Write the English cover image prompt now."
+    )
 }

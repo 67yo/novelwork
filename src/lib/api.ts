@@ -31,6 +31,29 @@ export type SettingsView = {
   ui_locale: string;
 };
 
+export type SkillPreviewItem = {
+  name: string;
+  description: string;
+  path: string;
+  trigger: boolean;
+  tags: string[];
+  hint: string | null;
+  body_preview: string;
+};
+
+export type SkillsPreview = {
+  root: string;
+  exists: boolean;
+  skills: SkillPreviewItem[];
+};
+
+export type SkillMatchPreview = {
+  matched: boolean;
+  name: string | null;
+  score: number | null;
+  via: string;
+};
+
 export type KnowledgeBook = {
   id: string;
   title: string;
@@ -55,6 +78,8 @@ export type NovelProject = {
   cover_path: string | null;
   knowledge_ids: string[];
   knowledge_strategy: string;
+  /** reference | strict */
+  canon_mode: string;
   archived: boolean;
   word_count_min: number;
   word_count_max: number;
@@ -76,6 +101,7 @@ export type KnowledgeCardPayload = {
   book_ids: string[];
   extract_prompt: string;
   extracted: string;
+  from_canon?: boolean;
 };
 
 export type TreeNode = {
@@ -192,6 +218,12 @@ export type NovelCreateChatResult = {
   novel: NovelProject | null;
 };
 
+export type KnowledgeExtractChatResult = {
+  reply: string;
+  used_mock: boolean;
+  extract_prompt: string | null;
+};
+
 /** 知识卡：按所选知识库与提取需求提炼特征并写回树节点 */
 export function extractKnowledgeCard(novelId: string, nodeId: string) {
   return invoke<NovelTree>("extract_knowledge_card", { novelId, nodeId });
@@ -259,8 +291,16 @@ export const api = {
     invoke<KnowledgeBook>("import_knowledge_text", { path, extractPrompt: extract_prompt, genres }),
   importKnowledgeUrl: (url: string, extract_prompt: string, genres: string[]) =>
     invoke<KnowledgeBook>("import_knowledge_url", { url, extractPrompt: extract_prompt, genres }),
-  reextractKnowledge: (id: string, path?: string | null) =>
-    invoke<KnowledgeBook>("reextract_knowledge", { id, path: path ?? null }),
+  knowledgeExtractChat: (messages: ChatTurn[], fromUrl = false) =>
+    invoke<KnowledgeExtractChatResult>("knowledge_extract_chat", {
+      input: { messages, fromUrl },
+    }),
+  reextractKnowledge: (id: string, path?: string | null, extract_prompt?: string | null) =>
+    invoke<KnowledgeBook>("reextract_knowledge", {
+      id,
+      path: path ?? null,
+      extractPrompt: extract_prompt ?? null,
+    }),
   listNovels: () => invoke<NovelProject[]>("list_novels"),
   getNovel: (id: string) => invoke<NovelProject | null>("get_novel", { id }),
   updateNovelPlan: (
@@ -275,6 +315,20 @@ export const api = {
       wordCountMax: word_count_max,
       chapterCount: chapter_count,
     }),
+  updateNovelCanon: (
+    novelId: string,
+    knowledge_ids: string[],
+    canon_mode: string,
+    knowledge_strategy?: string | null,
+  ) =>
+    invoke<NovelProject>("update_novel_canon", {
+      novelId,
+      knowledgeIds: knowledge_ids,
+      canonMode: canon_mode,
+      knowledgeStrategy: knowledge_strategy ?? null,
+    }),
+  syncCanonSettings: (novelId: string) =>
+    invoke<GenerateResult>("sync_canon_settings", { novelId }),
   archiveNovel: (id: string, archived: boolean) =>
     invoke<NovelProject>("archive_novel", { id, archived }),
   deleteNovel: (id: string) => invoke<void>("delete_novel", { id }),
@@ -359,7 +413,7 @@ export const api = {
   /** 左侧生成确认框：根大纲→前序大纲+记忆 + 期望占位 */
   previewChapterOutlineBrief: (
     novelId: string,
-    mode: "root" | "plan_next",
+    mode: "root" | "plan_next" | "regen_outline",
     count: number,
     nodeId?: string,
   ) =>
@@ -374,6 +428,13 @@ export const api = {
       novelId,
       nodeId,
       count,
+      userBrief,
+    }),
+  /** 章节卡：覆盖重写本章标题与大纲（同 generate_chapter_cards） */
+  regenerateChapterOutline: (novelId: string, nodeId: string, userBrief: string) =>
+    invoke<GenerateResult>("regenerate_chapter_outline", {
+      novelId,
+      nodeId,
       userBrief,
     }),
   /** 章节卡：按大纲+用户补充生成剧情卡 */
@@ -395,16 +456,21 @@ export const api = {
   listChat: (novelId: string) => invoke<ChatMessage[]>("list_chat_messages", { novelId }),
   chatSend: (novelId: string, content: string) =>
     invoke<ChatMessage[]>("chat_send", { novelId, content }),
-  /** 终止进行中的 chat / 开书聊（开书传 `__create__`） */
+  /** 终止进行中的 chat（开书 `__create__`、知识库提取 `__knowledge_extract__`） */
   chatCancel: (novelId: string) => invoke<void>("chat_cancel", { novelId }),
   cardChatSend: (novelId: string, nodeId: string, content: string) =>
     invoke<CardChatResult>("card_chat_send", { novelId, nodeId, content }),
   extractKnowledgeCard,
+  generateCoverPrompt: (novelId: string) =>
+    invoke<string>("generate_cover_prompt", { novelId }),
   pickCover: () => invoke<string | null>("pick_cover"),
   setCover: (novelId: string, sourcePath: string) =>
     invoke<NovelProject>("set_cover", { novelId, sourcePath }),
   pickTextFile: () => invoke<string | null>("pick_text_file"),
   appDataRoot: () => invoke<string>("app_data_root"),
+  listChatSkills: () => invoke<SkillsPreview>("list_chat_skills"),
+  previewChatSkillMatch: (query: string) =>
+    invoke<SkillMatchPreview>("preview_chat_skill_match", { query }),
   getTokenUsage: (date: string) => invoke<TokenUsageDay>("get_token_usage", { date }),
   getTokenUsageMonth: (month: string) =>
     invoke<TokenUsageMonth>("get_token_usage_month", { month }),

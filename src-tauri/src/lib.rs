@@ -1,6 +1,7 @@
 mod catalog;
 mod chapter_constraints;
 mod chapter_memory;
+mod chat_tools;
 mod chunk;
 mod commands;
 mod db;
@@ -11,6 +12,7 @@ mod paths;
 mod prompts;
 mod sample;
 mod secret;
+mod skills;
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -19,7 +21,7 @@ use tauri::Manager;
 
 pub struct AppState {
     pub db: Arc<db::Db>,
-    /// 按 novel_id（开书聊用 `__create__`）挂起的取消标志
+    /// 按 novel_id（开书 `__create__`、知识库提取 `__knowledge_extract__`）挂起的取消标志
     pub chat_cancel: Mutex<HashMap<String, Arc<AtomicBool>>>,
 }
 
@@ -73,10 +75,13 @@ pub fn run() {
             commands::delete_knowledge,
             commands::import_knowledge_text,
             commands::import_knowledge_url,
+            commands::knowledge_extract_chat,
             commands::reextract_knowledge,
             commands::list_novels,
             commands::get_novel,
             commands::update_novel_plan,
+            commands::update_novel_canon,
+            commands::sync_canon_settings,
             commands::archive_novel,
             commands::delete_novel,
             commands::create_novel,
@@ -95,6 +100,7 @@ pub fn run() {
             commands::refine_chapter,
             commands::preview_chapter_outline_brief,
             commands::plan_next_chapters,
+            commands::regenerate_chapter_outline,
             commands::generate_chapter_plots,
             commands::generate_chapter_cards,
             commands::list_chat_messages,
@@ -102,10 +108,13 @@ pub fn run() {
             commands::chat_cancel,
             commands::card_chat_send,
             commands::extract_knowledge_card,
+            commands::generate_cover_prompt,
             commands::pick_cover,
             commands::set_cover,
             commands::pick_text_file,
             commands::app_data_root,
+            commands::list_chat_skills,
+            commands::preview_chat_skill_match,
             commands::get_token_usage,
             commands::get_token_usage_month,
         ])

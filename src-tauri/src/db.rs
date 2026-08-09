@@ -95,6 +95,10 @@ impl Db {
             [],
         );
         let _ = conn.execute(
+            "ALTER TABLE novels ADD COLUMN canon_mode TEXT NOT NULL DEFAULT 'reference'",
+            [],
+        );
+        let _ = conn.execute(
             "ALTER TABLE knowledge_books ADD COLUMN archived INTEGER NOT NULL DEFAULT 0",
             [],
         );
@@ -422,7 +426,7 @@ impl Db {
         let mut stmt = conn.prepare(
             "SELECT id, title, synopsis, cover_path, knowledge_ids, knowledge_strategy, created_at, updated_at,
                     COALESCE(archived, 0), COALESCE(word_count_min, 2000), COALESCE(word_count_max, 3000),
-                    COALESCE(chapter_count, 20)
+                    COALESCE(chapter_count, 20), COALESCE(canon_mode, 'reference')
              FROM novels ORDER BY updated_at DESC",
         )?;
         let rows = stmt.query_map([], map_novel)?;
@@ -434,7 +438,7 @@ impl Db {
         let mut stmt = conn.prepare(
             "SELECT id, title, synopsis, cover_path, knowledge_ids, knowledge_strategy, created_at, updated_at,
                     COALESCE(archived, 0), COALESCE(word_count_min, 2000), COALESCE(word_count_max, 3000),
-                    COALESCE(chapter_count, 20)
+                    COALESCE(chapter_count, 20), COALESCE(canon_mode, 'reference')
              FROM novels WHERE id=?1",
         )?;
         let mut rows = stmt.query_map(params![id], map_novel)?;
@@ -443,9 +447,10 @@ impl Db {
 
     pub fn upsert_novel(&self, n: &NovelProject) -> Result<()> {
         let conn = self.conn.lock().unwrap();
+        let mode = normalize_canon_mode(&n.canon_mode);
         conn.execute(
-            "INSERT INTO novels(id, title, synopsis, cover_path, knowledge_ids, knowledge_strategy, created_at, updated_at, archived, word_count_min, word_count_max, chapter_count)
-             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)
+            "INSERT INTO novels(id, title, synopsis, cover_path, knowledge_ids, knowledge_strategy, created_at, updated_at, archived, word_count_min, word_count_max, chapter_count, canon_mode)
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)
              ON CONFLICT(id) DO UPDATE SET
                title=excluded.title,
                synopsis=excluded.synopsis,
@@ -456,7 +461,8 @@ impl Db {
                archived=excluded.archived,
                word_count_min=excluded.word_count_min,
                word_count_max=excluded.word_count_max,
-               chapter_count=excluded.chapter_count",
+               chapter_count=excluded.chapter_count,
+               canon_mode=excluded.canon_mode",
             params![
                 n.id,
                 n.title,
@@ -470,6 +476,7 @@ impl Db {
                 n.word_count_min as i64,
                 n.word_count_max as i64,
                 n.chapter_count as i64,
+                mode,
             ],
         )?;
         Ok(())
@@ -795,6 +802,7 @@ fn migrate_token_usage_novel_id(conn: &Connection) -> Result<()> {
 fn map_novel(row: &rusqlite::Row<'_>) -> rusqlite::Result<NovelProject> {
     let kids: String = row.get(4)?;
     let archived_i: i64 = row.get(8).unwrap_or(0);
+    let mode: String = row.get(12).unwrap_or_else(|_| "reference".into());
     Ok(NovelProject {
         id: row.get(0)?,
         title: row.get(1)?,
@@ -808,7 +816,15 @@ fn map_novel(row: &rusqlite::Row<'_>) -> rusqlite::Result<NovelProject> {
         word_count_min: row.get::<_, i64>(9).unwrap_or(2000) as u32,
         word_count_max: row.get::<_, i64>(10).unwrap_or(3000) as u32,
         chapter_count: row.get::<_, i64>(11).unwrap_or(20) as u32,
+        canon_mode: normalize_canon_mode(&mode),
     })
+}
+
+fn normalize_canon_mode(mode: &str) -> String {
+    match mode.trim().to_ascii_lowercase().as_str() {
+        "strict" | "locked" => "strict".into(),
+        _ => "reference".into(),
+    }
 }
 
 #[cfg(test)]

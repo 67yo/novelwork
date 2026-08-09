@@ -24,6 +24,7 @@ import {
   type KnowledgeBook,
   type NovelProject,
   type NovelTree,
+  type SkillPreviewItem,
   type TreeEdge,
   type TreeNode,
 } from "@/lib/api";
@@ -43,10 +44,13 @@ import {
   LayoutGrid,
   Library,
   Loader2,
+  PanelBottom,
+  PanelRight,
   Pencil,
   Play,
   Plus,
   RefreshCw,
+  Sparkles,
   Square,
   Trash2,
   User,
@@ -138,6 +142,9 @@ const autoAll = ref(false);
 /** 预生成/精修结束后的结束语（左侧底部独立区） */
 const chapterResultNotice = ref("");
 const coverBusy = ref(false);
+const coverPromptBusy = ref(false);
+const coverPrompt = ref("");
+const coverPromptHint = ref("");
 const chapterBodyEl = ref<HTMLElement | null>(null);
 const copyHint = ref("");
 /** 精修前后快照（会话内，按节点） */
@@ -656,14 +663,26 @@ watch(busy, (v) => {
       v !== "plan-next" &&
       v !== "gen-plots" &&
       v !== "regen-memory" &&
-      v !== "gen-cards")
+      v !== "gen-cards" &&
+      v !== "regen-outline" &&
+      v !== "sync-canon")
   ) {
     if (!autoAll.value) clearChapterTaskUi();
   }
 });
 
+async function loadChatSkills() {
+  try {
+    const p = await api.listChatSkills();
+    chatSkills.value = p.skills;
+  } catch {
+    chatSkills.value = [];
+  }
+}
+
 onMounted(async () => {
   await loadAll();
+  void loadChatSkills();
   unlistenChapterProgress = await listen<{
     novelId: string;
     step: string;
@@ -1140,9 +1159,9 @@ async function refine(): Promise<boolean> {
   return executeRefine(selected.value.id, refineBrief.value);
 }
 
-/** 左侧「生成章节卡 / 生成下一章」确认：可编辑考虑材料 + 期望 */
+/** 左侧「生成章节卡 / 生成下一章 / 刷新大纲」确认：可编辑考虑材料 + 期望 */
 const pendingOutlineGen = ref<{
-  mode: "root" | "plan_next";
+  mode: "root" | "plan_next" | "regen_outline";
   count: number;
   nodeId: string | null;
   from: number;
@@ -1171,6 +1190,36 @@ async function openPlanNextBrief() {
   try {
     const r = await api.previewChapterOutlineBrief(props.id, "plan_next", n, nodeId);
     if (!pendingOutlineGen.value || pendingOutlineGen.value.mode !== "plan_next") return;
+    pendingOutlineGen.value = {
+      ...pendingOutlineGen.value,
+      brief: r.brief,
+      from: r.from,
+      to: r.to,
+      loading: false,
+    };
+  } catch (e) {
+    pendingOutlineGen.value = null;
+    chapterResultNotice.value = String(e);
+  }
+}
+
+async function openRegenOutlineBrief() {
+  if (!selected.value || selected.value.kind !== "chapter" || !!busy.value || autoAll.value) return;
+  if (pendingOutlineGen.value) return;
+  const nodeId = selected.value.id;
+  pendingOutlineGen.value = {
+    mode: "regen_outline",
+    count: 1,
+    nodeId,
+    from: 0,
+    to: 0,
+    brief: "",
+    loading: true,
+    error: "",
+  };
+  try {
+    const r = await api.previewChapterOutlineBrief(props.id, "regen_outline", 1, nodeId);
+    if (!pendingOutlineGen.value || pendingOutlineGen.value.mode !== "regen_outline") return;
     pendingOutlineGen.value = {
       ...pendingOutlineGen.value,
       brief: r.brief,
@@ -1314,6 +1363,29 @@ async function confirmOutlineGen() {
   }
 
   if (!nodeId) return;
+  if (mode === "regen_outline") {
+    busy.value = "regen-outline";
+    beginChapterTask("context", 1, 3);
+    notice.value = "";
+    chapterResultNotice.value = "";
+    try {
+      const r = await api.regenerateChapterOutline(props.id, nodeId, brief);
+      chapterResultNotice.value = r.message;
+      tree.value = await api.getTree(props.id);
+      syncFlowFromTree();
+      if (selected.value) {
+        const cur = tree.value?.nodes.find((x) => x.id === selected.value!.id);
+        if (cur) selected.value = cur;
+      }
+    } catch (e) {
+      chapterResultNotice.value = isCancelledErr(e) ? t("workspace.chatStopped") : String(e);
+    } finally {
+      endChapterTask();
+      busy.value = "";
+    }
+    return;
+  }
+
   busy.value = "plan-next";
   beginChapterTask("context", 1, 3);
   notice.value = "";
@@ -1425,6 +1497,8 @@ async function scrollChatBottom() {
 const CHAT_STEPS: Record<string, MessageKey> = {
   context: "workspace.chatStepContext",
   thinking: "workspace.chatStepThinking",
+  skill: "workspace.chatStepSkill",
+  tool: "workspace.chatStepTool",
   fetch_web: "workspace.chatStepFetchWeb",
   apply_character: "workspace.chatStepApplyCharacter",
   apply_outlines: "workspace.chatStepApplyOutlines",
@@ -1440,8 +1514,75 @@ function patchPending(pendingId: string, lines: string[]) {
   messages.value = next;
 }
 
+/** 与后端 slash_args 对齐：匹配根 Chat 清空类指令。 */
+function matchRootSlash(text: string, names: string[]): boolean {
+  const t = text.trim();
+  if (!t.startsWith("/")) return false;
+  const rest = t.slice(1);
+  const sorted = [...names].sort((a, b) => b.length - a.length);
+  for (const name of sorted) {
+    if (!rest.startsWith(name)) continue;
+    const after = rest.slice(name.length);
+    if (after === "" || /^\s/.test(after)) return true;
+  }
+  return false;
+}
+
+function isClearChaptersCmd(text: string): boolean {
+  return matchRootSlash(text, [
+    "清空章节",
+    "清空所有章节",
+    "清空所有章节节点",
+    "clear-chapters",
+    "clear_chapters",
+  ]);
+}
+
+function isClearPlotsCmd(text: string): boolean {
+  return matchRootSlash(text, [
+    "清空所有剧情",
+    "清空剧情",
+    "清空所有剧情卡",
+    "清空剧情卡",
+    "clear-plots",
+    "clear_plots",
+  ]);
+}
+
+type PendingChatClear = { kind: "chapters" | "plots"; text: string; step: 1 | 2 };
+const pendingChatClear = ref<PendingChatClear | null>(null);
+
+function cancelPendingChatClear() {
+  pendingChatClear.value = null;
+}
+
+function confirmPendingChatClear() {
+  const p = pendingChatClear.value;
+  if (!p) return;
+  if (p.step === 1) {
+    pendingChatClear.value = { ...p, step: 2 };
+    return;
+  }
+  const text = p.text;
+  pendingChatClear.value = null;
+  void runSendChat(text);
+}
+
 async function sendChat() {
   const text = chatInput.value.trim();
+  if (!text || busy.value === "chat" || pendingChatClear.value) return;
+  if (isClearChaptersCmd(text)) {
+    pendingChatClear.value = { kind: "chapters", text, step: 1 };
+    return;
+  }
+  if (isClearPlotsCmd(text)) {
+    pendingChatClear.value = { kind: "plots", text, step: 1 };
+    return;
+  }
+  await runSendChat(text);
+}
+
+async function runSendChat(text: string) {
   if (!text || busy.value === "chat") return;
   busy.value = "chat";
   notice.value = "";
@@ -1487,7 +1628,17 @@ async function sendChat() {
     syncFlowFromTree();
     if (selected.value) {
       const n = tree.value.nodes.find((x) => x.id === selected.value!.id);
-      if (n) selected.value = n;
+      if (n) {
+        selected.value = n;
+      } else {
+        // 如 /清空章节：选中节点已删，清掉预览与记忆面板残留
+        selected.value = null;
+        chapterMd.value = "";
+        memoryItems.value = [];
+        memoryPanelOpen.value = false;
+        memoryRefPicks.value = [];
+        memoryRefSelectedIds.value = [];
+      }
     }
     await scrollChatBottom();
   } catch (e) {
@@ -1789,6 +1940,33 @@ async function pickAndSetCover() {
   }
 }
 
+async function generateCoverPrompt() {
+  if (coverPromptBusy.value) return;
+  coverPromptBusy.value = true;
+  coverPromptHint.value = "";
+  try {
+    coverPrompt.value = await api.generateCoverPrompt(props.id);
+  } catch (e) {
+    notice.value = String(e);
+  } finally {
+    coverPromptBusy.value = false;
+  }
+}
+
+async function copyCoverPrompt() {
+  const text = coverPrompt.value.trim();
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    coverPromptHint.value = t("workspace.coverPromptCopied");
+    window.setTimeout(() => {
+      if (coverPromptHint.value === t("workspace.coverPromptCopied")) coverPromptHint.value = "";
+    }, 2000);
+  } catch {
+    coverPromptHint.value = t("workspace.copyFailed");
+  }
+}
+
 const selectedIsChapter = computed(() => selected.value?.kind === "chapter");
 const selectedIsCharacter = computed(() => selected.value?.kind === "character");
 const selectedIsKnowledge = computed(() => selected.value?.kind === "knowledge");
@@ -1982,6 +2160,60 @@ async function persistNovelPlan() {
   }
 }
 
+const canonBusy = ref(false);
+
+function toggleCanonBook(id: string) {
+  if (!novel.value) return;
+  const cur = [...(novel.value.knowledge_ids ?? [])];
+  const i = cur.indexOf(id);
+  if (i >= 0) cur.splice(i, 1);
+  else cur.push(id);
+  novel.value.knowledge_ids = cur;
+  void persistNovelCanon();
+}
+
+async function persistNovelCanon() {
+  if (!novel.value) return;
+  try {
+    novel.value = await api.updateNovelCanon(
+      props.id,
+      novel.value.knowledge_ids ?? [],
+      novel.value.canon_mode || "reference",
+      novel.value.knowledge_strategy ?? "",
+    );
+  } catch (e) {
+    notice.value = String(e);
+  }
+}
+
+async function syncCanonSettings() {
+  if (!novel.value || !!busy.value || autoAll.value || canonBusy.value) return;
+  if (!(novel.value.knowledge_ids ?? []).length) {
+    notice.value = t("workspace.canonNeedBooks");
+    return;
+  }
+  canonBusy.value = true;
+  busy.value = "sync-canon";
+  beginChapterTask("context", 1, Math.max(1, novel.value.knowledge_ids.length));
+  chapterResultNotice.value = "";
+  try {
+    const r = await api.syncCanonSettings(props.id);
+    chapterResultNotice.value = r.message;
+    tree.value = await api.getTree(props.id);
+    syncFlowFromTree();
+    if (selected.value?.kind === "novel") {
+      const n = tree.value.nodes.find((x) => x.id === selected.value!.id);
+      if (n) selected.value = n;
+    }
+  } catch (e) {
+    chapterResultNotice.value = isCancelledErr(e) ? t("workspace.chatStopped") : String(e);
+  } finally {
+    endChapterTask();
+    busy.value = "";
+    canonBusy.value = false;
+  }
+}
+
 async function runExtractKnowledge() {
   if (!selected.value || selected.value.kind !== "knowledge") return;
   await persistSelectedKnowledge();
@@ -2069,7 +2301,9 @@ const chapterBusy = computed(
     busy.value === "plan-next" ||
     busy.value === "gen-plots" ||
     busy.value === "regen-memory" ||
-    busy.value === "gen-cards",
+    busy.value === "gen-cards" ||
+    busy.value === "regen-outline" ||
+    busy.value === "sync-canon",
 );
 const cardChatMode = computed(() => {
   const k = selected.value?.kind;
@@ -2095,6 +2329,8 @@ const cardChatPlaceholder = computed(() => {
 });
 
 type SlashCmd = { cmd: string; insert: string; hint: string };
+
+const chatSkills = ref<SkillPreviewItem[]>([]);
 
 const rootSlashCmds = computed<SlashCmd[]>(() => {
   const zh = locale.value.startsWith("zh") || locale.value === "ja";
@@ -2128,18 +2364,31 @@ const chapterSlashCmds = computed<SlashCmd[]>(() => {
   ];
 });
 
+const skillSlashCmds = computed<SlashCmd[]>(() =>
+  chatSkills.value.map((s) => {
+    const line = (s.description || "").split(/\n/)[0]?.trim() || t("workspace.slashHintSkill");
+    const hint = line.length > 72 ? `${line.slice(0, 72)}…` : line;
+    return {
+      cmd: `/${s.name}`,
+      insert: `/${s.name} `,
+      hint,
+    };
+  }),
+);
+
 const slashActive = ref(0);
 
-/** 输入以 / 开头且尚未空格时，提示可补全指令 */
+/** 输入以 / 开头且尚未空格时，提示可补全指令（含 skills） */
 const slashSuggestions = computed(() => {
   const chapterCard = selected.value?.kind === "chapter";
-  const cmds = chapterCard
+  const builtIn = chapterCard
     ? chapterSlashCmds.value
     : cardChatMode.value
       ? []
       : rootSlashCmds.value;
+  const cmds = [...builtIn, ...skillSlashCmds.value];
   if (!cmds.length) return [];
-  const v = chapterCard ? cardChatInput.value : chatInput.value;
+  const v = chapterCard || cardChatMode.value ? cardChatInput.value : chatInput.value;
   if (!v.startsWith("/") || /\s/.test(v)) return [];
   const q = v.toLowerCase();
   return cmds.filter((c) => c.cmd.toLowerCase().startsWith(q) || c.cmd.startsWith(v));
@@ -2150,7 +2399,7 @@ watch(slashSuggestions, () => {
 });
 
 function applySlashCmd(cmd: SlashCmd) {
-  if (selected.value?.kind === "chapter") cardChatInput.value = cmd.insert;
+  if (cardChatMode.value) cardChatInput.value = cmd.insert;
   else chatInput.value = cmd.insert;
   slashActive.value = 0;
 }
@@ -2189,11 +2438,35 @@ watch(
   },
 );
 
-/** panel widths (px); middle gets the rest */
-const leftW = ref(380);
-const rightW = ref(320);
+/** 三区尺寸比例跨会话记住 */
+const leftW = useLocalStorage("novework.workspaceLeftW", 380);
+const rightW = useLocalStorage("novework.workspaceRightW", 320);
+/** Chat 停靠：右侧栏 | 树图下方 */
+const chatDock = useLocalStorage<"right" | "bottom">("novework.chatDock", "right");
+const chatBottomH = useLocalStorage("novework.chatBottomH", 280);
 const MIN_SIDE = 220;
 const MIN_MID = 280;
+const MIN_CHAT_H = 160;
+
+const workspaceGridStyle = computed(() => {
+  // 左栏（章节编辑）始终满高独立；树图与 Chat 只在右侧区域切换
+  if (chatDock.value === "bottom") {
+    return {
+      display: "grid",
+      height: "100%",
+      gridTemplateColumns: `${leftW.value}px 6px minmax(${MIN_MID}px, 1fr)`,
+      gridTemplateRows: `minmax(0, 1fr) 6px ${chatBottomH.value}px`,
+      gridTemplateAreas: `"left v1 mid" "left v1 hr" "left v1 chat"`,
+    };
+  }
+  return {
+    display: "grid",
+    height: "100%",
+    gridTemplateColumns: `${leftW.value}px 6px minmax(${MIN_MID}px, 1fr) 6px ${rightW.value}px`,
+    gridTemplateRows: "minmax(0, 1fr)",
+    gridTemplateAreas: `"left v1 mid v2 chat"`,
+  };
+});
 
 function startResize(which: "left" | "right", ev: MouseEvent) {
   ev.preventDefault();
@@ -2204,10 +2477,34 @@ function startResize(which: "left" | "right", ev: MouseEvent) {
     const dx = e.clientX - startX;
     const total = window.innerWidth;
     if (which === "left") {
-      leftW.value = Math.min(Math.max(startLeft + dx, MIN_SIDE), total - rightW.value - MIN_MID - 16);
+      const max =
+        chatDock.value === "bottom"
+          ? total - MIN_MID - 16
+          : total - rightW.value - MIN_MID - 16;
+      leftW.value = Math.min(Math.max(startLeft + dx, MIN_SIDE), max);
     } else {
-      rightW.value = Math.min(Math.max(startRight - dx, MIN_SIDE), total - leftW.value - MIN_MID - 16);
+      rightW.value = Math.min(
+        Math.max(startRight - dx, MIN_SIDE),
+        total - leftW.value - MIN_MID - 16,
+      );
     }
+  };
+  const onUp = () => {
+    window.removeEventListener("mousemove", onMove);
+    window.removeEventListener("mouseup", onUp);
+  };
+  window.addEventListener("mousemove", onMove);
+  window.addEventListener("mouseup", onUp);
+}
+
+function startResizeChatH(ev: MouseEvent) {
+  ev.preventDefault();
+  const startY = ev.clientY;
+  const startH = chatBottomH.value;
+  const onMove = (e: MouseEvent) => {
+    const dy = startY - e.clientY;
+    const max = Math.max(MIN_CHAT_H, Math.floor(window.innerHeight * 0.7));
+    chatBottomH.value = Math.min(Math.max(startH + dy, MIN_CHAT_H), max);
   };
   const onUp = () => {
     window.removeEventListener("mousemove", onMove);
@@ -2228,9 +2525,9 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
 
 <template>
   <div class="flex h-full flex-col">
-    <div class="flex min-h-0 flex-1">
+    <div class="min-h-0 flex-1" :style="workspaceGridStyle">
       <!-- 左：章节预览 -->
-      <div class="flex min-h-0 flex-col border-r" :style="{ width: leftW + 'px', flex: '0 0 auto' }">
+      <div class="flex min-h-0 min-w-0 flex-col border-r" style="grid-area: left">
         <div class="shrink-0 space-y-2 border-b p-3">
           <div class="flex items-start justify-between gap-2">
             <div
@@ -2269,9 +2566,31 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
             v-if="selectedIsChapter || selected?.kind === 'side_plot'"
             class="space-y-1"
           >
-            <label class="block text-[11px] text-muted-foreground">{{
-              selectedIsChapter ? t("workspace.chapterOutline") : t("workspace.plotOutline")
-            }}</label>
+            <div class="flex items-center justify-between gap-2">
+              <label class="block text-[11px] text-muted-foreground">{{
+                selectedIsChapter ? t("workspace.chapterOutline") : t("workspace.plotOutline")
+              }}</label>
+              <Button
+                v-if="selectedIsChapter"
+                size="sm"
+                variant="ghost"
+                class="h-6 shrink-0 px-1.5 text-[11px]"
+                :disabled="!!busy || autoAll"
+                :title="t('workspace.regenOutlineHint')"
+                @click="openRegenOutlineBrief"
+              >
+                <Loader2
+                  v-if="busy === 'regen-outline'"
+                  class="mr-1 h-3 w-3 animate-spin"
+                />
+                <RefreshCw v-else class="mr-1 h-3 w-3" />
+                {{
+                  busy === "regen-outline"
+                    ? t("workspace.regenOutlineBusy")
+                    : t("workspace.regenOutline")
+                }}
+              </Button>
+            </div>
             <Textarea
               :model-value="selected?.outline ?? ''"
               rows="4"
@@ -2530,7 +2849,9 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                         ? t("workspace.regenMemoryBusy")
                         : busy === "gen-cards"
                           ? t("workspace.rootGenChaptersBusy")
-                          : t("workspace.generating")
+                          : busy === "regen-outline"
+                            ? t("workspace.regenOutlineBusy")
+                            : t("workspace.generating")
               }}
             </p>
             <div v-if="chapterProgress" class="w-full max-w-sm space-y-2">
@@ -2772,15 +3093,58 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                   />
                   <span v-else>{{ t("workspace.cover") }}</span>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  :disabled="coverBusy"
-                  @click="pickAndSetCover"
-                >
-                  <Loader2 v-if="coverBusy" class="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                  {{ t("workspace.pickCover") }}
-                </Button>
+                <div class="flex min-w-0 flex-1 flex-col gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    class="justify-start"
+                    :disabled="coverBusy"
+                    @click="pickAndSetCover"
+                  >
+                    <Loader2 v-if="coverBusy" class="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    {{ t("workspace.pickCover") }}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    class="justify-start"
+                    :disabled="coverPromptBusy"
+                    :title="t('workspace.coverPromptHint')"
+                    @click="generateCoverPrompt"
+                  >
+                    <Loader2
+                      v-if="coverPromptBusy"
+                      class="mr-1.5 h-3.5 w-3.5 shrink-0 animate-spin"
+                    />
+                    <Sparkles v-else class="mr-1.5 h-3.5 w-3.5 shrink-0" />
+                    {{
+                      coverPromptBusy
+                        ? t("workspace.genCoverPromptBusy")
+                        : t("workspace.genCoverPrompt")
+                    }}
+                  </Button>
+                </div>
+              </div>
+              <div v-if="coverPrompt || coverPromptBusy" class="space-y-1.5">
+                <div class="flex items-center justify-between gap-2">
+                  <label class="text-xs text-muted-foreground">{{ t("workspace.coverPrompt") }}</label>
+                  <Button
+                    v-if="coverPrompt"
+                    variant="ghost"
+                    size="sm"
+                    class="h-7 px-2 text-xs"
+                    @click="copyCoverPrompt"
+                  >
+                    <Copy class="mr-1 h-3 w-3" />
+                    {{ coverPromptHint || t("workspace.coverPromptCopy") }}
+                  </Button>
+                </div>
+                <Textarea
+                  v-model="coverPrompt"
+                  rows="4"
+                  class="text-xs"
+                  :placeholder="t('workspace.coverPromptPh')"
+                />
               </div>
             </div>
             <div class="space-y-2 rounded-md border bg-muted/30 p-3">
@@ -2821,6 +3185,100 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                 </div>
               </div>
               <p class="text-[11px] text-muted-foreground">{{ t("workspace.planHint") }}</p>
+            </div>
+            <div class="space-y-2 rounded-md border bg-muted/30 p-3">
+              <p class="text-xs font-medium">{{ t("workspace.canonTitle") }}</p>
+              <p class="text-[11px] text-muted-foreground">{{ t("workspace.canonHint") }}</p>
+              <div class="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  class="rounded px-2 py-1 text-[11px] transition-colors"
+                  :class="
+                    (novel?.canon_mode || 'reference') === 'strict'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:bg-muted'
+                  "
+                  :disabled="!!busy || autoAll"
+                  @click="
+                    () => {
+                      if (novel) novel.canon_mode = 'strict';
+                      void persistNovelCanon();
+                    }
+                  "
+                >
+                  {{ t("workspace.canonModeStrict") }}
+                </button>
+                <button
+                  type="button"
+                  class="rounded px-2 py-1 text-[11px] transition-colors"
+                  :class="
+                    (novel?.canon_mode || 'reference') !== 'strict'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:bg-muted'
+                  "
+                  :disabled="!!busy || autoAll"
+                  @click="
+                    () => {
+                      if (novel) novel.canon_mode = 'reference';
+                      void persistNovelCanon();
+                    }
+                  "
+                >
+                  {{ t("workspace.canonModeReference") }}
+                </button>
+              </div>
+              <div class="max-h-36 space-y-1 overflow-y-auto rounded-md border bg-background/80 p-2">
+                <p v-if="!knowledgeBooks.length" class="text-[11px] text-muted-foreground">
+                  {{ t("workspace.knowledgeNoBooks") }}
+                </p>
+                <button
+                  v-for="b in knowledgeBooks"
+                  :key="b.id"
+                  type="button"
+                  class="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs hover:bg-muted"
+                  :disabled="!!busy || autoAll"
+                  @click="toggleCanonBook(b.id)"
+                >
+                  <span
+                    class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border text-[9px]"
+                    :class="
+                      (novel?.knowledge_ids ?? []).includes(b.id)
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-border'
+                    "
+                  >
+                    {{ (novel?.knowledge_ids ?? []).includes(b.id) ? "✓" : "" }}
+                  </span>
+                  <span class="min-w-0 truncate">{{ b.title }}</span>
+                </button>
+              </div>
+              <div>
+                <label class="mb-1 block text-[11px] text-muted-foreground">{{
+                  t("workspace.canonStrategy")
+                }}</label>
+                <Textarea
+                  :model-value="novel?.knowledge_strategy ?? ''"
+                  rows="2"
+                  class="text-xs"
+                  :placeholder="t('workspace.canonStrategyPh')"
+                  :disabled="!!busy || autoAll"
+                  @update:model-value="(v) => { if (novel) novel.knowledge_strategy = String(v); }"
+                  @change="persistNovelCanon"
+                />
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                class="h-8"
+                :disabled="!!busy || autoAll || !(novel?.knowledge_ids ?? []).length"
+                :title="t('workspace.canonSyncHint')"
+                @click="syncCanonSettings"
+              >
+                <Loader2 v-if="busy === 'sync-canon'" class="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                {{
+                  busy === "sync-canon" ? t("workspace.canonSyncBusy") : t("workspace.canonSync")
+                }}
+              </Button>
             </div>
             <div class="space-y-2 rounded-md border bg-muted/30 p-3">
               <p class="text-xs font-medium">{{ t("workspace.rootGenChapters") }}</p>
@@ -2904,14 +3362,16 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
       </div>
 
       <div
-        class="w-1.5 shrink-0 cursor-col-resize bg-border hover:bg-primary/40"
+        class="cursor-col-resize bg-border hover:bg-primary/40"
+        style="grid-area: v1"
         :title="t('workspace.resize')"
         @mousedown="startResize('left', $event)"
       />
 
       <!-- 中：树图（缩放 / 拖动画布） -->
       <div
-        class="relative min-h-0 min-w-0 flex-1"
+        class="relative min-h-0 min-w-0"
+        style="grid-area: mid"
         tabindex="0"
         @keydown="onCanvasKeydown"
       >
@@ -3067,15 +3527,67 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
       </div>
 
       <div
-        class="w-1.5 shrink-0 cursor-col-resize bg-border hover:bg-primary/40"
+        v-if="chatDock === 'right'"
+        class="cursor-col-resize bg-border hover:bg-primary/40"
+        style="grid-area: v2"
         :title="t('workspace.resize')"
         @mousedown="startResize('right', $event)"
       />
 
-      <!-- 右：Chat（小说总聊 / 卡片专聊） -->
-      <div class="flex min-h-0 flex-col" :style="{ width: rightW + 'px', flex: '0 0 auto' }">
-        <div class="border-b px-3 py-2 text-sm font-medium">
-          {{ cardChatMode ? cardChatTitle : t("workspace.chat") }}
+      <div
+        v-if="chatDock === 'bottom'"
+        class="cursor-row-resize bg-border hover:bg-primary/40"
+        style="grid-area: hr"
+        :title="t('workspace.resizeChatH')"
+        @mousedown="startResizeChatH($event)"
+      />
+
+      <!-- Chat：右侧栏 或 树图下方（宽=左栏+树图） -->
+      <div
+        class="flex min-h-0 min-w-0 flex-col bg-background"
+        style="grid-area: chat"
+        :class="chatDock === 'right' ? 'border-l' : 'border-t'"
+      >
+        <div class="flex shrink-0 items-center justify-between gap-2 border-b px-3 py-2">
+          <div class="min-w-0 truncate text-sm font-medium">
+            {{ cardChatMode ? cardChatTitle : t("workspace.chat") }}
+          </div>
+          <div
+            class="inline-flex shrink-0 rounded-md border bg-muted/40 p-0.5"
+            role="group"
+            :aria-label="t('workspace.chatDockHint')"
+          >
+            <button
+              type="button"
+              class="rounded px-1.5 py-1 transition-colors"
+              :class="
+                chatDock === 'right'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              "
+              :aria-pressed="chatDock === 'right'"
+              :title="t('workspace.chatDockRight')"
+              :aria-label="t('workspace.chatDockRight')"
+              @click="chatDock = 'right'"
+            >
+              <PanelRight class="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              class="rounded px-1.5 py-1 transition-colors"
+              :class="
+                chatDock === 'bottom'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              "
+              :aria-pressed="chatDock === 'bottom'"
+              :title="t('workspace.chatDockBottom')"
+              :aria-label="t('workspace.chatDockBottom')"
+              @click="chatDock = 'bottom'"
+            >
+              <PanelBottom class="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
         <div ref="chatListEl" class="min-h-0 flex-1 space-y-3 overflow-auto p-3">
           <template v-if="cardChatMode">
@@ -3125,7 +3637,7 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
           <div v-if="cardChatMode" class="relative">
             <ul
               v-if="slashSuggestions.length"
-              class="absolute bottom-full left-0 right-0 z-20 mb-1 max-h-48 overflow-auto rounded-md border bg-popover py-1 text-sm shadow-md"
+              class="absolute bottom-full left-0 right-0 z-20 mb-1 max-h-64 overflow-auto rounded-md border bg-popover py-1 text-sm shadow-md"
               role="listbox"
             >
               <li
@@ -3151,7 +3663,7 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
           <div v-else class="relative">
             <ul
               v-if="slashSuggestions.length"
-              class="absolute bottom-full left-0 right-0 z-20 mb-1 max-h-48 overflow-auto rounded-md border bg-popover py-1 text-sm shadow-md"
+              class="absolute bottom-full left-0 right-0 z-20 mb-1 max-h-64 overflow-auto rounded-md border bg-popover py-1 text-sm shadow-md"
               role="listbox"
             >
               <li
@@ -3266,7 +3778,9 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
           {{
             pendingOutlineGen.mode === "root"
               ? t("workspace.outlineGenTitleRoot")
-              : t("workspace.outlineGenTitleNext")
+              : pendingOutlineGen.mode === "regen_outline"
+                ? t("workspace.outlineGenTitleRegen")
+                : t("workspace.outlineGenTitleNext")
           }}
         </h2>
         <p class="mt-2 text-xs text-muted-foreground">
@@ -3341,6 +3855,47 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                 : pendingCardDelete.hasBody && pendingCardDelete.step === 1
                   ? t("workspace.deleteContinue")
                   : t("workspace.deleteCard")
+            }}
+          </Button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 根 Chat：/清空章节 · /清空所有剧情（两步确认） -->
+    <div
+      v-if="pendingChatClear"
+      class="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+      @click.self="cancelPendingChatClear"
+      @keydown.escape="cancelPendingChatClear"
+    >
+      <div class="w-full max-w-md rounded-lg border bg-background p-5 shadow-lg" role="dialog" aria-modal="true">
+        <h2 class="text-base font-semibold">
+          {{
+            pendingChatClear.kind === "chapters"
+              ? t("workspace.clearChaptersTitle")
+              : t("workspace.clearPlotsTitle")
+          }}
+        </h2>
+        <p class="mt-3 whitespace-pre-wrap text-sm text-muted-foreground">
+          {{
+            pendingChatClear.kind === "chapters"
+              ? pendingChatClear.step === 2
+                ? t("workspace.clearChaptersConfirmAgain")
+                : t("workspace.clearChaptersConfirm")
+              : pendingChatClear.step === 2
+                ? t("workspace.clearPlotsConfirmAgain")
+                : t("workspace.clearPlotsConfirm")
+          }}
+        </p>
+        <div class="mt-5 flex justify-end gap-2">
+          <Button variant="outline" @click="cancelPendingChatClear">
+            {{ t("novels.cancel") }}
+          </Button>
+          <Button variant="destructive" @click="confirmPendingChatClear">
+            {{
+              pendingChatClear.step === 1
+                ? t("workspace.deleteContinue")
+                : t("workspace.clearConfirmAction")
             }}
           </Button>
         </div>
