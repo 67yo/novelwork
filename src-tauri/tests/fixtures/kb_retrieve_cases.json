@@ -1,0 +1,92 @@
+[
+  {
+    "id": "chapter_title_boost",
+    "query": "筑基禁忌与灵根",
+    "k": 3,
+    "chunks": [
+      {
+        "book_id": "book_a",
+        "idx": 0,
+        "title": "修真手册",
+        "content": "【第一章 江湖恩怨】市井闲谈与门派纷争，偶提禁忌二字，与修炼无关。"
+      },
+      {
+        "book_id": "book_a",
+        "idx": 1,
+        "title": "修真手册",
+        "content": "【第三章 筑基禁忌】灵根不合格者不得筑基。违者经脉逆乱。灵根与筑基规则详述如下。"
+      },
+      {
+        "book_id": "book_a",
+        "idx": 2,
+        "title": "修真手册",
+        "content": "市井故事很长，灵根二字偶尔出现一次，但全文讲的是酒楼掌柜，没有筑基。"
+      },
+      {
+        "book_id": "book_a",
+        "idx": 3,
+        "title": "修真手册",
+        "content": "【附录】杂记：天气、菜谱、路引。禁忌一词出现，却非修炼设定。"
+      }
+    ],
+    "expect_source_ids": ["book_a#1"]
+  },
+  {
+    "id": "proper_noun_over_noise",
+    "query": "玄霜剑的炼制材料",
+    "k": 2,
+    "chunks": [
+      {
+        "book_id": "book_b",
+        "idx": 0,
+        "title": "兵器录",
+        "content": "普通铁剑的炼制材料是精铁与炭火，学徒皆知。"
+      },
+      {
+        "book_id": "book_b",
+        "idx": 1,
+        "title": "兵器录",
+        "content": "【第七卷 玄霜剑】玄霜剑的炼制材料为千年寒铁与霜髓。缺一不可。"
+      },
+      {
+        "book_id": "book_b",
+        "idx": 2,
+        "title": "兵器录",
+        "content": "材料仓库清单：木材、布匹、粮草。与剑无关。"
+      },
+      {
+        "book_id": "book_b",
+        "idx": 3,
+        "title": "兵器录",
+        "content": "某章提到炼制两个字，又提到材料，但说的是丹药炉，不是玄霜剑。"
+      }
+    ],
+    "expect_source_ids": ["book_b#1"]
+  },
+  {
+    "id": "at_least_one_of_gold",
+    "query": "宗门禁地法则",
+    "k": 5,
+    "chunks": [
+      {
+        "book_id": "book_c",
+        "idx": 0,
+        "title": "宗门志",
+        "content": "【禁地篇】宗门禁地法则：未开悟者不得入内，违者废除修为。"
+      },
+      {
+        "book_id": "book_c",
+        "idx": 1,
+        "title": "宗门志",
+        "content": "食堂菜单与值日表，无关法则。"
+      },
+      {
+        "book_id": "book_c",
+        "idx": 2,
+        "title": "宗门志",
+        "content": "外门弟子课表：晨练、抄经。偶见禁地二字。"
+      }
+    ],
+    "expect_source_ids": ["book_c#0"]
+  }
+]

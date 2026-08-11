@@ -1,0 +1,7 @@
+1. `Project.md` (150 lines, language: `markdown`, fileCategory: `docs`)
+2. `README.md` (44 lines, language: `markdown`, fileCategory: `docs`)
+3. `components.json` (20 lines, language: `json`, fileCategory: `config`)
+4. `index.html` (14 lines, language: `html`, fileCategory: `markup`)
+5. `package.json` (42 lines, language: `json`, fileCategory: `config`)
+6. `tsconfig.json` (25 lines, language: `json`, fileCategory: `config`)
+7. `tsconfig.node.json` (10 lines, language: `json`, fileCategory: `config`)

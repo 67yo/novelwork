@@ -5,6 +5,7 @@ mod chat_tools;
 mod chunk;
 mod commands;
 mod db;
+mod kb_context;
 mod knowledge;
 mod llm;
 mod models;
@@ -66,6 +67,8 @@ pub fn run() {
             commands::get_settings,
             commands::save_settings,
             commands::refresh_model_catalog,
+            commands::fetch_compat_models,
+            commands::refresh_compat_provider_models,
             commands::list_genres,
             commands::list_knowledge_bases,
             commands::rename_knowledge,
@@ -77,6 +80,8 @@ pub fn run() {
             commands::import_knowledge_url,
             commands::knowledge_extract_chat,
             commands::reextract_knowledge,
+            commands::knowledge_index_status,
+            commands::rebuild_knowledge_index,
             commands::list_novels,
             commands::get_novel,
             commands::update_novel_plan,
@@ -102,8 +107,10 @@ pub fn run() {
             commands::plan_next_chapters,
             commands::regenerate_chapter_outline,
             commands::generate_chapter_plots,
+            commands::consolidate_plot_cards,
             commands::generate_chapter_cards,
             commands::list_chat_messages,
+            commands::list_card_chat_messages,
             commands::chat_send,
             commands::chat_cancel,
             commands::card_chat_send,

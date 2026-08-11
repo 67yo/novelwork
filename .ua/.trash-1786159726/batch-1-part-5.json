@@ -1,0 +1,107 @@
+{
+  "nodes": [
+    {
+      "id": "file:src-tauri/src/secret.rs",
+      "type": "file",
+      "name": "secret.rs",
+      "filePath": "src-tauri/src/secret.rs",
+      "summary": "基于主机与用户派生密钥，对 DeepSeek API Key 做 AES-256-GCM 本地加解密存储。",
+      "tags": [
+        "security",
+        "encryption",
+        "utility",
+        "密钥"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "使用 AES-256-GCM，密钥由 hostname + username + 应用盐经 SHA-256 派生。"
+    },
+    {
+      "id": "function:src-tauri/src/secret.rs:machine_key",
+      "type": "function",
+      "name": "machine_key",
+      "filePath": "src-tauri/src/secret.rs",
+      "lineRange": [
+        11,
+        22
+      ],
+      "summary": "由主机名、用户名与盐派生本机 AES 密钥。",
+      "tags": [
+        "security",
+        "encryption",
+        "密钥"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/secret.rs:encrypt_secret",
+      "type": "function",
+      "name": "encrypt_secret",
+      "filePath": "src-tauri/src/secret.rs",
+      "lineRange": [
+        25,
+        44
+      ],
+      "summary": "加密明文密钥为可持久化的 nw1 密文字符串。",
+      "tags": [
+        "security",
+        "encryption",
+        "密钥"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/secret.rs:decrypt_secret",
+      "type": "function",
+      "name": "decrypt_secret",
+      "filePath": "src-tauri/src/secret.rs",
+      "lineRange": [
+        47,
+        67
+      ],
+      "summary": "解密本地存储的 API Key 密文。",
+      "tags": [
+        "security",
+        "encryption",
+        "密钥"
+      ],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:src-tauri/src/secret.rs",
+      "target": "function:src-tauri/src/secret.rs:machine_key",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/secret.rs",
+      "target": "function:src-tauri/src/secret.rs:encrypt_secret",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/secret.rs",
+      "target": "function:src-tauri/src/secret.rs:encrypt_secret",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/secret.rs",
+      "target": "function:src-tauri/src/secret.rs:decrypt_secret",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/secret.rs",
+      "target": "function:src-tauri/src/secret.rs:decrypt_secret",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    }
+  ]
+}

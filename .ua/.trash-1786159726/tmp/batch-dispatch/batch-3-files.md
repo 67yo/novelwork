@@ -1,0 +1,5 @@
+1. `src-tauri/src/catalog.rs` (153 lines, language: `rust`, fileCategory: `code`)
+2. `src-tauri/src/db.rs` (808 lines, language: `rust`, fileCategory: `code`)
+3. `src-tauri/src/llm.rs` (232 lines, language: `rust`, fileCategory: `code`)
+4. `src-tauri/src/models.rs` (419 lines, language: `rust`, fileCategory: `code`)
+5. `src-tauri/src/sample.rs` (235 lines, language: `rust`, fileCategory: `code`)

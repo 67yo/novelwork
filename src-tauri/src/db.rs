@@ -35,6 +35,13 @@ impl Db {
               content TEXT NOT NULL,
               FOREIGN KEY(book_id) REFERENCES knowledge_books(id) ON DELETE CASCADE
             );
+            CREATE TABLE IF NOT EXISTS knowledge_embeddings (
+              book_id TEXT NOT NULL,
+              idx INTEGER NOT NULL,
+              dim INTEGER NOT NULL,
+              vector BLOB NOT NULL,
+              PRIMARY KEY(book_id, idx)
+            );
             CREATE TABLE IF NOT EXISTS novels (
               id TEXT PRIMARY KEY,
               title TEXT NOT NULL,
@@ -50,7 +57,8 @@ impl Db {
               novel_id TEXT NOT NULL,
               role TEXT NOT NULL,
               content TEXT NOT NULL,
-              created_at TEXT NOT NULL
+              created_at TEXT NOT NULL,
+              node_id TEXT NOT NULL DEFAULT ''
             );
             CREATE TABLE IF NOT EXISTS token_usage (
               day TEXT NOT NULL,
@@ -102,6 +110,14 @@ impl Db {
             "ALTER TABLE knowledge_books ADD COLUMN archived INTEGER NOT NULL DEFAULT 0",
             [],
         );
+        let _ = conn.execute(
+            "ALTER TABLE chat_messages ADD COLUMN node_id TEXT NOT NULL DEFAULT ''",
+            [],
+        );
+        let _ = conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_chat_messages_node ON chat_messages(novel_id, node_id)",
+            [],
+        );
         migrate_token_usage_novel_id(&conn)?;
         Ok(Self {
             conn: Mutex::new(conn),
@@ -121,7 +137,7 @@ impl Db {
                 let (k, v) = row?;
                 match k.as_str() {
                     "deepseek_api_key" | "chatgpt_api_key" | "gemini_api_key"
-                    | "claude_api_key" | "grok_api_key" => {
+                    | "claude_api_key" | "grok_api_key" | "kimi_api_key" => {
                         raws.insert(k, v);
                     }
                     _ => {
@@ -144,13 +160,76 @@ impl Db {
                 .unwrap_or(fallback)
                 .to_string()
         };
+
+        let mut compat_providers = Self::load_compat_providers(plain.get("compat_providers"))?;
+
+        let deepseek_api_key = decrypt("deepseek_api_key")?;
+        let chatgpt_api_key = decrypt("chatgpt_api_key")?;
+        let gemini_api_key = decrypt("gemini_api_key")?;
+        let claude_api_key = decrypt("claude_api_key")?;
+        let grok_api_key = decrypt("grok_api_key")?;
+        let kimi_api_key = decrypt("kimi_api_key")?;
+        let deepseek_base_url = get("deepseek_base_url", &d.deepseek_base_url);
+        let kimi_base_url = get("kimi_base_url", &d.kimi_base_url);
+
+        let mut migrated = false;
+        if compat_providers.is_empty() {
+            if !deepseek_api_key.trim().is_empty() {
+                compat_providers.push(crate::models::CompatProvider {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    label: "DeepSeek".into(),
+                    protocol: "openai".into(),
+                    base_url: deepseek_base_url.clone(),
+                    api_key: deepseek_api_key.clone(),
+                    models: vec![],
+                });
+                migrated = true;
+            }
+            if !kimi_api_key.trim().is_empty() {
+                compat_providers.push(crate::models::CompatProvider {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    label: "Kimi".into(),
+                    protocol: "openai".into(),
+                    base_url: kimi_base_url.clone(),
+                    api_key: kimi_api_key.clone(),
+                    models: vec![],
+                });
+                migrated = true;
+            }
+            if !chatgpt_api_key.trim().is_empty() {
+                compat_providers.push(crate::models::CompatProvider {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    label: "ChatGPT".into(),
+                    protocol: "openai".into(),
+                    base_url: "https://api.openai.com".into(),
+                    api_key: chatgpt_api_key.clone(),
+                    models: vec![],
+                });
+                migrated = true;
+            }
+            if !grok_api_key.trim().is_empty() {
+                compat_providers.push(crate::models::CompatProvider {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    label: "Grok".into(),
+                    protocol: "openai".into(),
+                    base_url: "https://api.x.ai".into(),
+                    api_key: grok_api_key.clone(),
+                    models: vec![],
+                });
+                migrated = true;
+            }
+        }
+
         let s = AppSettings {
-            deepseek_api_key: decrypt("deepseek_api_key")?,
-            chatgpt_api_key: decrypt("chatgpt_api_key")?,
-            gemini_api_key: decrypt("gemini_api_key")?,
-            claude_api_key: decrypt("claude_api_key")?,
-            grok_api_key: decrypt("grok_api_key")?,
-            deepseek_base_url: get("deepseek_base_url", &d.deepseek_base_url),
+            compat_providers,
+            deepseek_api_key,
+            chatgpt_api_key,
+            gemini_api_key,
+            claude_api_key,
+            grok_api_key,
+            kimi_api_key,
+            deepseek_base_url,
+            kimi_base_url,
             default_model: get("default_model", &d.default_model),
             create_model: get("create_model", &d.create_model),
             generate_model: get("generate_model", &d.generate_model),
@@ -160,24 +239,74 @@ impl Db {
             ui_locale: get("ui_locale", &d.ui_locale),
         };
         // migrate legacy plaintext → encrypted on read
-        let needs_migrate = raws
-            .values()
-            .any(|v| !v.is_empty() && !v.starts_with("nw1:"));
+        let needs_migrate = migrated
+            || raws
+                .values()
+                .any(|v| !v.is_empty() && !v.starts_with("nw1:"));
         if needs_migrate {
             let _ = self.save_settings(&s);
         }
         Ok(s)
     }
 
+    fn load_compat_providers(raw: Option<&String>) -> Result<Vec<crate::models::CompatProvider>> {
+        let Some(raw) = raw.filter(|s| !s.trim().is_empty()) else {
+            return Ok(vec![]);
+        };
+        #[derive(serde::Deserialize)]
+        struct Stored {
+            id: String,
+            label: String,
+            protocol: String,
+            base_url: String,
+            api_key: String,
+            #[serde(default)]
+            models: Vec<String>,
+        }
+        let stored: Vec<Stored> = serde_json::from_str(raw).unwrap_or_default();
+        let mut out = Vec::with_capacity(stored.len());
+        for p in stored {
+            out.push(crate::models::CompatProvider {
+                id: p.id,
+                label: p.label,
+                protocol: p.protocol,
+                base_url: p.base_url,
+                api_key: crate::secret::decrypt_secret(&p.api_key)?,
+                models: p.models,
+            });
+        }
+        Ok(out)
+    }
+
     pub fn save_settings(&self, s: &AppSettings) -> Result<()> {
         let enc = |plain: &str| crate::secret::encrypt_secret(plain);
+        let compat_json = {
+            let stored: Vec<serde_json::Value> = s
+                .compat_providers
+                .iter()
+                .map(|p| {
+                    Ok(serde_json::json!({
+                        "id": p.id,
+                        "label": p.label,
+                        "protocol": p.protocol,
+                        "base_url": p.base_url,
+                        "api_key": enc(&p.api_key)?,
+                        "models": p.models,
+                    }))
+                })
+                .collect::<Result<Vec<_>>>()?;
+            serde_json::to_string(&stored)?
+        };
         let pairs = [
+            ("compat_providers", compat_json),
             ("deepseek_api_key", enc(&s.deepseek_api_key)?),
             ("chatgpt_api_key", enc(&s.chatgpt_api_key)?),
             ("gemini_api_key", enc(&s.gemini_api_key)?),
             ("claude_api_key", enc(&s.claude_api_key)?),
             ("grok_api_key", enc(&s.grok_api_key)?),
+            ("kimi_api_key", enc(&s.kimi_api_key)?),
             ("deepseek_base_url", s.deepseek_base_url.clone()),
+            ("kimi_base_url", s.kimi_base_url.clone()),
             ("default_model", s.default_model.clone()),
             ("create_model", s.create_model.clone()),
             ("generate_model", s.generate_model.clone()),
@@ -271,6 +400,10 @@ impl Db {
 
     pub fn delete_knowledge(&self, id: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
+        let _ = conn.execute(
+            "DELETE FROM knowledge_embeddings WHERE book_id=?1",
+            params![id],
+        );
         // chunks CASCADE via FK
         let n = conn.execute("DELETE FROM knowledge_books WHERE id=?1", params![id])?;
         if n == 0 {
@@ -352,6 +485,61 @@ impl Db {
             })
         })?;
         Ok(rows.filter_map(|r| r.ok()).collect())
+    }
+
+    pub fn upsert_knowledge_embedding(&self, book_id: &str, idx: i64, vector: &[f32]) -> Result<()> {
+        let mut bytes = Vec::with_capacity(vector.len() * 4);
+        for v in vector {
+            bytes.extend_from_slice(&v.to_le_bytes());
+        }
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO knowledge_embeddings(book_id, idx, dim, vector) VALUES(?1,?2,?3,?4)
+             ON CONFLICT(book_id, idx) DO UPDATE SET dim=excluded.dim, vector=excluded.vector",
+            params![book_id, idx, vector.len() as i64, bytes],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_knowledge_embedding(&self, book_id: &str, idx: i64) -> Result<Option<Vec<f32>>> {
+        let conn = self.conn.lock().unwrap();
+        let row: Option<(i64, Vec<u8>)> = conn
+            .query_row(
+                "SELECT dim, vector FROM knowledge_embeddings WHERE book_id=?1 AND idx=?2",
+                params![book_id, idx],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()?;
+        let Some((dim, bytes)) = row else {
+            return Ok(None);
+        };
+        if dim <= 0 || bytes.len() != (dim as usize) * 4 {
+            return Ok(None);
+        }
+        let mut out = Vec::with_capacity(dim as usize);
+        for chunk in bytes.chunks_exact(4) {
+            out.push(f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]));
+        }
+        Ok(Some(out))
+    }
+
+    pub fn count_knowledge_embeddings(&self, book_id: &str) -> Result<i64> {
+        let conn = self.conn.lock().unwrap();
+        let n: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM knowledge_embeddings WHERE book_id=?1",
+            params![book_id],
+            |r| r.get(0),
+        )?;
+        Ok(n)
+    }
+
+    pub fn delete_knowledge_embeddings(&self, book_id: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "DELETE FROM knowledge_embeddings WHERE book_id=?1",
+            params![book_id],
+        )?;
+        Ok(())
     }
 
     pub fn insert_knowledge(&self, book: &KnowledgeBook, chunks: &[String]) -> Result<()> {
@@ -565,18 +753,24 @@ impl Db {
     }
 
     pub fn list_chat(&self, novel_id: &str) -> Result<Vec<ChatMessage>> {
+        self.list_chat_for_node(novel_id, "")
+    }
+
+    /// `node_id` 空串 = 根创作 Chat；否则为卡片 Chat。
+    pub fn list_chat_for_node(&self, novel_id: &str, node_id: &str) -> Result<Vec<ChatMessage>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, novel_id, role, content, created_at FROM chat_messages
-             WHERE novel_id=?1 ORDER BY created_at ASC",
+            "SELECT id, novel_id, role, content, created_at, COALESCE(node_id, '') FROM chat_messages
+             WHERE novel_id=?1 AND COALESCE(node_id, '')=?2 ORDER BY created_at ASC",
         )?;
-        let rows = stmt.query_map(params![novel_id], |row| {
+        let rows = stmt.query_map(params![novel_id, node_id], |row| {
             Ok(ChatMessage {
                 id: row.get(0)?,
                 novel_id: row.get(1)?,
                 role: row.get(2)?,
                 content: row.get(3)?,
                 created_at: row.get(4)?,
+                node_id: row.get(5)?,
             })
         })?;
         Ok(rows.filter_map(|r| r.ok()).collect())
@@ -585,8 +779,17 @@ impl Db {
     pub fn insert_chat(&self, m: &ChatMessage) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "INSERT INTO chat_messages(id, novel_id, role, content, created_at) VALUES(?1,?2,?3,?4,?5)",
-            params![m.id, m.novel_id, m.role, m.content, m.created_at],
+            "INSERT INTO chat_messages(id, novel_id, role, content, created_at, node_id) VALUES(?1,?2,?3,?4,?5,?6)",
+            params![m.id, m.novel_id, m.role, m.content, m.created_at, m.node_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_chat_for_node(&self, novel_id: &str, node_id: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "DELETE FROM chat_messages WHERE novel_id=?1 AND COALESCE(node_id, '')=?2",
+            params![novel_id, node_id],
         )?;
         Ok(())
     }

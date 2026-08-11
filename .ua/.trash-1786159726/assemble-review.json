@@ -1,0 +1,14 @@
+{
+  "fixedSectionOk": true,
+  "nodesRecovered": 0,
+  "edgesRestored": 2,
+  "crossBatchEdgesAdded": 0,
+  "typesRemapped": 0,
+  "complexityRemapped": 0,
+  "notes": [
+    "Fixed section: 2 × tested_by drops are expected from merge linker; both endpoints exist but is_test_path only recognizes .test/.spec, not .selfcheck, so pairs were misclassified as prod↔prod.",
+    "Restored 2 tested_by edges (treeLayout.ts→treeLayout.selfcheck.ts, md.ts→md.selfcheck.mjs) and tagged production file nodes with \"tested\".",
+    "Import map: 42 resolvable file↔file pairs all already have imports edges; 0 cross-batch gaps. Remaining importMap sources are empty-target or non-graph files (.ua tmp/config).",
+    "Graph quality otherwise clean: 420 nodes, no missing IDs, no unknown types/complexities, no dangling edges, no prefix/type mismatches. Only 2 mechanical ID/edge corrections upstream — well under 30%."
+  ]
+}

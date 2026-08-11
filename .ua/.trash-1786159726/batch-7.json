@@ -1,0 +1,511 @@
+{
+  "nodes": [
+    {
+      "id": "file:src/i18n/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "src/i18n/index.ts",
+      "summary": "前端国际化运行时：检测系统语言、读写语言偏好，并提供 t/useI18n 供 Vue 组件取文案。",
+      "tags": ["i18n", "hook", "utility", "entry-point"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/i18n/index.ts:detectSystemLocale",
+      "type": "function",
+      "name": "detectSystemLocale",
+      "filePath": "src/i18n/index.ts",
+      "lineRange": [14, 28],
+      "summary": "根据 navigator.language 映射到支持的 LocaleCode（含中文简繁分流）。",
+      "tags": ["i18n", "locale-detection", "utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/i18n/index.ts:getLocalePreference",
+      "type": "function",
+      "name": "getLocalePreference",
+      "filePath": "src/i18n/index.ts",
+      "lineRange": [34, 36],
+      "summary": "读取当前用户语言偏好（含 system）。",
+      "tags": ["i18n", "preference", "getter"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/i18n/index.ts:setLocalePreference",
+      "type": "function",
+      "name": "setLocalePreference",
+      "filePath": "src/i18n/index.ts",
+      "lineRange": [38, 40],
+      "summary": "更新响应式语言偏好状态。",
+      "tags": ["i18n", "preference", "setter"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/i18n/index.ts:t",
+      "type": "function",
+      "name": "t",
+      "filePath": "src/i18n/index.ts",
+      "lineRange": [42, 51],
+      "summary": "按已解析语言查字典并做 {param} 占位符插值。",
+      "tags": ["i18n", "translation", "utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/i18n/index.ts:useI18n",
+      "type": "function",
+      "name": "useI18n",
+      "filePath": "src/i18n/index.ts",
+      "lineRange": [54, 64],
+      "summary": "Vue 组合式 API，暴露 t、locale 与偏好读写，供组件绑定。",
+      "tags": ["i18n", "hook", "vue-composable"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/i18n/messages.ts",
+      "type": "file",
+      "name": "messages.ts",
+      "filePath": "src/i18n/messages.ts",
+      "summary": "六语 UI 文案字典（zh-CN/en/zh-TW/ja/de/fr）与 dictionaries 聚合导出，是 i18n 的唯一文案源。",
+      "tags": ["i18n", "localization", "data-model", "type-definition"],
+      "complexity": "complex",
+      "languageNotes": "以 zhCN 为源字典结构，其余语言键对齐；纯数据导出无运行时逻辑。"
+    },
+    {
+      "id": "file:src/lib/api.ts",
+      "type": "file",
+      "name": "api.ts",
+      "filePath": "src/lib/api.ts",
+      "summary": "前端 Tauri invoke 封装与领域类型定义，统一调用后端命令（小说、知识库、设置、生成等）。",
+      "tags": ["api-handler", "type-definition", "tauri", "service"],
+      "complexity": "complex",
+      "languageNotes": "以 api 对象聚合大量 invoke 包装，类型与命令面同文件共存。"
+    },
+    {
+      "id": "function:src/lib/api.ts:extractKnowledgeCard",
+      "type": "function",
+      "name": "extractKnowledgeCard",
+      "filePath": "src/lib/api.ts",
+      "lineRange": [179, 181],
+      "summary": "调用后端从指定小说节点抽取知识卡片。",
+      "tags": ["api-handler", "knowledge", "tauri"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/lib/chatFormat.ts",
+      "type": "file",
+      "name": "chatFormat.ts",
+      "filePath": "src/lib/chatFormat.ts",
+      "summary": "聊天内容展示格式化：将行内 JSON 美化为缩进文本。",
+      "tags": ["utility", "formatting", "chat"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/lib/chatFormat.ts:formatChatContent",
+      "type": "function",
+      "name": "formatChatContent",
+      "filePath": "src/lib/chatFormat.ts",
+      "lineRange": [2, 16],
+      "summary": "逐行尝试 JSON.parse，成功则 pretty-print，失败则原样保留。",
+      "tags": ["utility", "formatting", "json"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/lib/linediff.ts",
+      "type": "file",
+      "name": "linediff.ts",
+      "filePath": "src/lib/linediff.ts",
+      "summary": "提供按行 diff，生成增删改标记序列，用于正文对比展示。",
+      "tags": ["utility", "diff", "text-processing"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/lib/linediff.ts:diffLines",
+      "type": "function",
+      "name": "diffLines",
+      "filePath": "src/lib/linediff.ts",
+      "lineRange": [4, 33],
+      "summary": "对旧/新文本做按行对齐比较，输出 equal/add/remove 片段。",
+      "tags": ["utility", "diff", "algorithm"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/lib/md.selfcheck.mjs",
+      "type": "file",
+      "name": "md.selfcheck.mjs",
+      "filePath": "src/lib/md.selfcheck.mjs",
+      "summary": "stripChapterMeta 的可独立运行自检脚本，验证章节元信息剥离逻辑。",
+      "tags": ["test", "self-check", "markdown"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/lib/md.ts",
+      "type": "file",
+      "name": "md.ts",
+      "filePath": "src/lib/md.ts",
+      "summary": "章节 Markdown 处理：剥离约束摘要等元信息、marked 渲染，并调整段落缩进以便复制。",
+      "tags": ["utility", "markdown", "rendering"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/lib/md.ts:stripChapterMeta",
+      "type": "function",
+      "name": "stripChapterMeta",
+      "filePath": "src/lib/md.ts",
+      "lineRange": [9, 18],
+      "summary": "用正则去掉章节正文尾部的约束校验摘要与设置提示块。",
+      "tags": ["utility", "markdown", "sanitization"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/lib/md.ts:renderChapterMd",
+      "type": "function",
+      "name": "renderChapterMd",
+      "filePath": "src/lib/md.ts",
+      "lineRange": [21, 28],
+      "summary": "规范化换行后用 marked 将章节 Markdown 转为可展示 HTML。",
+      "tags": ["utility", "markdown", "rendering"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/lib/md.ts:withCopyableParaIndent",
+      "type": "function",
+      "name": "withCopyableParaIndent",
+      "filePath": "src/lib/md.ts",
+      "lineRange": [31, 33],
+      "summary": "给 HTML 段落注入可复制的缩进样式标记。",
+      "tags": ["utility", "html", "formatting"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/lib/treeLayout.selfcheck.ts",
+      "type": "file",
+      "name": "treeLayout.selfcheck.ts",
+      "filePath": "src/lib/treeLayout.selfcheck.ts",
+      "summary": "applyAutoLayout 的断言式自检：构造样例节点/边并校验布局坐标。",
+      "tags": ["test", "self-check", "layout"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/lib/treeLayout.ts",
+      "type": "file",
+      "name": "treeLayout.ts",
+      "filePath": "src/lib/treeLayout.ts",
+      "summary": "故事画布自动布局：按章节/角色/知识/情节类型分层排布节点坐标。",
+      "tags": ["layout", "utility", "flow-graph"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/lib/treeLayout.ts:placePlotGrid",
+      "type": "function",
+      "name": "placePlotGrid",
+      "filePath": "src/lib/treeLayout.ts",
+      "lineRange": [40, 49],
+      "summary": "将情节节点按网格写入 x/y，相对给定原点排列。",
+      "tags": ["layout", "grid", "utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/lib/treeLayout.ts:applyAutoLayout",
+      "type": "function",
+      "name": "applyAutoLayout",
+      "filePath": "src/lib/treeLayout.ts",
+      "lineRange": [58, 116],
+      "summary": "根据节点 kind 与边关系自动计算画布坐标，挂靠章节的情节块与孤立情节。",
+      "tags": ["layout", "algorithm", "flow-graph"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:src/lib/utils.ts",
+      "type": "file",
+      "name": "utils.ts",
+      "filePath": "src/lib/utils.ts",
+      "summary": "提供 cn 辅助函数，合并 clsx 与 tailwind-merge 的 className。",
+      "tags": ["utility", "styling", "classname"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/lib/utils.ts:cn",
+      "type": "function",
+      "name": "cn",
+      "filePath": "src/lib/utils.ts",
+      "lineRange": [5, 7],
+      "summary": "合并条件 class，并消解 Tailwind 冲突类名。",
+      "tags": ["utility", "styling", "classname"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/style.css",
+      "type": "file",
+      "name": "style.css",
+      "filePath": "src/style.css",
+      "summary": "全局样式入口：Tailwind、主题 CSS 变量（亮/暗）、圆角与语义色 token。",
+      "tags": ["styling", "theme", "design-tokens"],
+      "complexity": "moderate",
+      "languageNotes": "使用 Tailwind v4 @theme inline 与 oklch 色值定义设计系统。"
+    },
+    {
+      "id": "file:src/vite-env.d.ts",
+      "type": "file",
+      "name": "vite-env.d.ts",
+      "filePath": "src/vite-env.d.ts",
+      "summary": "Vite 客户端类型引用与 Vue 模块环境声明。",
+      "tags": ["type-definition", "vite", "ambient-types"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:vite.config.ts",
+      "type": "file",
+      "name": "vite.config.ts",
+      "filePath": "vite.config.ts",
+      "summary": "Vite 构建配置：Vue/Tailwind 插件、@ 别名，以及适配 Tauri 的固定端口与 HMR。",
+      "tags": ["configuration", "build-system", "vite", "tauri"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:src/i18n/index.ts",
+      "target": "file:src/i18n/messages.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/lib/treeLayout.selfcheck.ts",
+      "target": "file:src/lib/treeLayout.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/i18n/index.ts",
+      "target": "function:src/i18n/index.ts:detectSystemLocale",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/i18n/index.ts",
+      "target": "function:src/i18n/index.ts:getLocalePreference",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/i18n/index.ts",
+      "target": "function:src/i18n/index.ts:setLocalePreference",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/i18n/index.ts",
+      "target": "function:src/i18n/index.ts:t",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/i18n/index.ts",
+      "target": "function:src/i18n/index.ts:useI18n",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/lib/api.ts",
+      "target": "function:src/lib/api.ts:extractKnowledgeCard",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/lib/chatFormat.ts",
+      "target": "function:src/lib/chatFormat.ts:formatChatContent",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/lib/linediff.ts",
+      "target": "function:src/lib/linediff.ts:diffLines",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/lib/md.ts",
+      "target": "function:src/lib/md.ts:stripChapterMeta",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/lib/md.ts",
+      "target": "function:src/lib/md.ts:renderChapterMd",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/lib/md.ts",
+      "target": "function:src/lib/md.ts:withCopyableParaIndent",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/lib/treeLayout.ts",
+      "target": "function:src/lib/treeLayout.ts:placePlotGrid",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/lib/treeLayout.ts",
+      "target": "function:src/lib/treeLayout.ts:applyAutoLayout",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/lib/utils.ts",
+      "target": "function:src/lib/utils.ts:cn",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/i18n/index.ts",
+      "target": "function:src/i18n/index.ts:detectSystemLocale",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/i18n/index.ts",
+      "target": "function:src/i18n/index.ts:getLocalePreference",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/i18n/index.ts",
+      "target": "function:src/i18n/index.ts:setLocalePreference",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/i18n/index.ts",
+      "target": "function:src/i18n/index.ts:t",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/i18n/index.ts",
+      "target": "function:src/i18n/index.ts:useI18n",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/lib/api.ts",
+      "target": "function:src/lib/api.ts:extractKnowledgeCard",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/lib/chatFormat.ts",
+      "target": "function:src/lib/chatFormat.ts:formatChatContent",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/lib/linediff.ts",
+      "target": "function:src/lib/linediff.ts:diffLines",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/lib/md.ts",
+      "target": "function:src/lib/md.ts:stripChapterMeta",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/lib/md.ts",
+      "target": "function:src/lib/md.ts:renderChapterMd",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/lib/md.ts",
+      "target": "function:src/lib/md.ts:withCopyableParaIndent",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/lib/treeLayout.ts",
+      "target": "function:src/lib/treeLayout.ts:applyAutoLayout",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/lib/utils.ts",
+      "target": "function:src/lib/utils.ts:cn",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/lib/treeLayout.ts:applyAutoLayout",
+      "target": "function:src/lib/treeLayout.ts:placePlotGrid",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/i18n/index.ts:useI18n",
+      "target": "function:src/i18n/index.ts:t",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src/lib/md.ts:renderChapterMd",
+      "target": "function:src/lib/md.ts:withCopyableParaIndent",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src/lib/treeLayout.ts",
+      "target": "file:src/lib/treeLayout.selfcheck.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/lib/md.ts",
+      "target": "file:src/lib/md.selfcheck.mjs",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/style.css",
+      "target": "file:src/main.ts",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

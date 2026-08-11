@@ -9,6 +9,7 @@ import {
   type SkillPreviewItem,
 } from "@/lib/api";
 import { formatChatContent } from "@/lib/chatFormat";
+import { usePersistedChatModel } from "@/lib/chatModel";
 import { useI18n } from "@/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +36,12 @@ const extractMessages = ref<ChatTurn[]>([]);
 const extractChatInput = ref("");
 const extractListEl = ref<HTMLElement | null>(null);
 const chatSkills = ref<SkillPreviewItem[]>([]);
+const {
+  model: chatModel,
+  options: chatModelOptions,
+  load: loadChatModel,
+  persist: persistChatModel,
+} = usePersistedChatModel("knowledge_model");
 type SlashCmd = { cmd: string; insert: string; hint: string };
 const slashActive = ref(0);
 
@@ -59,6 +66,10 @@ const viewing = ref<KnowledgeBook | null>(null);
 const chunks = ref<KnowledgeChunk[]>([]);
 const chunksBusy = ref(false);
 const chunksError = ref("");
+const indexStatus = ref<{ bookId: string; chunkCount: number; embeddingCount: number } | null>(
+  null,
+);
+const indexBusy = ref(false);
 
 const pendingDelete = ref<KnowledgeBook | null>(null);
 const deleting = ref(false);
@@ -208,7 +219,7 @@ async function sendExtractChat() {
     extractMessages.value = next;
     extractChatInput.value = "";
     await scrollExtractBottom();
-    const r = await api.knowledgeExtractChat(next, importMode.value === "url");
+    const r = await api.knowledgeExtractChat(next, importMode.value === "url", chatModel.value);
     extractMessages.value = [...extractMessages.value, { role: "assistant", content: r.reply }];
     await scrollExtractBottom();
     if (r.extract_prompt) {
@@ -244,6 +255,7 @@ async function stopExtractChat() {
 onMounted(async () => {
   await refresh();
   void loadChatSkills();
+  void loadChatModel(t("settings.deprecated"));
   unlistenFileDrop = await getCurrentWebview().onDragDropEvent((ev) => {
     if (!showImport.value || tab.value !== "active" || importMode.value !== "file") {
       fileDropHover.value = false;
@@ -389,9 +401,15 @@ async function openChunks(b: KnowledgeBook) {
   viewing.value = b;
   chunks.value = [];
   chunksError.value = "";
+  indexStatus.value = null;
   chunksBusy.value = true;
   try {
-    chunks.value = await api.listKnowledgeChunks(b.id);
+    const [list, st] = await Promise.all([
+      api.listKnowledgeChunks(b.id),
+      api.knowledgeIndexStatus(b.id),
+    ]);
+    chunks.value = list;
+    indexStatus.value = st;
   } catch (e) {
     chunksError.value = String(e);
   } finally {
@@ -403,6 +421,30 @@ function closeChunks() {
   viewing.value = null;
   chunks.value = [];
   chunksError.value = "";
+  indexStatus.value = null;
+}
+
+async function rebuildIndex() {
+  const b = viewing.value;
+  if (!b || indexBusy.value) return;
+  indexBusy.value = true;
+  chunksError.value = "";
+  try {
+    indexStatus.value = await api.rebuildKnowledgeIndex(b.id);
+  } catch (e) {
+    chunksError.value = String(e);
+  } finally {
+    indexBusy.value = false;
+  }
+}
+
+/** Chunk bodies often start with 【第N章 …】 — surface as source hint. */
+function chunkChapterHint(content: string): string {
+  const line = (content || "").split("\n")[0]?.trim() || "";
+  if (line.startsWith("【第") && line.includes("章")) {
+    return line.replace(/^【/, "").replace(/】$/, "").slice(0, 40);
+  }
+  return "";
 }
 
 async function archive(b: KnowledgeBook, archived: boolean) {
@@ -623,7 +665,16 @@ async function confirmReextract() {
               @keydown="onExtractChatKeydown"
             />
           </div>
-          <div class="mt-2 flex flex-wrap gap-2">
+          <div class="mt-2 flex flex-wrap items-center gap-2">
+            <select
+              v-model="chatModel"
+              class="h-9 min-w-[9rem] flex-1 rounded-md border border-input bg-background px-2 text-xs"
+              :aria-label="t('chat.pickModel')"
+              :disabled="chatBusy || busy"
+              @change="persistChatModel"
+            >
+              <option v-for="m in chatModelOptions" :key="m.id" :value="m.id">{{ m.label }}</option>
+            </select>
             <Button v-if="chatBusy" variant="destructive" @click="stopExtractChat">
               {{ t("workspace.stop") }}
             </Button>
@@ -661,7 +712,7 @@ async function confirmReextract() {
 
     <p v-if="error && !showImport" class="text-sm text-destructive">{{ error }}</p>
 
-    <div class="grid gap-4 sm:grid-cols-2">
+    <div class="grid grid-cols-[repeat(auto-fill,minmax(16rem,1fr))] gap-4">
       <Card v-for="b in visible" :key="b.id">
         <CardHeader>
           <CardTitle class="text-base">{{ b.title }}</CardTitle>
@@ -794,8 +845,26 @@ async function confirmReextract() {
               <p class="mt-1 text-xs text-muted-foreground">
                 {{ t("library.chunksView", { n: chunks.length || viewing.chunk_count }) }}
               </p>
+              <p v-if="indexStatus" class="mt-1 text-xs text-muted-foreground">
+                {{
+                  t("library.indexStatus", {
+                    emb: indexStatus.embeddingCount,
+                    chunks: indexStatus.chunkCount,
+                  })
+                }}
+              </p>
             </div>
-            <Button size="sm" variant="ghost" @click="closeChunks">{{ t("library.close") }}</Button>
+            <div class="flex shrink-0 items-center gap-1">
+              <Button
+                size="sm"
+                variant="outline"
+                :disabled="indexBusy || chunksBusy"
+                @click="rebuildIndex"
+              >
+                {{ indexBusy ? t("library.rebuildingIndex") : t("library.rebuildIndex") }}
+              </Button>
+              <Button size="sm" variant="ghost" @click="closeChunks">{{ t("library.close") }}</Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent class="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
@@ -809,6 +878,9 @@ async function confirmReextract() {
           >
             <div class="mb-1 text-[10px] uppercase text-muted-foreground">
               {{ t("library.chunkIndex", { n: c.idx + 1 }) }}
+              <span v-if="chunkChapterHint(c.content)" class="normal-case">
+                · {{ chunkChapterHint(c.content) }}
+              </span>
             </div>
             <pre class="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed">{{ c.content }}</pre>
           </div>

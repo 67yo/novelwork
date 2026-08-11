@@ -13,7 +13,7 @@ const nodes = [
     id: "c1",
     kind: "chapter",
     position: { x: 0, y: 10 },
-    linked_side_plot_ids: ["p1", "p2", "p3", "p4", "p5"],
+    linked_side_plot_ids: ["p1", "p2", "p3", "p4", "p5", "pm"],
     linked_character_ids: ["a1", "a2", "a3", "a4", "a5"],
     linked_knowledge_ids: ["k1"],
   },
@@ -21,7 +21,7 @@ const nodes = [
     id: "c2",
     kind: "chapter",
     position: { x: 0, y: 20 },
-    linked_side_plot_ids: [] as string[],
+    linked_side_plot_ids: ["pm"],
     linked_character_ids: [] as string[],
     linked_knowledge_ids: [] as string[],
   },
@@ -31,6 +31,12 @@ const nodes = [
     position: { x: 0, y: i },
     linked_side_plot_ids: [] as string[],
   })),
+  {
+    id: "pm",
+    kind: "side_plot",
+    position: { x: 0, y: 0 },
+    linked_side_plot_ids: [] as string[],
+  },
   ...[1, 2, 3, 4, 5].map((i) => ({
     id: `a${i}`,
     kind: "character",
@@ -44,6 +50,8 @@ const nodes = [
 applyAutoLayout(nodes, []);
 const get = (id: string) => nodes.find((n) => n.id === id)!;
 
+console.assert(get("r").position.x === C.MAIN_X);
+console.assert(get("r").position.y === C.TOP);
 console.assert(get("a1").position.x === C.CHAR_X);
 console.assert(get("c1").position.x === C.MAIN_X);
 console.assert(get("p1").position.x === C.PLOT_X);
@@ -53,16 +61,89 @@ console.assert(get("p2").position.y - get("p1").position.y === C.PLOT_DY);
 console.assert(get("p5").position.x === C.PLOT_X + C.PLOT_DX);
 console.assert(get("p5").position.y === get("p1").position.y);
 // 人物卡同章竖排，第 5 张向左横排
-console.assert(get("a2").position.y - get("a1").position.y === C.SIDE_DY);
 console.assert(get("a5").position.x === C.CHAR_X - C.SIDE_DX);
 console.assert(get("a5").position.y === get("a1").position.y);
-// 知识卡跟在同章人物后：第 6 张 → 第 2 列第 2 行
-console.assert(get("k1").position.x === C.CHAR_X - C.SIDE_DX);
-console.assert(get("k1").position.y === get("a1").position.y + C.SIDE_DY);
-// 根上人物/知识靠顶
-console.assert(get("a_root").position.y === C.TOP);
-console.assert(get("k_root").position.y === C.TOP + C.SIDE_DY);
-// 下章远离上章，给 4 行剧情 / 左侧块腾位
+console.assert(get("a2").position.y > get("a1").position.y);
+// 知识卡在人物左侧
+const leftCharX = Math.min(
+  get("a1").position.x,
+  get("a2").position.x,
+  get("a3").position.x,
+  get("a4").position.x,
+  get("a5").position.x,
+);
+console.assert(get("k1").position.x === leftCharX - C.KNOW_GAP_FROM_CHAR);
+console.assert(get("k1").position.y === get("c1").position.y);
+// 根上侧卡与根同 y（主轴首项）
+console.assert(get("a_root").position.x === C.CHAR_X);
+console.assert(get("a_root").position.y === get("r").position.y);
+console.assert(get("k_root").position.x === C.CHAR_X - C.KNOW_GAP_FROM_CHAR);
+console.assert(get("k_root").position.y === get("r").position.y);
+// 根有链接 → 首章按大间距拉开
+console.assert(get("c1").position.y - get("r").position.y >= C.MIN_CHAPTER_GAP);
+
+// 实测高度：高人物卡应拉开下一张
+{
+  const tall = [
+    {
+      id: "r2",
+      kind: "novel",
+      position: { x: 0, y: 0 },
+      linked_character_ids: ["t1", "t2"],
+      linked_side_plot_ids: [] as string[],
+      linked_knowledge_ids: [] as string[],
+    },
+    {
+      id: "t1",
+      kind: "character",
+      position: { x: 0, y: 0 },
+      linked_side_plot_ids: [] as string[],
+    },
+    {
+      id: "t2",
+      kind: "character",
+      position: { x: 0, y: 1 },
+      linked_side_plot_ids: [] as string[],
+    },
+  ];
+  const sizes = new Map([
+    ["t1", { w: 160, h: 140 }],
+    ["t2", { w: 160, h: 80 }],
+  ]);
+  applyAutoLayout(tall, [], sizes);
+  const t1 = tall.find((n) => n.id === "t1")!;
+  const t2 = tall.find((n) => n.id === "t2")!;
+  console.assert(t2.position.y === t1.position.y + 140 + C.SIDE_GAP);
+}
+// 有链接章：下章远离上章，给 4 行剧情 / 左侧块腾位
 const need = C.MAX_PLOT_COL * C.PLOT_DY + C.CH_PAD;
 console.assert(get("c2").position.y - get("c1").position.y >= need);
+
+// 多章共用剧情：落在两章垂直中点
+const midY = (get("c1").position.y + get("c2").position.y) / 2;
+console.assert(Math.abs(get("pm").position.y - midY) < 1e-6);
+const rightmostSingle = Math.max(get("p1").position.x, get("p5").position.x);
+const expectMultiX = rightmostSingle + C.PLOT_CARD_W + C.PLOT_CARD_W / 2;
+console.assert(Math.abs(get("pm").position.x - expectMultiX) < 1e-6);
+
+// 无链接章节：主轴竖向贴近
+{
+  const bare = [
+    { id: "br", kind: "novel", position: { x: 0, y: 0 } },
+    { id: "b1", kind: "chapter", position: { x: 0, y: 10 } },
+    { id: "b2", kind: "chapter", position: { x: 0, y: 20 } },
+    { id: "b3", kind: "chapter", position: { x: 0, y: 30 } },
+  ];
+  applyAutoLayout(bare, []);
+  const g = (id: string) => bare.find((n) => n.id === id)!;
+  console.assert(g("br").position.y === C.TOP);
+  const d12 = g("b2").position.y - g("b1").position.y;
+  const d23 = g("b3").position.y - g("b2").position.y;
+  console.assert(d12 < C.MIN_CHAPTER_GAP, `bare gap ${d12}`);
+  console.assert(d12 >= C.MIN_CHAPTER_GAP_TIGHT, `bare gap floor ${d12}`);
+  console.assert(d23 === d12);
+  // 根也无链接 → 根到首章同样贴近
+  console.assert(g("b1").position.y - g("br").position.y < C.MIN_CHAPTER_GAP);
+}
+
 console.log("treeLayout.selfcheck ok");

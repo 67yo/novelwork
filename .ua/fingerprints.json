@@ -1,0 +1,5184 @@
+{
+  "version": "1.0.0",
+  "gitCommitHash": "27e24d9a6ada1eb347d29c5bd68cf57441ac8c2c",
+  "generatedAt": "2026-08-08T03:28:46.750Z",
+  "files": {
+    ".cursor/rules/i18n-sync.mdc": {
+      "filePath": ".cursor/rules/i18n-sync.mdc",
+      "contentHash": "e81e135a77148d99a54fd5b9b2a3f4c73042eaeb6d52903b39ce8c7c36351bfa",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 18,
+      "hasStructuralAnalysis": false
+    },
+    ".cursor/rules/no-window-confirm.mdc": {
+      "filePath": ".cursor/rules/no-window-confirm.mdc",
+      "contentHash": "6061fe29b1edd85aa513bfd9e0e93cd791c6bfc6e34203374e23c1cd2b98f5d8",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 42,
+      "hasStructuralAnalysis": false
+    },
+    ".ua/.understandignore": {
+      "filePath": ".ua/.understandignore",
+      "contentHash": "cfec3e11d61cfb45b766db968a3b246b20be4e26e5fbb4309289fe8b154a2714",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 85,
+      "hasStructuralAnalysis": false
+    },
+    ".ua/config.json": {
+      "filePath": ".ua/config.json",
+      "contentHash": "de7ae7b841141718a1bd36930e7642f915b847a713410d80cd433977a0691fe0",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 3,
+      "hasStructuralAnalysis": true
+    },
+    ".ua/tmp/commit.txt": {
+      "filePath": ".ua/tmp/commit.txt",
+      "contentHash": "465c41e5572acfb9226652f0fe347a2e14ee40d43bb4e37b56b578dac0e2d012",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 2,
+      "hasStructuralAnalysis": false
+    },
+    ".ua/tmp/dir-tree.txt": {
+      "filePath": ".ua/tmp/dir-tree.txt",
+      "contentHash": "471b837ed9e37d69630714ab6e065cbf19760dc7bcf21dba64f8cd8af29570f7",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 28,
+      "hasStructuralAnalysis": false
+    },
+    ".ua/tmp/manifest-cargo.txt": {
+      "filePath": ".ua/tmp/manifest-cargo.txt",
+      "contentHash": "90063a6f5bbd5372a25c6adaf6c16979a6ee623ff402ec9deb832c15a7fb48cb",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 43,
+      "hasStructuralAnalysis": false
+    },
+    ".ua/tmp/manifest-pkg.txt": {
+      "filePath": ".ua/tmp/manifest-pkg.txt",
+      "contentHash": "a489f7577ddb3f05d53f1944279f871b261ef7d36fb8af5393d31e0c8dc05c61",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 43,
+      "hasStructuralAnalysis": false
+    },
+    ".ua/tmp/readme.txt": {
+      "filePath": ".ua/tmp/readme.txt",
+      "contentHash": "6dc5adade627ae896e2b60527519c9c8e371cce4abae0ce064feae19e38155af",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 45,
+      "hasStructuralAnalysis": false
+    },
+    ".ua/tmp/ua-scan-files.json": {
+      "filePath": ".ua/tmp/ua-scan-files.json",
+      "contentHash": "231d15d6c2cce610f19ffe30d73e38e937f026ab72da188032b19903c5152b39",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 471,
+      "hasStructuralAnalysis": true
+    },
+    "Project.md": {
+      "filePath": "Project.md",
+      "contentHash": "af046faea9054d566f4fd4710d880eb0fc11789ef231e618c40034d565ca11ad",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 151,
+      "hasStructuralAnalysis": true
+    },
+    "README.md": {
+      "filePath": "README.md",
+      "contentHash": "6dc5adade627ae896e2b60527519c9c8e371cce4abae0ce064feae19e38155af",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 45,
+      "hasStructuralAnalysis": true
+    },
+    "components.json": {
+      "filePath": "components.json",
+      "contentHash": "fb9a5766f830fc65678cf250af45a421968e374dbcb88a287e567b865005160c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 21,
+      "hasStructuralAnalysis": true
+    },
+    "index.html": {
+      "filePath": "index.html",
+      "contentHash": "d13e8727892ff1e003c732ca94fea4d19e8569e7f0eae544ac036ad524ac74dd",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 15,
+      "hasStructuralAnalysis": false
+    },
+    "package.json": {
+      "filePath": "package.json",
+      "contentHash": "a489f7577ddb3f05d53f1944279f871b261ef7d36fb8af5393d31e0c8dc05c61",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 43,
+      "hasStructuralAnalysis": true
+    },
+    "src-tauri/Cargo.toml": {
+      "filePath": "src-tauri/Cargo.toml",
+      "contentHash": "90063a6f5bbd5372a25c6adaf6c16979a6ee623ff402ec9deb832c15a7fb48cb",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 43,
+      "hasStructuralAnalysis": true
+    },
+    "src-tauri/build.rs": {
+      "filePath": "src-tauri/build.rs",
+      "contentHash": "487059eaf8a947b80f20a9aacac038a5047b2ad69d2401b827376c67d6fe847f",
+      "functions": [
+        {
+          "name": "main",
+          "params": [],
+          "exported": false,
+          "lineCount": 3
+        }
+      ],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 4,
+      "hasStructuralAnalysis": true
+    },
+    "src-tauri/capabilities/default.json": {
+      "filePath": "src-tauri/capabilities/default.json",
+      "contentHash": "2d3380b5f539ea2927767f2f4511c6f4c0c51d8583dbb9bdf305c7888bf750f0",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 12,
+      "hasStructuralAnalysis": true
+    },
+    "src-tauri/icons/icon.icns": {
+      "filePath": "src-tauri/icons/icon.icns",
+      "contentHash": "e0dcec888d74d60be74dbd652ba3b29b75c8d1499af18a5c28296282f7e50a2c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 463,
+      "hasStructuralAnalysis": false
+    },
+    "src-tauri/src/catalog.rs": {
+      "filePath": "src-tauri/src/catalog.rs",
+      "contentHash": "303a8de5cbbfe148062f7d118b6250cd9936a9dd8c7faa7416f7b6be3862fd02",
+      "functions": [
+        {
+          "name": "refresh",
+          "params": [
+            "db"
+          ],
+          "returnType": "Result<ModelCatalog>",
+          "exported": true,
+          "lineCount": 53
+        },
+        {
+          "name": "fetch_openai_compat",
+          "params": [
+            "url",
+            "api_key"
+          ],
+          "returnType": "Result<Vec<String>>",
+          "exported": false,
+          "lineCount": 22
+        },
+        {
+          "name": "fetch_gemini",
+          "params": [
+            "api_key"
+          ],
+          "returnType": "Result<Vec<String>>",
+          "exported": false,
+          "lineCount": 41
+        },
+        {
+          "name": "fetch_claude",
+          "params": [
+            "api_key"
+          ],
+          "returnType": "Result<Vec<String>>",
+          "exported": false,
+          "lineCount": 27
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "crate::db",
+          "specifiers": [
+            "Db"
+          ]
+        },
+        {
+          "source": "crate::models",
+          "specifiers": [
+            "ModelCatalog"
+          ]
+        },
+        {
+          "source": "anyhow",
+          "specifiers": [
+            "anyhow",
+            "Result"
+          ]
+        },
+        {
+          "source": "chrono",
+          "specifiers": [
+            "Utc"
+          ]
+        },
+        {
+          "source": "serde",
+          "specifiers": [
+            "Deserialize"
+          ]
+        }
+      ],
+      "exports": [
+        "refresh"
+      ],
+      "totalLines": 154,
+      "hasStructuralAnalysis": true
+    },
+    "src-tauri/src/chapter_constraints.rs": {
+      "filePath": "src-tauri/src/chapter_constraints.rs",
+      "contentHash": "2cd009ac1cb0584a19e1ce03c560b07fcad2098bf66521027293cc677f9aad81",
+      "functions": [
+        {
+          "name": "outline_beats",
+          "params": [
+            "outline"
+          ],
+          "returnType": "Vec<String>",
+          "exported": true,
+          "lineCount": 40
+        },
+        {
+          "name": "format_contract",
+          "params": [
+            "zh",
+            "beats"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 43
+        },
+        {
+          "name": "beat_landed",
+          "params": [
+            "body",
+            "beat"
+          ],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 45
+        },
+        {
+          "name": "missing_beats",
+          "params": [
+            "body",
+            "beats"
+          ],
+          "returnType": "Vec<&'a LandBeat>",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "format_missing",
+          "params": [
+            "zh",
+            "missing"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 11
+        }
+      ],
+      "classes": [
+        {
+          "name": "LandBeat",
+          "methods": [],
+          "properties": [
+            "kind",
+            "title",
+            "text"
+          ],
+          "exported": true,
+          "lineCount": 6
+        }
+      ],
+      "imports": [
+        {
+          "source": "crate::chapter_memory",
+          "specifiers": [
+            "query_terms",
+            "score_memory"
+          ]
+        }
+      ],
+      "exports": [
+        "LandBeat",
+        "outline_beats",
+        "format_contract",
+        "beat_landed",
+        "missing_beats",
+        "format_missing"
+      ],
+      "totalLines": 197,
+      "hasStructuralAnalysis": true
+    },
+    "src-tauri/src/chapter_memory.rs": {
+      "filePath": "src-tauri/src/chapter_memory.rs",
+      "contentHash": "749df12f16cc758638af52fa14bce9f1aad464427db6a9b1e89f4d3013dd3db3",
+      "functions": [
+        {
+          "name": "upsert_lance",
+          "params": [
+            "novel_id",
+            "node_id",
+            "chunks"
+          ],
+          "returnType": "Result<()>",
+          "exported": true,
+          "lineCount": 43
+        },
+        {
+          "name": "delete_lance",
+          "params": [
+            "novel_id",
+            "node_id"
+          ],
+          "returnType": "Result<()>",
+          "exported": true,
+          "lineCount": 16
+        },
+        {
+          "name": "delete_lance_novel",
+          "params": [
+            "novel_id"
+          ],
+          "returnType": "Result<()>",
+          "exported": true,
+          "lineCount": 13
+        },
+        {
+          "name": "is_section_header",
+          "params": [
+            "line"
+          ],
+          "returnType": "bool",
+          "exported": false,
+          "lineCount": 15
+        },
+        {
+          "name": "is_bullet",
+          "params": [
+            "line"
+          ],
+          "returnType": "bool",
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "split_memory_text",
+          "params": [
+            "text"
+          ],
+          "returnType": "Vec<String>",
+          "exported": true,
+          "lineCount": 92
+        },
+        {
+          "name": "score_memory",
+          "params": [
+            "content",
+            "query_terms"
+          ],
+          "returnType": "usize",
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "query_terms",
+          "params": [
+            "text"
+          ],
+          "returnType": "Vec<String>",
+          "exported": true,
+          "lineCount": 60
+        },
+        {
+          "name": "rank_memory",
+          "params": [
+            "rows",
+            "query",
+            "limit"
+          ],
+          "returnType": "Vec<(String, String)>",
+          "exported": true,
+          "lineCount": 17
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "crate::chunk",
+          "specifiers": [
+            "chunk_text"
+          ]
+        },
+        {
+          "source": "crate::paths",
+          "specifiers": [
+            "lancedb_dir"
+          ]
+        },
+        {
+          "source": "anyhow",
+          "specifiers": [
+            "Result"
+          ]
+        },
+        {
+          "source": "arrow_array",
+          "specifiers": [
+            "ArrayRef",
+            "Int32Array",
+            "RecordBatch",
+            "RecordBatchIterator",
+            "StringArray"
+          ]
+        },
+        {
+          "source": "arrow_schema",
+          "specifiers": [
+            "DataType",
+            "Field",
+            "Schema"
+          ]
+        },
+        {
+          "source": "std::sync",
+          "specifiers": [
+            "Arc"
+          ]
+        }
+      ],
+      "exports": [
+        "upsert_lance",
+        "delete_lance",
+        "delete_lance_novel",
+        "split_memory_text",
+        "score_memory",
+        "query_terms",
+        "rank_memory"
+      ],
+      "totalLines": 324,
+      "hasStructuralAnalysis": true
+    },
+    "src-tauri/src/chunk.rs": {
+      "filePath": "src-tauri/src/chunk.rs",
+      "contentHash": "90ec5e9bcfc74346694ab91744213aee857ea046937c39ba305b4e7e38afdb55",
+      "functions": [
+        {
+          "name": "chunk_text",
+          "params": [
+            "text",
+            "size",
+            "overlap"
+          ],
+          "returnType": "Vec<String>",
+          "exported": true,
+          "lineCount": 20
+        }
+      ],
+      "classes": [],
+      "imports": [],
+      "exports": [
+        "chunk_text"
+      ],
+      "totalLines": 39,
+      "hasStructuralAnalysis": true
+    },
+    "src-tauri/src/commands.rs": {
+      "filePath": "src-tauri/src/commands.rs",
+      "contentHash": "5acda632f129f32ee2f6f0082294549595863c4551144c87f39e84b83e80d526",
+      "functions": [
+        {
+          "name": "drop",
+          "params": [],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "emit_chat_progress",
+          "params": [
+            "app",
+            "novel_id",
+            "step"
+          ],
+          "exported": false,
+          "lineCount": 6
+        },
+        {
+          "name": "llm_complete",
+          "params": [
+            "state",
+            "settings",
+            "system",
+            "user",
+            "model",
+            "novel_id",
+            "cancel"
+          ],
+          "returnType": "Result<(String, bool), String>",
+          "exported": false,
+          "lineCount": 33
+        },
+        {
+          "name": "enrich_user_with_urls",
+          "params": [
+            "text"
+          ],
+          "returnType": "String",
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "enrich_user_with_urls_progress",
+          "params": [
+            "app",
+            "novel_id",
+            "text"
+          ],
+          "returnType": "String",
+          "exported": false,
+          "lineCount": 11
+        },
+        {
+          "name": "mask_key",
+          "params": [
+            "key"
+          ],
+          "returnType": "String",
+          "exported": false,
+          "lineCount": 14
+        },
+        {
+          "name": "apply_optional_key",
+          "params": [
+            "target",
+            "incoming"
+          ],
+          "exported": false,
+          "lineCount": 9
+        },
+        {
+          "name": "task_model",
+          "params": [
+            "preferred",
+            "fallback"
+          ],
+          "returnType": "String",
+          "exported": false,
+          "lineCount": 8
+        },
+        {
+          "name": "get_settings",
+          "params": [
+            "state"
+          ],
+          "returnType": "Result<SettingsView, String>",
+          "exported": true,
+          "lineCount": 27
+        },
+        {
+          "name": "save_settings",
+          "params": [
+            "state",
+            "input"
+          ],
+          "returnType": "Result<SettingsView, String>",
+          "exported": true,
+          "lineCount": 37
+        },
+        {
+          "name": "refresh_model_catalog",
+          "params": [
+            "state"
+          ],
+          "returnType": "Result<ModelCatalog, String>",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "collect_known_genres",
+          "params": [
+            "state"
+          ],
+          "returnType": "Vec<String>",
+          "exported": false,
+          "lineCount": 17
+        },
+        {
+          "name": "list_genres",
+          "params": [
+            "state"
+          ],
+          "returnType": "Vec<String>",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "list_knowledge_bases",
+          "params": [
+            "state"
+          ],
+          "returnType": "Result<Vec<KnowledgeBook>, String>",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "rename_knowledge",
+          "params": [
+            "state",
+            "id",
+            "title"
+          ],
+          "returnType": "Result<(), String>",
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "update_knowledge",
+          "params": [
+            "state",
+            "id",
+            "title",
+            "author",
+            "extract_prompt",
+            "genres"
+          ],
+          "returnType": "Result<KnowledgeBook, String>",
+          "exported": true,
+          "lineCount": 20
+        },
+        {
+          "name": "list_knowledge_chunks",
+          "params": [
+            "state",
+            "book_id"
+          ],
+          "returnType": "Result<Vec<KnowledgeChunk>, String>",
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "archive_knowledge",
+          "params": [
+            "state",
+            "id",
+            "archived"
+          ],
+          "returnType": "Result<KnowledgeBook, String>",
+          "exported": true,
+          "lineCount": 15
+        },
+        {
+          "name": "delete_knowledge",
+          "params": [
+            "state",
+            "id"
+          ],
+          "returnType": "Result<(), String>",
+          "exported": true,
+          "lineCount": 14
+        },
+        {
+          "name": "import_knowledge_text",
+          "params": [
+            "state",
+            "path",
+            "extract_prompt",
+            "genres"
+          ],
+          "returnType": "Result<KnowledgeBook, String>",
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "import_knowledge_url",
+          "params": [
+            "state",
+            "url",
+            "extract_prompt",
+            "genres"
+          ],
+          "returnType": "Result<KnowledgeBook, String>",
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "analyze_knowledge_source",
+          "params": [
+            "state",
+            "src",
+            "extract_prompt",
+            "genres",
+            "from_url"
+          ],
+          "returnType": "Result<(String, String, Vec<String>, String, Vec<String>), String>",
+          "exported": false,
+          "lineCount": 70
+        },
+        {
+          "name": "ingest_knowledge_source",
+          "params": [
+            "state",
+            "src",
+            "source_path",
+            "extract_prompt",
+            "genres",
+            "from_url"
+          ],
+          "returnType": "Result<KnowledgeBook, String>",
+          "exported": false,
+          "lineCount": 28
+        },
+        {
+          "name": "is_http_source",
+          "params": [
+            "path"
+          ],
+          "returnType": "bool",
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "reextract_knowledge",
+          "params": [
+            "state",
+            "id",
+            "path"
+          ],
+          "returnType": "Result<KnowledgeBook, String>",
+          "exported": true,
+          "lineCount": 56
+        },
+        {
+          "name": "list_novels",
+          "params": [
+            "state"
+          ],
+          "returnType": "Result<Vec<NovelProject>, String>",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "get_novel",
+          "params": [
+            "state",
+            "id"
+          ],
+          "returnType": "Result<Option<NovelProject>, String>",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "archive_novel",
+          "params": [
+            "state",
+            "id",
+            "archived"
+          ],
+          "returnType": "Result<NovelProject, String>",
+          "exported": true,
+          "lineCount": 19
+        },
+        {
+          "name": "delete_novel",
+          "params": [
+            "state",
+            "id"
+          ],
+          "returnType": "Result<(), String>",
+          "exported": true,
+          "lineCount": 20
+        },
+        {
+          "name": "create_novel",
+          "params": [
+            "state",
+            "input"
+          ],
+          "returnType": "Result<NovelProject, String>",
+          "exported": true,
+          "lineCount": 17
+        },
+        {
+          "name": "count_words",
+          "params": [
+            "text"
+          ],
+          "returnType": "u32",
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "normalize_word_range",
+          "params": [
+            "min",
+            "max"
+          ],
+          "returnType": "(u32, u32)",
+          "exported": false,
+          "lineCount": 9
+        },
+        {
+          "name": "root_chapter_word_target",
+          "params": [
+            "tree",
+            "novel"
+          ],
+          "returnType": "(u32, u32)",
+          "exported": false,
+          "lineCount": 14
+        },
+        {
+          "name": "word_tolerance_bounds",
+          "params": [
+            "wmin",
+            "wmax"
+          ],
+          "returnType": "(u32, u32)",
+          "exported": false,
+          "lineCount": 6
+        },
+        {
+          "name": "word_count_ok",
+          "params": [
+            "words",
+            "wmin",
+            "wmax"
+          ],
+          "returnType": "bool",
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "repair_chapter_word_count",
+          "params": [
+            "state",
+            "settings",
+            "novel_id",
+            "model",
+            "loc",
+            "content",
+            "wmin",
+            "wmax",
+            "cancel"
+          ],
+          "returnType": "Result<String, String>",
+          "exported": false,
+          "lineCount": 40
+        },
+        {
+          "name": "parse_word_target_from_text",
+          "params": [
+            "text"
+          ],
+          "returnType": "Option<(u32, u32)>",
+          "exported": false,
+          "lineCount": 56
+        },
+        {
+          "name": "word_target_from_json",
+          "params": [
+            "v"
+          ],
+          "returnType": "Option<(u32, u32)>",
+          "exported": false,
+          "lineCount": 39
+        },
+        {
+          "name": "apply_novel_word_target",
+          "params": [
+            "state",
+            "novel",
+            "tree",
+            "min",
+            "max"
+          ],
+          "returnType": "Result<(), String>",
+          "exported": false,
+          "lineCount": 21
+        },
+        {
+          "name": "normalize_chapter_count",
+          "params": [
+            "n"
+          ],
+          "returnType": "u32",
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "chapter_count_from_json",
+          "params": [
+            "v"
+          ],
+          "returnType": "Option<u32>",
+          "exported": false,
+          "lineCount": 18
+        },
+        {
+          "name": "parse_chapter_count_from_text",
+          "params": [
+            "text"
+          ],
+          "returnType": "Option<u32>",
+          "exported": false,
+          "lineCount": 44
+        },
+        {
+          "name": "apply_novel_chapter_count",
+          "params": [
+            "state",
+            "novel",
+            "tree",
+            "count"
+          ],
+          "returnType": "Result<(), String>",
+          "exported": false,
+          "lineCount": 18
+        },
+        {
+          "name": "update_novel_plan",
+          "params": [
+            "state",
+            "novel_id",
+            "word_count_min",
+            "word_count_max",
+            "chapter_count"
+          ],
+          "returnType": "Result<NovelProject, String>",
+          "exported": true,
+          "lineCount": 24
+        },
+        {
+          "name": "set_node_word_count",
+          "params": [
+            "tree",
+            "node_id",
+            "words"
+          ],
+          "exported": false,
+          "lineCount": 5
+        },
+        {
+          "name": "create_novel_with_tree",
+          "params": [
+            "state",
+            "title",
+            "synopsis",
+            "knowledge_ids",
+            "knowledge_strategy",
+            "word_count_min",
+            "word_count_max",
+            "chapter_count",
+            "_chapters",
+            "characters"
+          ],
+          "returnType": "Result<NovelProject, String>",
+          "exported": false,
+          "lineCount": 53
+        },
+        {
+          "name": "build_initial_tree",
+          "params": [
+            "novel_id",
+            "title",
+            "synopsis",
+            "word_count_min",
+            "word_count_max",
+            "chapter_count",
+            "characters"
+          ],
+          "returnType": "NovelTree",
+          "exported": false,
+          "lineCount": 101
+        },
+        {
+          "name": "root_id",
+          "params": [
+            "tree"
+          ],
+          "returnType": "String",
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "cn_digit",
+          "params": [
+            "ch"
+          ],
+          "returnType": "Option<u32>",
+          "exported": false,
+          "lineCount": 15
+        },
+        {
+          "name": "is_cn_num_char",
+          "params": [
+            "ch"
+          ],
+          "returnType": "bool",
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "parse_chinese_numeral",
+          "params": [
+            "s"
+          ],
+          "returnType": "Option<u32>",
+          "exported": false,
+          "lineCount": 51
+        },
+        {
+          "name": "parse_chapter_num_token",
+          "params": [
+            "tok"
+          ],
+          "returnType": "Option<u32>",
+          "exported": false,
+          "lineCount": 10
+        },
+        {
+          "name": "chapter_number_from_label",
+          "params": [
+            "label"
+          ],
+          "returnType": "Option<u32>",
+          "exported": false,
+          "lineCount": 58
+        },
+        {
+          "name": "parse_chapter_ref",
+          "params": [
+            "args"
+          ],
+          "returnType": "Option<u32>",
+          "exported": false,
+          "lineCount": 23
+        },
+        {
+          "name": "existing_chapter_nums",
+          "params": [
+            "tree"
+          ],
+          "returnType": "std::collections::HashMap<u32, String>",
+          "exported": false,
+          "lineCount": 20
+        },
+        {
+          "name": "last_chapter_anchor",
+          "params": [
+            "tree"
+          ],
+          "returnType": "(String, f64, f64)",
+          "exported": false,
+          "lineCount": 21
+        },
+        {
+          "name": "clear_all_chapter_nodes",
+          "params": [
+            "tree"
+          ],
+          "exported": false,
+          "lineCount": 22
+        },
+        {
+          "name": "clear_all_side_plot_nodes",
+          "params": [
+            "tree"
+          ],
+          "exported": false,
+          "lineCount": 22
+        },
+        {
+          "name": "push_chapter_node",
+          "params": [
+            "tree",
+            "prev",
+            "x",
+            "y",
+            "label",
+            "outline"
+          ],
+          "exported": false,
+          "lineCount": 37
+        },
+        {
+          "name": "apply_chapter_outlines",
+          "params": [
+            "tree",
+            "list",
+            "mode"
+          ],
+          "exported": false,
+          "lineCount": 51
+        },
+        {
+          "name": "add_plot_to_chapter",
+          "params": [
+            "tree",
+            "chapter_num",
+            "plot_text"
+          ],
+          "returnType": "Result<String, String>",
+          "exported": false,
+          "lineCount": 67
+        },
+        {
+          "name": "parse_resolve_mode",
+          "params": [
+            "text"
+          ],
+          "returnType": "Option<ChapterResolveMode>",
+          "exported": false,
+          "lineCount": 12
+        },
+        {
+          "name": "extract_small_chapter_nums",
+          "params": [
+            "text"
+          ],
+          "returnType": "Vec<u32>",
+          "exported": false,
+          "lineCount": 26
+        },
+        {
+          "name": "slash_args",
+          "params": [
+            "text",
+            "names"
+          ],
+          "returnType": "Option<&'a str>",
+          "exported": false,
+          "lineCount": 14
+        },
+        {
+          "name": "root_slash_help",
+          "params": [
+            "zh"
+          ],
+          "returnType": "String",
+          "exported": false,
+          "lineCount": 23
+        },
+        {
+          "name": "parse_clear_all_chapters",
+          "params": [
+            "text"
+          ],
+          "returnType": "bool",
+          "exported": false,
+          "lineCount": 13
+        },
+        {
+          "name": "parse_clear_all_plots",
+          "params": [
+            "text"
+          ],
+          "returnType": "bool",
+          "exported": false,
+          "lineCount": 14
+        },
+        {
+          "name": "parse_gen_plots_for_chapter",
+          "params": [
+            "text"
+          ],
+          "returnType": "Option<u32>",
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "parse_enrich_plots_command",
+          "params": [
+            "text"
+          ],
+          "returnType": "bool",
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "enrich_plots_for_chapter_node",
+          "params": [
+            "app",
+            "state",
+            "settings",
+            "novel",
+            "novel_id",
+            "tree",
+            "chapter_id",
+            "chapter_num",
+            "loc",
+            "cancel"
+          ],
+          "returnType": "Result<String, String>",
+          "exported": false,
+          "lineCount": 101
+        },
+        {
+          "name": "find_character_id_by_label",
+          "params": [
+            "tree",
+            "label"
+          ],
+          "returnType": "Option<String>",
+          "exported": false,
+          "lineCount": 14
+        },
+        {
+          "name": "ensure_character_linked",
+          "params": [
+            "tree",
+            "host_id",
+            "char_id"
+          ],
+          "exported": false,
+          "lineCount": 23
+        },
+        {
+          "name": "apply_plots_and_characters_for_chapter",
+          "params": [
+            "tree",
+            "chapter_id",
+            "plots",
+            "def_role",
+            "def_align"
+          ],
+          "returnType": "(usize, usize)",
+          "exported": false,
+          "lineCount": 151
+        },
+        {
+          "name": "strip_resolve_prefix",
+          "params": [
+            "args"
+          ],
+          "returnType": "&str",
+          "exported": false,
+          "lineCount": 25
+        },
+        {
+          "name": "parse_chapter_range",
+          "params": [
+            "args"
+          ],
+          "returnType": "Option<(u32, u32)>",
+          "exported": false,
+          "lineCount": 57
+        },
+        {
+          "name": "parse_gen_chapter_cards",
+          "params": [
+            "text"
+          ],
+          "returnType": "Option<(u32, u32, Option<ChapterResolveMode>)>",
+          "exported": false,
+          "lineCount": 13
+        },
+        {
+          "name": "parse_add_plot_command",
+          "params": [
+            "text"
+          ],
+          "returnType": "Option<(u32, String)>",
+          "exported": false,
+          "lineCount": 33
+        },
+        {
+          "name": "finish_chat_reply",
+          "params": [
+            "state",
+            "novel_id",
+            "reply"
+          ],
+          "returnType": "Result<Vec<ChatMessage>, String>",
+          "exported": false,
+          "lineCount": 18
+        },
+        {
+          "name": "create_novel_chat",
+          "params": [
+            "state",
+            "input"
+          ],
+          "returnType": "Result<NovelCreateChatResult, String>",
+          "exported": true,
+          "lineCount": 134
+        },
+        {
+          "name": "normalize_llm_json_text",
+          "params": [
+            "text"
+          ],
+          "returnType": "String",
+          "exported": false,
+          "lineCount": 15
+        },
+        {
+          "name": "strip_trailing_commas",
+          "params": [
+            "s"
+          ],
+          "returnType": "String",
+          "exported": false,
+          "lineCount": 41
+        },
+        {
+          "name": "find_matching_brace",
+          "params": [
+            "chars",
+            "start"
+          ],
+          "returnType": "Option<usize>",
+          "exported": false,
+          "lineCount": 33
+        },
+        {
+          "name": "try_parse_json_object",
+          "params": [
+            "s"
+          ],
+          "returnType": "Option<serde_json::Value>",
+          "exported": false,
+          "lineCount": 20
+        },
+        {
+          "name": "extract_json_objects",
+          "params": [
+            "text"
+          ],
+          "returnType": "Vec<serde_json::Value>",
+          "exported": false,
+          "lineCount": 27
+        },
+        {
+          "name": "first_json_array_field",
+          "params": [
+            "text",
+            "key"
+          ],
+          "returnType": "Option<Vec<serde_json::Value>>",
+          "exported": false,
+          "lineCount": 8
+        },
+        {
+          "name": "first_json_with_any_key",
+          "params": [
+            "text",
+            "keys"
+          ],
+          "returnType": "Option<serde_json::Value>",
+          "exported": false,
+          "lineCount": 5
+        },
+        {
+          "name": "extract_create_json",
+          "params": [
+            "reply"
+          ],
+          "returnType": "Option<serde_json::Value>",
+          "exported": false,
+          "lineCount": 12
+        },
+        {
+          "name": "get_tree",
+          "params": [
+            "novel_id"
+          ],
+          "returnType": "Result<NovelTree, String>",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "save_tree",
+          "params": [
+            "tree"
+          ],
+          "returnType": "Result<(), String>",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "delete_tree_card",
+          "params": [
+            "state",
+            "novel_id",
+            "node_id"
+          ],
+          "returnType": "Result<NovelTree, String>",
+          "exported": true,
+          "lineCount": 76
+        },
+        {
+          "name": "get_chapter",
+          "params": [
+            "novel_id",
+            "node_id"
+          ],
+          "returnType": "Result<String, String>",
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "get_chapter_memory",
+          "params": [
+            "state",
+            "novel_id",
+            "node_id"
+          ],
+          "returnType": "Result<Vec<String>, String>",
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "chapter_context",
+          "params": [
+            "tree",
+            "novel_id",
+            "node_id",
+            "loc"
+          ],
+          "returnType": "(String, String)",
+          "exported": false,
+          "lineCount": 372
+        },
+        {
+          "name": "root_generate_reference",
+          "params": [
+            "tree",
+            "synopsis",
+            "loc"
+          ],
+          "returnType": "String",
+          "exported": false,
+          "lineCount": 95
+        },
+        {
+          "name": "upsert_chapter_memory",
+          "params": [
+            "state",
+            "settings",
+            "novel_id",
+            "node_id",
+            "label",
+            "outline",
+            "body",
+            "loc",
+            "cancel"
+          ],
+          "exported": false,
+          "lineCount": 35
+        },
+        {
+          "name": "collect_land_beats",
+          "params": [
+            "tree",
+            "novel_id",
+            "node_id"
+          ],
+          "returnType": "Vec<LandBeat>",
+          "exported": false,
+          "lineCount": 112
+        },
+        {
+          "name": "sorted_chapter_nodes",
+          "params": [
+            "tree"
+          ],
+          "returnType": "Vec<TreeNode>",
+          "exported": false,
+          "lineCount": 21
+        },
+        {
+          "name": "chapters_outline_index",
+          "params": [
+            "tree"
+          ],
+          "returnType": "String",
+          "exported": false,
+          "lineCount": 11
+        },
+        {
+          "name": "outline_mode_from_json",
+          "params": [
+            "v"
+          ],
+          "returnType": "Option<ChapterResolveMode>",
+          "exported": false,
+          "lineCount": 18
+        },
+        {
+          "name": "build_refine_memory_context",
+          "params": [
+            "state",
+            "novel_id",
+            "prev_chapters",
+            "query",
+            "loc"
+          ],
+          "returnType": "String",
+          "exported": false,
+          "lineCount": 70
+        },
+        {
+          "name": "generate_chapter",
+          "params": [
+            "state",
+            "novel_id",
+            "node_id"
+          ],
+          "returnType": "Result<GenerateResult, String>",
+          "exported": true,
+          "lineCount": 150
+        },
+        {
+          "name": "refine_chapter",
+          "params": [
+            "state",
+            "novel_id",
+            "node_id",
+            "prev_n",
+            "mode"
+          ],
+          "returnType": "Result<GenerateResult, String>",
+          "exported": true,
+          "lineCount": 148
+        },
+        {
+          "name": "plan_next_chapters",
+          "params": [
+            "state",
+            "novel_id",
+            "node_id",
+            "count"
+          ],
+          "returnType": "Result<GenerateResult, String>",
+          "exported": true,
+          "lineCount": 121
+        },
+        {
+          "name": "list_chat_messages",
+          "params": [
+            "state",
+            "novel_id"
+          ],
+          "returnType": "Result<Vec<ChatMessage>, String>",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "chat_send",
+          "params": [
+            "app",
+            "state",
+            "novel_id",
+            "content"
+          ],
+          "returnType": "Result<Vec<ChatMessage>, String>",
+          "exported": true,
+          "lineCount": 421
+        },
+        {
+          "name": "extract_knowledge_card",
+          "params": [
+            "state",
+            "novel_id",
+            "node_id"
+          ],
+          "returnType": "Result<NovelTree, String>",
+          "exported": true,
+          "lineCount": 58
+        },
+        {
+          "name": "gather_knowledge_corpus",
+          "params": [
+            "state",
+            "book_ids",
+            "max_chars"
+          ],
+          "returnType": "Result<String, String>",
+          "exported": false,
+          "lineCount": 42
+        },
+        {
+          "name": "card_chat_send",
+          "params": [
+            "app",
+            "state",
+            "novel_id",
+            "node_id",
+            "content"
+          ],
+          "returnType": "Result<CardChatResult, String>",
+          "exported": true,
+          "lineCount": 143
+        },
+        {
+          "name": "pick_cover",
+          "params": [
+            "app"
+          ],
+          "returnType": "Result<Option<String>, String>",
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "set_cover",
+          "params": [
+            "state",
+            "novel_id",
+            "source_path"
+          ],
+          "returnType": "Result<NovelProject, String>",
+          "exported": true,
+          "lineCount": 26
+        },
+        {
+          "name": "pick_text_file",
+          "params": [
+            "app"
+          ],
+          "returnType": "Result<Option<String>, String>",
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "app_data_root",
+          "params": [],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "get_token_usage",
+          "params": [
+            "state",
+            "date"
+          ],
+          "returnType": "Result<TokenUsageDay, String>",
+          "exported": true,
+          "lineCount": 25
+        },
+        {
+          "name": "get_token_usage_month",
+          "params": [
+            "state",
+            "month"
+          ],
+          "returnType": "Result<TokenUsageMonth, String>",
+          "exported": true,
+          "lineCount": 21
+        },
+        {
+          "name": "init_state",
+          "params": [],
+          "returnType": "Result<AppState, String>",
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "chat_cancel",
+          "params": [
+            "state",
+            "novel_id"
+          ],
+          "returnType": "Result<(), String>",
+          "exported": true,
+          "lineCount": 9
+        }
+      ],
+      "classes": [
+        {
+          "name": "ClearChatCancel",
+          "methods": [],
+          "properties": [
+            "state",
+            "key"
+          ],
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "ChapterResolveMode",
+          "methods": [],
+          "properties": [
+            "Overwrite",
+            "Skip",
+            "ForceAppend"
+          ],
+          "exported": false,
+          "lineCount": 8
+        }
+      ],
+      "imports": [
+        {
+          "source": "crate::chapter_constraints",
+          "specifiers": [
+            "self",
+            "LandBeat"
+          ]
+        },
+        {
+          "source": "crate",
+          "specifiers": [
+            "chapter_memory"
+          ]
+        },
+        {
+          "source": "crate::db",
+          "specifiers": [
+            "Db"
+          ]
+        },
+        {
+          "source": "crate::knowledge",
+          "specifiers": [
+            "build_knowledge_chunks",
+            "fetch_urls_context",
+            "load_source",
+            "load_source_from_url",
+            "with_fetched_url_context",
+            "upsert_chunks"
+          ]
+        },
+        {
+          "source": "crate",
+          "specifiers": [
+            "llm"
+          ]
+        },
+        {
+          "source": "crate::models",
+          "specifiers": [
+            "*"
+          ]
+        },
+        {
+          "source": "crate::paths",
+          "specifiers": [
+            "*"
+          ]
+        },
+        {
+          "source": "crate::prompts",
+          "specifiers": [
+            "self",
+            "PromptLocale"
+          ]
+        },
+        {
+          "source": "crate",
+          "specifiers": [
+            "AppState"
+          ]
+        },
+        {
+          "source": "chrono",
+          "specifiers": [
+            "Local",
+            "Timelike",
+            "Utc"
+          ]
+        },
+        {
+          "source": "std",
+          "specifiers": [
+            "fs"
+          ]
+        },
+        {
+          "source": "std::path",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "std::sync::atomic",
+          "specifiers": [
+            "AtomicBool"
+          ]
+        },
+        {
+          "source": "std::sync",
+          "specifiers": [
+            "Arc"
+          ]
+        },
+        {
+          "source": "tauri",
+          "specifiers": [
+            "Emitter",
+            "State"
+          ]
+        },
+        {
+          "source": "tauri_plugin_dialog",
+          "specifiers": [
+            "DialogExt"
+          ]
+        }
+      ],
+      "exports": [
+        "get_settings",
+        "save_settings",
+        "refresh_model_catalog",
+        "list_genres",
+        "list_knowledge_bases",
+        "rename_knowledge",
+        "update_knowledge",
+        "list_knowledge_chunks",
+        "archive_knowledge",
+        "delete_knowledge",
+        "import_knowledge_text",
+        "import_knowledge_url",
+        "reextract_knowledge",
+        "list_novels",
+        "get_novel",
+        "archive_novel",
+        "delete_novel",
+        "create_novel",
+        "update_novel_plan",
+        "create_novel_chat",
+        "get_tree",
+        "save_tree",
+        "delete_tree_card",
+        "get_chapter",
+        "get_chapter_memory",
+        "generate_chapter",
+        "refine_chapter",
+        "plan_next_chapters",
+        "list_chat_messages",
+        "chat_send",
+        "extract_knowledge_card",
+        "card_chat_send",
+        "pick_cover",
+        "set_cover",
+        "pick_text_file",
+        "app_data_root",
+        "get_token_usage",
+        "get_token_usage_month",
+        "init_state",
+        "chat_cancel"
+      ],
+      "totalLines": 4646,
+      "hasStructuralAnalysis": true
+    },
+    "src-tauri/src/db.rs": {
+      "filePath": "src-tauri/src/db.rs",
+      "contentHash": "bcaf7e3341d6299757c27fa7b365d3805a179f3f2956e75fbc08eeaee13917ef",
+      "functions": [
+        {
+          "name": "open",
+          "params": [],
+          "returnType": "Result<Self>",
+          "exported": true,
+          "lineCount": 94
+        },
+        {
+          "name": "get_settings",
+          "params": [],
+          "returnType": "Result<AppSettings>",
+          "exported": true,
+          "lineCount": 60
+        },
+        {
+          "name": "save_settings",
+          "params": [
+            "s"
+          ],
+          "returnType": "Result<()>",
+          "exported": true,
+          "lineCount": 27
+        },
+        {
+          "name": "get_model_catalog",
+          "params": [],
+          "returnType": "Result<ModelCatalog>",
+          "exported": true,
+          "lineCount": 16
+        },
+        {
+          "name": "save_model_catalog",
+          "params": [
+            "c"
+          ],
+          "returnType": "Result<()>",
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "list_knowledge",
+          "params": [],
+          "returnType": "Result<Vec<KnowledgeBook>>",
+          "exported": true,
+          "lineCount": 24
+        },
+        {
+          "name": "get_knowledge",
+          "params": [
+            "id"
+          ],
+          "returnType": "Result<Option<KnowledgeBook>>",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "set_knowledge_archived",
+          "params": [
+            "id",
+            "archived"
+          ],
+          "returnType": "Result<()>",
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "delete_knowledge",
+          "params": [
+            "id"
+          ],
+          "returnType": "Result<()>",
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "unlink_knowledge_from_novels",
+          "params": [
+            "book_id"
+          ],
+          "returnType": "Result<()>",
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "rename_knowledge",
+          "params": [
+            "id",
+            "title"
+          ],
+          "returnType": "Result<()>",
+          "exported": true,
+          "lineCount": 15
+        },
+        {
+          "name": "update_knowledge",
+          "params": [
+            "id",
+            "title",
+            "author",
+            "extract_prompt",
+            "genres"
+          ],
+          "returnType": "Result<()>",
+          "exported": true,
+          "lineCount": 28
+        },
+        {
+          "name": "list_knowledge_chunks",
+          "params": [
+            "book_id"
+          ],
+          "returnType": "Result<Vec<crate::models::KnowledgeChunk>>",
+          "exported": true,
+          "lineCount": 16
+        },
+        {
+          "name": "insert_knowledge",
+          "params": [
+            "book",
+            "chunks"
+          ],
+          "returnType": "Result<()>",
+          "exported": true,
+          "lineCount": 26
+        },
+        {
+          "name": "replace_knowledge_content",
+          "params": [
+            "id",
+            "title",
+            "author",
+            "genres",
+            "source_path",
+            "extract_prompt",
+            "chunks"
+          ],
+          "returnType": "Result<()>",
+          "exported": true,
+          "lineCount": 38
+        },
+        {
+          "name": "list_novels",
+          "params": [],
+          "returnType": "Result<Vec<NovelProject>>",
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "get_novel",
+          "params": [
+            "id"
+          ],
+          "returnType": "Result<Option<NovelProject>>",
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "upsert_novel",
+          "params": [
+            "n"
+          ],
+          "returnType": "Result<()>",
+          "exported": true,
+          "lineCount": 33
+        },
+        {
+          "name": "delete_novel",
+          "params": [
+            "id"
+          ],
+          "returnType": "Result<()>",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "replace_chapter_memory",
+          "params": [
+            "novel_id",
+            "node_id",
+            "chunks"
+          ],
+          "returnType": "Result<()>",
+          "exported": true,
+          "lineCount": 27
+        },
+        {
+          "name": "delete_chapter_memory",
+          "params": [
+            "novel_id",
+            "node_id"
+          ],
+          "returnType": "Result<()>",
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "list_chapter_memory_for_nodes",
+          "params": [
+            "novel_id",
+            "node_ids"
+          ],
+          "returnType": "Result<Vec<(String, String)>>",
+          "exported": true,
+          "lineCount": 23
+        },
+        {
+          "name": "list_chapter_memory",
+          "params": [
+            "novel_id"
+          ],
+          "returnType": "Result<Vec<(String, String)>>",
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "list_chat",
+          "params": [
+            "novel_id"
+          ],
+          "returnType": "Result<Vec<ChatMessage>>",
+          "exported": true,
+          "lineCount": 17
+        },
+        {
+          "name": "insert_chat",
+          "params": [
+            "m"
+          ],
+          "returnType": "Result<()>",
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "add_token_usage",
+          "params": [
+            "day",
+            "hour",
+            "model",
+            "novel_id",
+            "prompt_tokens",
+            "completion_tokens",
+            "total_tokens"
+          ],
+          "returnType": "Result<()>",
+          "exported": true,
+          "lineCount": 30
+        },
+        {
+          "name": "list_token_usage_day",
+          "params": [
+            "day"
+          ],
+          "returnType": "Result<Vec<crate::models::TokenUsageHourRow>>",
+          "exported": true,
+          "lineCount": 20
+        },
+        {
+          "name": "list_token_usage_by_novel",
+          "params": [
+            "day"
+          ],
+          "returnType": "Result<Vec<crate::models::TokenUsageNovelRow>>",
+          "exported": true,
+          "lineCount": 62
+        },
+        {
+          "name": "list_token_usage_month",
+          "params": [
+            "month"
+          ],
+          "returnType": "Result<Vec<crate::models::TokenUsageModelRow>>",
+          "exported": true,
+          "lineCount": 20
+        },
+        {
+          "name": "migrate_token_usage_novel_id",
+          "params": [
+            "conn"
+          ],
+          "returnType": "Result<()>",
+          "exported": false,
+          "lineCount": 29
+        },
+        {
+          "name": "map_novel",
+          "params": [
+            "row"
+          ],
+          "returnType": "rusqlite::Result<NovelProject>",
+          "exported": false,
+          "lineCount": 18
+        }
+      ],
+      "classes": [
+        {
+          "name": "Db",
+          "methods": [
+            "open",
+            "get_settings",
+            "save_settings",
+            "get_model_catalog",
+            "save_model_catalog",
+            "list_knowledge",
+            "get_knowledge",
+            "set_knowledge_archived",
+            "delete_knowledge",
+            "unlink_knowledge_from_novels",
+            "rename_knowledge",
+            "update_knowledge",
+            "list_knowledge_chunks",
+            "insert_knowledge",
+            "replace_knowledge_content",
+            "list_novels",
+            "get_novel",
+            "upsert_novel",
+            "delete_novel",
+            "replace_chapter_memory",
+            "delete_chapter_memory",
+            "list_chapter_memory_for_nodes",
+            "list_chapter_memory",
+            "list_chat",
+            "insert_chat",
+            "add_token_usage",
+            "list_token_usage_day",
+            "list_token_usage_by_novel",
+            "list_token_usage_month"
+          ],
+          "properties": [
+            "conn"
+          ],
+          "exported": true,
+          "lineCount": 3
+        }
+      ],
+      "imports": [
+        {
+          "source": "crate::models",
+          "specifiers": [
+            "AppSettings",
+            "ChatMessage",
+            "KnowledgeBook",
+            "ModelCatalog",
+            "NovelProject"
+          ]
+        },
+        {
+          "source": "crate::paths",
+          "specifiers": [
+            "db_path"
+          ]
+        },
+        {
+          "source": "anyhow",
+          "specifiers": [
+            "Context",
+            "Result"
+          ]
+        },
+        {
+          "source": "rusqlite",
+          "specifiers": [
+            "params",
+            "Connection",
+            "OptionalExtension"
+          ]
+        },
+        {
+          "source": "std::sync",
+          "specifiers": [
+            "Mutex"
+          ]
+        }
+      ],
+      "exports": [
+        "Db",
+        "open",
+        "get_settings",
+        "save_settings",
+        "get_model_catalog",
+        "save_model_catalog",
+        "list_knowledge",
+        "get_knowledge",
+        "set_knowledge_archived",
+        "delete_knowledge",
+        "unlink_knowledge_from_novels",
+        "rename_knowledge",
+        "update_knowledge",
+        "list_knowledge_chunks",
+        "insert_knowledge",
+        "replace_knowledge_content",
+        "list_novels",
+        "get_novel",
+        "upsert_novel",
+        "delete_novel",
+        "replace_chapter_memory",
+        "delete_chapter_memory",
+        "list_chapter_memory_for_nodes",
+        "list_chapter_memory",
+        "list_chat",
+        "insert_chat",
+        "add_token_usage",
+        "list_token_usage_day",
+        "list_token_usage_by_novel",
+        "list_token_usage_month"
+      ],
+      "totalLines": 809,
+      "hasStructuralAnalysis": true
+    },
+    "src-tauri/src/knowledge.rs": {
+      "filePath": "src-tauri/src/knowledge.rs",
+      "contentHash": "50681f6c0b4bfd50b4fca30a3c3fcc402a426b68fc22753281e287bf2411f09f",
+      "functions": [
+        {
+          "name": "full_text",
+          "params": [],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 13
+        },
+        {
+          "name": "toc_lines",
+          "params": [],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 15
+        },
+        {
+          "name": "style_samples",
+          "params": [
+            "per_chapter",
+            "max_total"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 37
+        },
+        {
+          "name": "upsert_chunks",
+          "params": [
+            "book_id",
+            "chunks"
+          ],
+          "returnType": "Result<()>",
+          "exported": true,
+          "lineCount": 36
+        },
+        {
+          "name": "delete_chunks",
+          "params": [
+            "book_id"
+          ],
+          "returnType": "Result<()>",
+          "exported": true,
+          "lineCount": 13
+        },
+        {
+          "name": "split_book",
+          "params": [
+            "text"
+          ],
+          "returnType": "Vec<String>",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "build_knowledge_chunks",
+          "params": [
+            "src",
+            "analysis"
+          ],
+          "returnType": "Vec<String>",
+          "exported": true,
+          "lineCount": 27
+        },
+        {
+          "name": "guess_meta",
+          "params": [
+            "text",
+            "filename"
+          ],
+          "returnType": "(String, String)",
+          "exported": true,
+          "lineCount": 23
+        },
+        {
+          "name": "load_source",
+          "params": [
+            "path"
+          ],
+          "returnType": "Result<ParsedSource>",
+          "exported": true,
+          "lineCount": 14
+        },
+        {
+          "name": "load_source_from_url",
+          "params": [
+            "url"
+          ],
+          "returnType": "Result<ParsedSource>",
+          "exported": true,
+          "lineCount": 16
+        },
+        {
+          "name": "fetch_url_main",
+          "params": [
+            "url"
+          ],
+          "returnType": "Result<(String, String, String)>",
+          "exported": true,
+          "lineCount": 52
+        },
+        {
+          "name": "extract_http_urls",
+          "params": [
+            "text"
+          ],
+          "returnType": "Vec<String>",
+          "exported": true,
+          "lineCount": 35
+        },
+        {
+          "name": "fetch_urls_context",
+          "params": [
+            "text",
+            "per_url_chars"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 21
+        },
+        {
+          "name": "with_fetched_url_context",
+          "params": [
+            "user_msg",
+            "fetched"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "extract_main_html",
+          "params": [
+            "html"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 37
+        },
+        {
+          "name": "extract_element_inner",
+          "params": [
+            "html",
+            "tag"
+          ],
+          "returnType": "Option<String>",
+          "exported": false,
+          "lineCount": 52
+        },
+        {
+          "name": "extract_role_main",
+          "params": [
+            "html"
+          ],
+          "returnType": "Option<String>",
+          "exported": false,
+          "lineCount": 12
+        },
+        {
+          "name": "extract_by_id",
+          "params": [
+            "html",
+            "id"
+          ],
+          "returnType": "Option<String>",
+          "exported": false,
+          "lineCount": 13
+        },
+        {
+          "name": "extract_by_class_contains",
+          "params": [
+            "html",
+            "needle"
+          ],
+          "returnType": "Option<String>",
+          "exported": false,
+          "lineCount": 23
+        },
+        {
+          "name": "tag_name_from",
+          "params": [
+            "lower",
+            "open_lt"
+          ],
+          "returnType": "Option<String>",
+          "exported": false,
+          "lineCount": 12
+        },
+        {
+          "name": "extract_element_from",
+          "params": [
+            "html",
+            "lower",
+            "open_lt",
+            "tag"
+          ],
+          "returnType": "Option<String>",
+          "exported": false,
+          "lineCount": 35
+        },
+        {
+          "name": "title_from_html",
+          "params": [
+            "html"
+          ],
+          "returnType": "Option<String>",
+          "exported": false,
+          "lineCount": 14
+        },
+        {
+          "name": "host_from_url",
+          "params": [
+            "url"
+          ],
+          "returnType": "String",
+          "exported": false,
+          "lineCount": 14
+        },
+        {
+          "name": "parse_txt",
+          "params": [
+            "path"
+          ],
+          "returnType": "Result<ParsedSource>",
+          "exported": false,
+          "lineCount": 17
+        },
+        {
+          "name": "parse_epub",
+          "params": [
+            "path"
+          ],
+          "returnType": "Result<ParsedSource>",
+          "exported": false,
+          "lineCount": 95
+        },
+        {
+          "name": "meta_first",
+          "params": [
+            "doc",
+            "keys"
+          ],
+          "returnType": "Option<String>",
+          "exported": false,
+          "lineCount": 14
+        },
+        {
+          "name": "meta_all",
+          "params": [
+            "doc",
+            "keys"
+          ],
+          "returnType": "Vec<String>",
+          "exported": false,
+          "lineCount": 24
+        },
+        {
+          "name": "flatten_toc",
+          "params": [
+            "nav",
+            "out"
+          ],
+          "exported": false,
+          "lineCount": 9
+        },
+        {
+          "name": "strip_fragment",
+          "params": [
+            "p"
+          ],
+          "returnType": "PathBuf",
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "html_to_text",
+          "params": [
+            "html"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 115
+        },
+        {
+          "name": "decode_entity",
+          "params": [
+            "ent"
+          ],
+          "returnType": "&str",
+          "exported": false,
+          "lineCount": 14
+        }
+      ],
+      "classes": [
+        {
+          "name": "SourceChapter",
+          "methods": [],
+          "properties": [
+            "title",
+            "text"
+          ],
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "ParsedSource",
+          "methods": [
+            "full_text",
+            "toc_lines",
+            "style_samples"
+          ],
+          "properties": [
+            "title",
+            "author",
+            "subjects",
+            "chapters"
+          ],
+          "exported": true,
+          "lineCount": 7
+        }
+      ],
+      "imports": [
+        {
+          "source": "crate::chunk",
+          "specifiers": [
+            "chunk_text"
+          ]
+        },
+        {
+          "source": "crate::paths",
+          "specifiers": [
+            "lancedb_dir"
+          ]
+        },
+        {
+          "source": "anyhow",
+          "specifiers": [
+            "anyhow",
+            "Result"
+          ]
+        },
+        {
+          "source": "arrow_array",
+          "specifiers": [
+            "ArrayRef",
+            "Int32Array",
+            "RecordBatch",
+            "RecordBatchIterator",
+            "StringArray"
+          ]
+        },
+        {
+          "source": "arrow_schema",
+          "specifiers": [
+            "DataType",
+            "Field",
+            "Schema"
+          ]
+        },
+        {
+          "source": "epub::doc",
+          "specifiers": [
+            "EpubDoc",
+            "NavPoint"
+          ]
+        },
+        {
+          "source": "std::path",
+          "specifiers": [
+            "Path",
+            "PathBuf"
+          ]
+        },
+        {
+          "source": "std::sync",
+          "specifiers": [
+            "Arc"
+          ]
+        }
+      ],
+      "exports": [
+        "SourceChapter",
+        "ParsedSource",
+        "full_text",
+        "toc_lines",
+        "style_samples",
+        "upsert_chunks",
+        "delete_chunks",
+        "split_book",
+        "build_knowledge_chunks",
+        "guess_meta",
+        "load_source",
+        "load_source_from_url",
+        "fetch_url_main",
+        "extract_http_urls",
+        "fetch_urls_context",
+        "with_fetched_url_context",
+        "extract_main_html",
+        "html_to_text"
+      ],
+      "totalLines": 959,
+      "hasStructuralAnalysis": true
+    },
+    "src-tauri/src/lib.rs": {
+      "filePath": "src-tauri/src/lib.rs",
+      "contentHash": "b0dd3c08f610a167be825171cae51086708552b06bcd33c1ce4f22ab2ff759bc",
+      "functions": [
+        {
+          "name": "arm_chat_cancel",
+          "params": [
+            "key"
+          ],
+          "returnType": "Arc<AtomicBool>",
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "request_chat_cancel",
+          "params": [
+            "key"
+          ],
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "clear_chat_cancel",
+          "params": [
+            "key"
+          ],
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "run",
+          "params": [],
+          "exported": true,
+          "lineCount": 59
+        }
+      ],
+      "classes": [
+        {
+          "name": "AppState",
+          "methods": [
+            "arm_chat_cancel",
+            "request_chat_cancel",
+            "clear_chat_cancel"
+          ],
+          "properties": [
+            "db",
+            "chat_cancel"
+          ],
+          "exported": true,
+          "lineCount": 5
+        }
+      ],
+      "imports": [
+        {
+          "source": "std::collections",
+          "specifiers": [
+            "HashMap"
+          ]
+        },
+        {
+          "source": "std::sync::atomic",
+          "specifiers": [
+            "AtomicBool",
+            "Ordering"
+          ]
+        },
+        {
+          "source": "std::sync",
+          "specifiers": [
+            "Arc",
+            "Mutex"
+          ]
+        },
+        {
+          "source": "tauri",
+          "specifiers": [
+            "Manager"
+          ]
+        }
+      ],
+      "exports": [
+        "AppState",
+        "arm_chat_cancel",
+        "request_chat_cancel",
+        "clear_chat_cancel",
+        "run"
+      ],
+      "totalLines": 107,
+      "hasStructuralAnalysis": true
+    },
+    "src-tauri/src/llm.rs": {
+      "filePath": "src-tauri/src/llm.rs",
+      "contentHash": "1ce5164697850247dfdb82cdca6d9f48da2fd3fdfaf61ad6525cdc974ebc7d12",
+      "functions": [
+        {
+          "name": "cancelled",
+          "params": [
+            "cancel"
+          ],
+          "returnType": "bool",
+          "exported": false,
+          "lineCount": 6
+        },
+        {
+          "name": "wait_cancel",
+          "params": [
+            "cancel"
+          ],
+          "exported": false,
+          "lineCount": 12
+        },
+        {
+          "name": "complete",
+          "params": [
+            "settings",
+            "system",
+            "user",
+            "model",
+            "cancel"
+          ],
+          "returnType": "Result<CompletionResult>",
+          "exported": true,
+          "lineCount": 109
+        },
+        {
+          "name": "mock_complete",
+          "params": [
+            "system",
+            "user"
+          ],
+          "returnType": "String",
+          "exported": false,
+          "lineCount": 14
+        },
+        {
+          "name": "truncate",
+          "params": [
+            "s",
+            "n"
+          ],
+          "returnType": "String",
+          "exported": false,
+          "lineCount": 8
+        }
+      ],
+      "classes": [
+        {
+          "name": "CompletionResult",
+          "methods": [],
+          "properties": [
+            "content",
+            "used_mock",
+            "model",
+            "prompt_tokens",
+            "completion_tokens",
+            "total_tokens"
+          ],
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "ChatRequest",
+          "methods": [],
+          "properties": [
+            "model",
+            "messages",
+            "temperature"
+          ],
+          "exported": false,
+          "lineCount": 5
+        },
+        {
+          "name": "ChatMessage",
+          "methods": [],
+          "properties": [
+            "role",
+            "content"
+          ],
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "ChatResponse",
+          "methods": [],
+          "properties": [
+            "choices",
+            "usage"
+          ],
+          "exported": false,
+          "lineCount": 5
+        },
+        {
+          "name": "Usage",
+          "methods": [],
+          "properties": [
+            "prompt_tokens",
+            "completion_tokens",
+            "total_tokens"
+          ],
+          "exported": false,
+          "lineCount": 8
+        },
+        {
+          "name": "Choice",
+          "methods": [],
+          "properties": [
+            "message"
+          ],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "ChoiceMessage",
+          "methods": [],
+          "properties": [
+            "content"
+          ],
+          "exported": false,
+          "lineCount": 3
+        }
+      ],
+      "imports": [
+        {
+          "source": "crate::models",
+          "specifiers": [
+            "AppSettings"
+          ]
+        },
+        {
+          "source": "anyhow",
+          "specifiers": [
+            "anyhow",
+            "Result"
+          ]
+        },
+        {
+          "source": "serde",
+          "specifiers": [
+            "Deserialize",
+            "Serialize"
+          ]
+        },
+        {
+          "source": "std::sync::atomic",
+          "specifiers": [
+            "AtomicBool",
+            "Ordering"
+          ]
+        },
+        {
+          "source": "std::sync",
+          "specifiers": [
+            "Arc"
+          ]
+        },
+        {
+          "source": "std::time",
+          "specifiers": [
+            "Duration"
+          ]
+        }
+      ],
+      "exports": [
+        "CompletionResult",
+        "complete"
+      ],
+      "totalLines": 233,
+      "hasStructuralAnalysis": true
+    },
+    "src-tauri/src/main.rs": {
+      "filePath": "src-tauri/src/main.rs",
+      "contentHash": "9279620cafc13400bdabc82b7abccc5c4a703a1a73a9a9110ab5a417b9c667b6",
+      "functions": [
+        {
+          "name": "main",
+          "params": [],
+          "exported": false,
+          "lineCount": 3
+        }
+      ],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 7,
+      "hasStructuralAnalysis": true
+    },
+    "src-tauri/src/models.rs": {
+      "filePath": "src-tauri/src/models.rs",
+      "contentHash": "457f3e30e05a0b8488c9bb63b144de1d05702e9e40ad79a8deb7aebff7dc49ae",
+      "functions": [
+        {
+          "name": "all_ids",
+          "params": [],
+          "returnType": "Vec<String>",
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "seed",
+          "params": [],
+          "returnType": "Self",
+          "exported": true,
+          "lineCount": 15
+        },
+        {
+          "name": "default",
+          "params": [],
+          "returnType": "Self",
+          "exported": false,
+          "lineCount": 17
+        },
+        {
+          "name": "default_word_min",
+          "params": [],
+          "returnType": "u32",
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "default_word_max",
+          "params": [],
+          "returnType": "u32",
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "default_chapter_count",
+          "params": [],
+          "returnType": "u32",
+          "exported": false,
+          "lineCount": 3
+        }
+      ],
+      "classes": [
+        {
+          "name": "AppSettings",
+          "methods": [
+            "default"
+          ],
+          "properties": [
+            "deepseek_api_key",
+            "chatgpt_api_key",
+            "gemini_api_key",
+            "claude_api_key",
+            "grok_api_key",
+            "deepseek_base_url",
+            "default_model",
+            "create_model",
+            "generate_model",
+            "chat_model",
+            "refine_model",
+            "knowledge_model",
+            "ui_locale"
+          ],
+          "exported": true,
+          "lineCount": 17
+        },
+        {
+          "name": "ModelCatalog",
+          "methods": [
+            "all_ids",
+            "seed"
+          ],
+          "properties": [
+            "deepseek",
+            "gemini",
+            "claude",
+            "grok",
+            "updated_at",
+            "errors"
+          ],
+          "exported": true,
+          "lineCount": 14
+        },
+        {
+          "name": "SettingsView",
+          "methods": [],
+          "properties": [
+            "deepseek_api_key_masked",
+            "deepseek_api_key_configured",
+            "chatgpt_api_key_masked",
+            "chatgpt_api_key_configured",
+            "gemini_api_key_masked",
+            "gemini_api_key_configured",
+            "claude_api_key_masked",
+            "claude_api_key_configured",
+            "grok_api_key_masked",
+            "grok_api_key_configured",
+            "deepseek_base_url",
+            "default_model",
+            "create_model",
+            "generate_model",
+            "chat_model",
+            "refine_model",
+            "knowledge_model",
+            "model_catalog",
+            "ui_locale"
+          ],
+          "exported": true,
+          "lineCount": 21
+        },
+        {
+          "name": "SaveSettingsInput",
+          "methods": [],
+          "properties": [
+            "deepseek_api_key",
+            "chatgpt_api_key",
+            "gemini_api_key",
+            "claude_api_key",
+            "grok_api_key",
+            "deepseek_base_url",
+            "default_model",
+            "create_model",
+            "generate_model",
+            "chat_model",
+            "refine_model",
+            "knowledge_model",
+            "ui_locale"
+          ],
+          "exported": true,
+          "lineCount": 28
+        },
+        {
+          "name": "KnowledgeBook",
+          "methods": [],
+          "properties": [
+            "id",
+            "title",
+            "author",
+            "genres",
+            "source_path",
+            "extract_prompt",
+            "created_at",
+            "chunk_count",
+            "archived"
+          ],
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "KnowledgeChunk",
+          "methods": [],
+          "properties": [
+            "idx",
+            "content"
+          ],
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "NovelProject",
+          "methods": [],
+          "properties": [
+            "id",
+            "title",
+            "synopsis",
+            "cover_path",
+            "knowledge_ids",
+            "knowledge_strategy",
+            "archived",
+            "word_count_min",
+            "word_count_max",
+            "chapter_count",
+            "created_at",
+            "updated_at"
+          ],
+          "exported": true,
+          "lineCount": 21
+        },
+        {
+          "name": "CreateNovelInput",
+          "methods": [],
+          "properties": [
+            "title",
+            "synopsis",
+            "knowledge_ids",
+            "knowledge_strategy"
+          ],
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "ChatTurn",
+          "methods": [],
+          "properties": [
+            "role",
+            "content"
+          ],
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "NovelCreateChatInput",
+          "methods": [],
+          "properties": [
+            "messages",
+            "force_create"
+          ],
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "NovelCreateChatResult",
+          "methods": [],
+          "properties": [
+            "reply",
+            "used_mock",
+            "novel"
+          ],
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "NodeKind",
+          "methods": [],
+          "properties": [
+            "Novel",
+            "Chapter",
+            "Character",
+            "SidePlot",
+            "Knowledge"
+          ],
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "TreeNode",
+          "methods": [],
+          "properties": [
+            "id",
+            "kind",
+            "label",
+            "outline",
+            "character",
+            "knowledge",
+            "linked_character_ids",
+            "linked_side_plot_ids",
+            "linked_knowledge_ids",
+            "position",
+            "word_count",
+            "word_count_min",
+            "word_count_max",
+            "chapter_count"
+          ],
+          "exported": true,
+          "lineCount": 28
+        },
+        {
+          "name": "NodePosition",
+          "methods": [],
+          "properties": [
+            "x",
+            "y"
+          ],
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "CharacterCard",
+          "methods": [],
+          "properties": [
+            "role",
+            "personality",
+            "motto",
+            "gender",
+            "style",
+            "alignment"
+          ],
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "KnowledgeCardPayload",
+          "methods": [],
+          "properties": [
+            "book_ids",
+            "extract_prompt",
+            "extracted"
+          ],
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "TreeEdge",
+          "methods": [],
+          "properties": [
+            "id",
+            "source",
+            "target",
+            "kind",
+            "source_handle",
+            "target_handle",
+            "label"
+          ],
+          "exported": true,
+          "lineCount": 13
+        },
+        {
+          "name": "NovelTree",
+          "methods": [],
+          "properties": [
+            "novel_id",
+            "nodes",
+            "edges"
+          ],
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "ChatMessage",
+          "methods": [],
+          "properties": [
+            "id",
+            "novel_id",
+            "role",
+            "content",
+            "created_at"
+          ],
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "GenerateResult",
+          "methods": [],
+          "properties": [
+            "content",
+            "used_mock",
+            "message"
+          ],
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "CardChatResult",
+          "methods": [],
+          "properties": [
+            "reply",
+            "tree"
+          ],
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "TokenUsageHourRow",
+          "methods": [],
+          "properties": [
+            "hour",
+            "model",
+            "prompt_tokens",
+            "completion_tokens",
+            "total_tokens"
+          ],
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "TokenUsageNovelRow",
+          "methods": [],
+          "properties": [
+            "novel_id",
+            "title",
+            "day_tokens",
+            "total_tokens"
+          ],
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "TokenUsageDay",
+          "methods": [],
+          "properties": [
+            "date",
+            "rows",
+            "models",
+            "novels"
+          ],
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "TokenUsageModelRow",
+          "methods": [],
+          "properties": [
+            "model",
+            "total_tokens"
+          ],
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "TokenUsageMonth",
+          "methods": [],
+          "properties": [
+            "month",
+            "total_tokens",
+            "models"
+          ],
+          "exported": true,
+          "lineCount": 6
+        }
+      ],
+      "imports": [
+        {
+          "source": "serde",
+          "specifiers": [
+            "Deserialize",
+            "Serialize"
+          ]
+        }
+      ],
+      "exports": [
+        "AppSettings",
+        "ModelCatalog",
+        "all_ids",
+        "seed",
+        "SettingsView",
+        "SaveSettingsInput",
+        "KnowledgeBook",
+        "KnowledgeChunk",
+        "NovelProject",
+        "CreateNovelInput",
+        "ChatTurn",
+        "NovelCreateChatInput",
+        "NovelCreateChatResult",
+        "NodeKind",
+        "TreeNode",
+        "NodePosition",
+        "CharacterCard",
+        "KnowledgeCardPayload",
+        "TreeEdge",
+        "NovelTree",
+        "ChatMessage",
+        "GenerateResult",
+        "CardChatResult",
+        "TokenUsageHourRow",
+        "TokenUsageNovelRow",
+        "TokenUsageDay",
+        "TokenUsageModelRow",
+        "TokenUsageMonth"
+      ],
+      "totalLines": 420,
+      "hasStructuralAnalysis": true
+    },
+    "src-tauri/src/paths.rs": {
+      "filePath": "src-tauri/src/paths.rs",
+      "contentHash": "b49f8bc20419875793ab9fa398c6dac2d0e1df4f41077fe89f40ac2d3a8fb629",
+      "functions": [
+        {
+          "name": "app_root",
+          "params": [],
+          "returnType": "PathBuf",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "db_path",
+          "params": [],
+          "returnType": "PathBuf",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "lancedb_dir",
+          "params": [],
+          "returnType": "PathBuf",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "novels_dir",
+          "params": [],
+          "returnType": "PathBuf",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "novel_dir",
+          "params": [
+            "novel_id"
+          ],
+          "returnType": "PathBuf",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "novel_meta_path",
+          "params": [
+            "novel_id"
+          ],
+          "returnType": "PathBuf",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "novel_tree_path",
+          "params": [
+            "novel_id"
+          ],
+          "returnType": "PathBuf",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "chapter_path",
+          "params": [
+            "novel_id",
+            "node_id"
+          ],
+          "returnType": "PathBuf",
+          "exported": true,
+          "lineCount": 5
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "std",
+          "specifiers": [
+            "fs"
+          ]
+        },
+        {
+          "source": "std::path",
+          "specifiers": [
+            "PathBuf"
+          ]
+        }
+      ],
+      "exports": [
+        "app_root",
+        "db_path",
+        "lancedb_dir",
+        "novels_dir",
+        "novel_dir",
+        "novel_meta_path",
+        "novel_tree_path",
+        "chapter_path"
+      ],
+      "totalLines": 48,
+      "hasStructuralAnalysis": true
+    },
+    "src-tauri/src/prompts.rs": {
+      "filePath": "src-tauri/src/prompts.rs",
+      "contentHash": "deaeee46372299f4ec67d99eab19a287f00155a00149543350c30f7203f8246e",
+      "functions": [
+        {
+          "name": "from_preference",
+          "params": [
+            "pref"
+          ],
+          "returnType": "Self",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "for_interaction",
+          "params": [
+            "ui_pref",
+            "samples"
+          ],
+          "returnType": "Self",
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "detect_from_text",
+          "params": [
+            "text"
+          ],
+          "returnType": "Option<Self>",
+          "exported": true,
+          "lineCount": 33
+        },
+        {
+          "name": "parse",
+          "params": [
+            "code"
+          ],
+          "returnType": "Self",
+          "exported": false,
+          "lineCount": 23
+        },
+        {
+          "name": "from_system",
+          "params": [],
+          "returnType": "Self",
+          "exported": false,
+          "lineCount": 8
+        },
+        {
+          "name": "is_zh",
+          "params": [],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "output_language",
+          "params": [],
+          "returnType": "&'static str",
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "language_rule",
+          "params": [],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 22
+        },
+        {
+          "name": "knowledge_extract_system",
+          "params": [
+            "loc"
+          ],
+          "returnType": "&'static str",
+          "exported": true,
+          "lineCount": 15
+        },
+        {
+          "name": "knowledge_url_extract_system",
+          "params": [
+            "loc"
+          ],
+          "returnType": "&'static str",
+          "exported": true,
+          "lineCount": 19
+        },
+        {
+          "name": "knowledge_extract_user",
+          "params": [
+            "loc",
+            "extract_prompt",
+            "title",
+            "author",
+            "toc",
+            "samples",
+            "known_genres"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 19
+        },
+        {
+          "name": "default_knowledge_book_prompt",
+          "params": [
+            "loc"
+          ],
+          "returnType": "&'static str",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "default_knowledge_url_prompt",
+          "params": [
+            "loc"
+          ],
+          "returnType": "&'static str",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "parse_title_author",
+          "params": [
+            "_loc",
+            "line"
+          ],
+          "returnType": "(Option<String>, Option<String>)",
+          "exported": true,
+          "lineCount": 42
+        },
+        {
+          "name": "apply_analysis_meta",
+          "params": [
+            "analysis",
+            "title",
+            "author"
+          ],
+          "exported": true,
+          "lineCount": 28
+        },
+        {
+          "name": "is_genre_heading",
+          "params": [
+            "line"
+          ],
+          "returnType": "bool",
+          "exported": false,
+          "lineCount": 12
+        },
+        {
+          "name": "extract_genres_from_analysis",
+          "params": [
+            "analysis"
+          ],
+          "returnType": "Vec<String>",
+          "exported": true,
+          "lineCount": 36
+        },
+        {
+          "name": "split_genre_tokens",
+          "params": [
+            "s"
+          ],
+          "returnType": "Vec<String>",
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "merge_genre_tags",
+          "params": [
+            "base",
+            "extra",
+            "known"
+          ],
+          "returnType": "Vec<String>",
+          "exported": true,
+          "lineCount": 17
+        },
+        {
+          "name": "create_novel_system",
+          "params": [
+            "loc",
+            "force"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 33
+        },
+        {
+          "name": "create_novel_empty_user",
+          "params": [
+            "loc"
+          ],
+          "returnType": "&'static str",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "untitled_novel",
+          "params": [
+            "loc"
+          ],
+          "returnType": "&'static str",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "chat_created_novel",
+          "params": [
+            "loc"
+          ],
+          "returnType": "(&'static str, &'static str, &'static str)",
+          "exported": true,
+          "lineCount": 15
+        },
+        {
+          "name": "chapter_context_labels",
+          "params": [
+            "loc"
+          ],
+          "returnType": "ChapterContextLabels",
+          "exported": true,
+          "lineCount": 53
+        },
+        {
+          "name": "generate_chapter_system",
+          "params": [
+            "loc",
+            "title",
+            "synopsis",
+            "knowledge_strategy",
+            "wmin",
+            "wmax",
+            "chapter_count"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 46
+        },
+        {
+          "name": "generate_chapter_user",
+          "params": [
+            "loc",
+            "root_ref",
+            "prior_hist",
+            "chapter_info",
+            "cards",
+            "contract",
+            "wmin",
+            "wmax"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 39
+        },
+        {
+          "name": "repair_chapter_system",
+          "params": [
+            "loc",
+            "wmin",
+            "wmax"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 18
+        },
+        {
+          "name": "length_repair_chapter_system",
+          "params": [
+            "loc",
+            "wmin",
+            "wmax",
+            "lo",
+            "hi"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 24
+        },
+        {
+          "name": "length_repair_chapter_user",
+          "params": [
+            "loc",
+            "current",
+            "words",
+            "wmin",
+            "wmax",
+            "lo",
+            "hi"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 23
+        },
+        {
+          "name": "repair_chapter_user",
+          "params": [
+            "loc",
+            "missing",
+            "current"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 13
+        },
+        {
+          "name": "generate_footer",
+          "params": [
+            "loc",
+            "node_id",
+            "model"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "word_count_off_note",
+          "params": [
+            "loc",
+            "words",
+            "wmin",
+            "wmax"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "generate_done_msg",
+          "params": [
+            "loc",
+            "model",
+            "words",
+            "mock",
+            "repaired"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 23
+        },
+        {
+          "name": "refine_chapter_system",
+          "params": [
+            "loc",
+            "title",
+            "linked_n",
+            "wmin",
+            "wmax",
+            "full_body"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 59
+        },
+        {
+          "name": "refine_chapter_user",
+          "params": [
+            "loc",
+            "knowledge_strategy",
+            "linked_n",
+            "prev_text",
+            "chapter_info",
+            "cards",
+            "current",
+            "full_body"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 69
+        },
+        {
+          "name": "refine_done_msg",
+          "params": [
+            "loc",
+            "model",
+            "linked_n",
+            "words",
+            "mock",
+            "full_body"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 24
+        },
+        {
+          "name": "extract_chapter_memory_system",
+          "params": [
+            "loc"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 28
+        },
+        {
+          "name": "extract_chapter_memory_user",
+          "params": [
+            "loc",
+            "label",
+            "outline",
+            "body"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "workspace_chat_system",
+          "params": [
+            "loc",
+            "title",
+            "synopsis",
+            "root_outline",
+            "has_chapters",
+            "wmin",
+            "wmax",
+            "chapter_count",
+            "chapter_list"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 65
+        },
+        {
+          "name": "gen_chapter_cards_system",
+          "params": [
+            "loc",
+            "title",
+            "synopsis",
+            "chapter_count",
+            "from",
+            "to",
+            "nums",
+            "replace"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 49
+        },
+        {
+          "name": "gen_chapter_cards_user",
+          "params": [
+            "loc",
+            "from",
+            "to",
+            "nums",
+            "tree_index",
+            "prior_memory"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 33
+        },
+        {
+          "name": "plan_next_chapters_system",
+          "params": [
+            "loc",
+            "title",
+            "synopsis",
+            "chapter_count",
+            "from",
+            "to",
+            "nums"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 43
+        },
+        {
+          "name": "plan_next_chapters_user",
+          "params": [
+            "loc",
+            "cur_label",
+            "cur_outline",
+            "cur_body",
+            "root_ref",
+            "knowledge_strategy",
+            "tree_index",
+            "prior_memory",
+            "from",
+            "to",
+            "nums"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 64
+        },
+        {
+          "name": "plan_next_done_msg",
+          "params": [
+            "loc",
+            "from",
+            "to",
+            "used_mock"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 22
+        },
+        {
+          "name": "gen_chapter_plots_system",
+          "params": [
+            "loc",
+            "title",
+            "synopsis",
+            "chapter_count"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 31
+        },
+        {
+          "name": "gen_chapter_plots_user",
+          "params": [
+            "loc",
+            "chapter_num",
+            "label",
+            "outline",
+            "existing_chars"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 32
+        },
+        {
+          "name": "knowledge_card_extract_system",
+          "params": [
+            "loc"
+          ],
+          "returnType": "&'static str",
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "knowledge_card_extract_user",
+          "params": [
+            "loc",
+            "extract_prompt",
+            "corpus"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "card_chat_system",
+          "params": [
+            "loc",
+            "kind",
+            "title",
+            "label",
+            "outline"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 57
+        },
+        {
+          "name": "default_new_character",
+          "params": [
+            "loc"
+          ],
+          "returnType": "(&'static str, &'static str, &'static str)",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "prev_chapter_memory_block",
+          "params": [
+            "loc",
+            "label",
+            "outline",
+            "facts"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 22
+        },
+        {
+          "name": "prev_chapter_block",
+          "params": [
+            "loc",
+            "label",
+            "outline",
+            "body"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 17
+        }
+      ],
+      "classes": [
+        {
+          "name": "PromptLocale",
+          "methods": [
+            "from_preference",
+            "for_interaction",
+            "detect_from_text",
+            "parse",
+            "from_system",
+            "is_zh",
+            "output_language",
+            "language_rule"
+          ],
+          "properties": [
+            "ZhCn",
+            "ZhTw",
+            "En",
+            "Ja",
+            "De",
+            "Fr"
+          ],
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "ChapterContextLabels",
+          "methods": [],
+          "properties": [
+            "name",
+            "role",
+            "gender",
+            "alignment",
+            "personality",
+            "style",
+            "motto",
+            "card_incomplete",
+            "no_characters",
+            "empty_plot",
+            "no_plots",
+            "empty_outline",
+            "chapter_title",
+            "chapter_outline",
+            "chars_header",
+            "relations_header",
+            "relation_unset",
+            "plots_header",
+            "knowledge_header",
+            "no_knowledge",
+            "empty_knowledge"
+          ],
+          "exported": true,
+          "lineCount": 23
+        }
+      ],
+      "imports": [],
+      "exports": [
+        "PromptLocale",
+        "from_preference",
+        "for_interaction",
+        "detect_from_text",
+        "is_zh",
+        "output_language",
+        "language_rule",
+        "knowledge_extract_system",
+        "knowledge_url_extract_system",
+        "knowledge_extract_user",
+        "default_knowledge_book_prompt",
+        "default_knowledge_url_prompt",
+        "parse_title_author",
+        "apply_analysis_meta",
+        "extract_genres_from_analysis",
+        "merge_genre_tags",
+        "create_novel_system",
+        "create_novel_empty_user",
+        "untitled_novel",
+        "chat_created_novel",
+        "ChapterContextLabels",
+        "chapter_context_labels",
+        "generate_chapter_system",
+        "generate_chapter_user",
+        "repair_chapter_system",
+        "length_repair_chapter_system",
+        "length_repair_chapter_user",
+        "repair_chapter_user",
+        "generate_footer",
+        "word_count_off_note",
+        "generate_done_msg",
+        "refine_chapter_system",
+        "refine_chapter_user",
+        "refine_done_msg",
+        "extract_chapter_memory_system",
+        "extract_chapter_memory_user",
+        "workspace_chat_system",
+        "gen_chapter_cards_system",
+        "gen_chapter_cards_user",
+        "plan_next_chapters_system",
+        "plan_next_chapters_user",
+        "plan_next_done_msg",
+        "gen_chapter_plots_system",
+        "gen_chapter_plots_user",
+        "knowledge_card_extract_system",
+        "knowledge_card_extract_user",
+        "card_chat_system",
+        "default_new_character",
+        "prev_chapter_memory_block",
+        "prev_chapter_block"
+      ],
+      "totalLines": 1431,
+      "hasStructuralAnalysis": true
+    },
+    "src-tauri/src/sample.rs": {
+      "filePath": "src-tauri/src/sample.rs",
+      "contentHash": "b1601bf1be520cedd635be4d8ec9ce7c2f35e5b0245ffbec76c9328f025f3c91",
+      "functions": [
+        {
+          "name": "ensure_sample",
+          "params": [
+            "db"
+          ],
+          "returnType": "Result<()>",
+          "exported": true,
+          "lineCount": 30
+        },
+        {
+          "name": "sample_tree",
+          "params": [
+            "novel_id"
+          ],
+          "returnType": "NovelTree",
+          "exported": false,
+          "lineCount": 197
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "crate::db",
+          "specifiers": [
+            "Db"
+          ]
+        },
+        {
+          "source": "crate::models",
+          "specifiers": [
+            "*"
+          ]
+        },
+        {
+          "source": "crate::paths",
+          "specifiers": [
+            "novel_meta_path",
+            "novel_tree_path"
+          ]
+        },
+        {
+          "source": "anyhow",
+          "specifiers": [
+            "Result"
+          ]
+        },
+        {
+          "source": "chrono",
+          "specifiers": [
+            "Utc"
+          ]
+        },
+        {
+          "source": "std",
+          "specifiers": [
+            "fs"
+          ]
+        }
+      ],
+      "exports": [
+        "ensure_sample"
+      ],
+      "totalLines": 236,
+      "hasStructuralAnalysis": true
+    },
+    "src-tauri/src/secret.rs": {
+      "filePath": "src-tauri/src/secret.rs",
+      "contentHash": "8e8ad41cd73ae2ba14014cfc5e07f9779a6abdf327b77feed1833c80b071a1ba",
+      "functions": [
+        {
+          "name": "machine_key",
+          "params": [],
+          "returnType": "[u8; 32]",
+          "exported": false,
+          "lineCount": 12
+        },
+        {
+          "name": "encrypt_secret",
+          "params": [
+            "plain"
+          ],
+          "returnType": "Result<String>",
+          "exported": true,
+          "lineCount": 20
+        },
+        {
+          "name": "decrypt_secret",
+          "params": [
+            "stored"
+          ],
+          "returnType": "Result<String>",
+          "exported": true,
+          "lineCount": 21
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "aes_gcm::aead",
+          "specifiers": [
+            "Aead",
+            "KeyInit"
+          ]
+        },
+        {
+          "source": "aes_gcm",
+          "specifiers": [
+            "Aes256Gcm",
+            "Nonce"
+          ]
+        },
+        {
+          "source": "anyhow",
+          "specifiers": [
+            "anyhow",
+            "Result"
+          ]
+        },
+        {
+          "source": "sha2",
+          "specifiers": [
+            "Digest",
+            "Sha256"
+          ]
+        }
+      ],
+      "exports": [
+        "encrypt_secret",
+        "decrypt_secret"
+      ],
+      "totalLines": 85,
+      "hasStructuralAnalysis": true
+    },
+    "src-tauri/tauri.conf.json": {
+      "filePath": "src-tauri/tauri.conf.json",
+      "contentHash": "ee6ef02c6248a7025596b503221ad282605563c501618373d9eec2487ab824d3",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 42,
+      "hasStructuralAnalysis": true
+    },
+    "src/App.vue": {
+      "filePath": "src/App.vue",
+      "contentHash": "9c00e4abf5970a666b99a1300412da964332629913526dc98a3e4595829de12d",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 85,
+      "hasStructuralAnalysis": false
+    },
+    "src/components/CharacterCardPanel.vue": {
+      "filePath": "src/components/CharacterCardPanel.vue",
+      "contentHash": "10f991e186b8e8395834c3257bea61d619707a1a6c26095296ed6f32b0f0e40a",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 50,
+      "hasStructuralAnalysis": false
+    },
+    "src/components/flow/StoryNode.vue": {
+      "filePath": "src/components/flow/StoryNode.vue",
+      "contentHash": "0e89925c16384ea32924104404fc65717e7c51fc96097429ac8850b65e98256f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 236,
+      "hasStructuralAnalysis": false
+    },
+    "src/components/ui/button/Button.vue": {
+      "filePath": "src/components/ui/button/Button.vue",
+      "contentHash": "e9d6428f046c30c1f92e12da8f4f1c6a77430bd3cea7bac78430c389b115dfaa",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 43,
+      "hasStructuralAnalysis": false
+    },
+    "src/components/ui/button/index.ts": {
+      "filePath": "src/components/ui/button/index.ts",
+      "contentHash": "8e173de38a3229b26c5283a24abd12d55da1c0397ae5e84632d3e42c6bcae5a8",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [
+        "Button"
+      ],
+      "totalLines": 2,
+      "hasStructuralAnalysis": true
+    },
+    "src/components/ui/card/Card.vue": {
+      "filePath": "src/components/ui/card/Card.vue",
+      "contentHash": "4d601a2f05a81ba5e22799d954bbb32f889b535a73175d02afd6bcfb0b11d71d",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 13,
+      "hasStructuralAnalysis": false
+    },
+    "src/components/ui/card/CardContent.vue": {
+      "filePath": "src/components/ui/card/CardContent.vue",
+      "contentHash": "5decc00100bc111804605d7ba0ddeacd98ad6f533672e2c3247416456cac112c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 9,
+      "hasStructuralAnalysis": false
+    },
+    "src/components/ui/card/CardHeader.vue": {
+      "filePath": "src/components/ui/card/CardHeader.vue",
+      "contentHash": "4c05e8334edc218519f1b4d6f641ebc30289161afe3fce6ad0c683ed38219ccd",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 9,
+      "hasStructuralAnalysis": false
+    },
+    "src/components/ui/card/CardTitle.vue": {
+      "filePath": "src/components/ui/card/CardTitle.vue",
+      "contentHash": "ca8fd5192e0ae39657ba3dc6468d79faf61211e01ba04dda4a9b7ca8788e5a5b",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 9,
+      "hasStructuralAnalysis": false
+    },
+    "src/components/ui/card/index.ts": {
+      "filePath": "src/components/ui/card/index.ts",
+      "contentHash": "89afcac0527f66558e563e769c3fa7e0d86c17508007e171552aefb542ea8a18",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [
+        "Card",
+        "CardHeader",
+        "CardTitle",
+        "CardContent"
+      ],
+      "totalLines": 5,
+      "hasStructuralAnalysis": true
+    },
+    "src/components/ui/input/Input.vue": {
+      "filePath": "src/components/ui/input/Input.vue",
+      "contentHash": "9885d05b96e820d35e1fd7d90fda104638175f76ad68a308eb4f4573385fde41",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 47,
+      "hasStructuralAnalysis": false
+    },
+    "src/components/ui/input/index.ts": {
+      "filePath": "src/components/ui/input/index.ts",
+      "contentHash": "dec84e8e1cd5e152ae456e00a217b167ec403c0eccaead46b755c2c6afda5712",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [
+        "Input"
+      ],
+      "totalLines": 2,
+      "hasStructuralAnalysis": true
+    },
+    "src/components/ui/separator/Separator.vue": {
+      "filePath": "src/components/ui/separator/Separator.vue",
+      "contentHash": "7cbe040b4c1130a523eef0a0ea2f5f5064cd15c303bb3d1858f8f427f07e5da9",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 19,
+      "hasStructuralAnalysis": false
+    },
+    "src/components/ui/separator/index.ts": {
+      "filePath": "src/components/ui/separator/index.ts",
+      "contentHash": "2c78890627e0fcbd03be022a6d468e000a8c0c72fde0c9422a3c1358ae7f941c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [
+        "Separator"
+      ],
+      "totalLines": 2,
+      "hasStructuralAnalysis": true
+    },
+    "src/components/ui/textarea/Textarea.vue": {
+      "filePath": "src/components/ui/textarea/Textarea.vue",
+      "contentHash": "2455fd77199c39f67f2618f0fa2c16c8d32b52408285d7065e9269d68534887f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 34,
+      "hasStructuralAnalysis": false
+    },
+    "src/components/ui/textarea/index.ts": {
+      "filePath": "src/components/ui/textarea/index.ts",
+      "contentHash": "c2e0bc2516527fcac5672670bd6bf685f3ac0582375405c18a889c494c8ba200",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [
+        "Textarea"
+      ],
+      "totalLines": 2,
+      "hasStructuralAnalysis": true
+    },
+    "src/i18n/index.ts": {
+      "filePath": "src/i18n/index.ts",
+      "contentHash": "182691caca5df9583d35a15aae08d4b41fd2bee7304e2c67a4b0b999c985894c",
+      "functions": [
+        {
+          "name": "detectSystemLocale",
+          "params": [],
+          "returnType": "LocaleCode",
+          "exported": true,
+          "lineCount": 15
+        },
+        {
+          "name": "getLocalePreference",
+          "params": [],
+          "returnType": "LocalePreference",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "setLocalePreference",
+          "params": [
+            "next"
+          ],
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "t",
+          "params": [
+            "key",
+            "params"
+          ],
+          "returnType": "string",
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "useI18n",
+          "params": [],
+          "exported": true,
+          "lineCount": 11
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "vue",
+          "specifiers": [
+            "computed",
+            "ref"
+          ]
+        },
+        {
+          "source": "./messages",
+          "specifiers": [
+            "dictionaries",
+            "LocaleCode",
+            "LocalePreference",
+            "MessageKey",
+            "LOCALE_OPTIONS"
+          ]
+        }
+      ],
+      "exports": [
+        "LOCALE_OPTIONS",
+        "LocaleCode",
+        "LocalePreference",
+        "MessageKey",
+        "detectSystemLocale",
+        "resolvedLocale",
+        "getLocalePreference",
+        "setLocalePreference",
+        "t",
+        "useI18n"
+      ],
+      "totalLines": 65,
+      "hasStructuralAnalysis": true
+    },
+    "src/i18n/messages.ts": {
+      "filePath": "src/i18n/messages.ts",
+      "contentHash": "7643ee5b1d77c1bc0254f9fb0c96e0e4a3db23b792cff95be5614eda7f666903",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [
+        "LOCALE_OPTIONS",
+        "zhCN",
+        "en",
+        "zhTW",
+        "ja",
+        "de",
+        "fr",
+        "dictionaries"
+      ],
+      "totalLines": 1750,
+      "hasStructuralAnalysis": true
+    },
+    "src/lib/api.ts": {
+      "filePath": "src/lib/api.ts",
+      "contentHash": "7b6d8fc0b2a706c525aee15b24df01f082fb0b085e7020d74c6c600c1fec4c7f",
+      "functions": [
+        {
+          "name": "extractKnowledgeCard",
+          "params": [
+            "novelId",
+            "nodeId"
+          ],
+          "exported": true,
+          "lineCount": 3
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@tauri-apps/api/core",
+          "specifiers": [
+            "invoke"
+          ]
+        }
+      ],
+      "exports": [
+        "extractKnowledgeCard",
+        "api"
+      ],
+      "totalLines": 322,
+      "hasStructuralAnalysis": true
+    },
+    "src/lib/chatFormat.ts": {
+      "filePath": "src/lib/chatFormat.ts",
+      "contentHash": "3f94efd01d52e43ef6ab554b59b028d7f64d3533079fab5f1d46d47a75b097c5",
+      "functions": [
+        {
+          "name": "formatChatContent",
+          "params": [
+            "text"
+          ],
+          "returnType": "string",
+          "exported": true,
+          "lineCount": 15
+        }
+      ],
+      "classes": [],
+      "imports": [],
+      "exports": [
+        "formatChatContent"
+      ],
+      "totalLines": 17,
+      "hasStructuralAnalysis": true
+    },
+    "src/lib/linediff.ts": {
+      "filePath": "src/lib/linediff.ts",
+      "contentHash": "ec02c2993bf3cf27d09f12c0adca94b56f341f62f491541856c0b4ac1b1ec175",
+      "functions": [
+        {
+          "name": "diffLines",
+          "params": [
+            "oldText",
+            "newText"
+          ],
+          "returnType": "DiffHunk[]",
+          "exported": true,
+          "lineCount": 30
+        }
+      ],
+      "classes": [],
+      "imports": [],
+      "exports": [
+        "diffLines"
+      ],
+      "totalLines": 34,
+      "hasStructuralAnalysis": true
+    },
+    "src/lib/md.selfcheck.mjs": {
+      "filePath": "src/lib/md.selfcheck.mjs",
+      "contentHash": "19e243b5e3cf65da1933f48687de9281516c1d4e180a5a6b6b44e0582c55054d",
+      "functions": [
+        {
+          "name": "stripChapterMeta",
+          "params": [
+            "src"
+          ],
+          "exported": false,
+          "lineCount": 8
+        }
+      ],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 30,
+      "hasStructuralAnalysis": true
+    },
+    "src/lib/md.ts": {
+      "filePath": "src/lib/md.ts",
+      "contentHash": "77017ace2ccb28dbc277c910f9669e6e5ee40d2006f86a611a58c209f24c2ed6",
+      "functions": [
+        {
+          "name": "stripChapterMeta",
+          "params": [
+            "src"
+          ],
+          "returnType": "string",
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "renderChapterMd",
+          "params": [
+            "src"
+          ],
+          "returnType": "string",
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "withCopyableParaIndent",
+          "params": [
+            "html"
+          ],
+          "returnType": "string",
+          "exported": true,
+          "lineCount": 3
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "marked",
+          "specifiers": [
+            "marked"
+          ]
+        }
+      ],
+      "exports": [
+        "stripChapterMeta",
+        "renderChapterMd",
+        "withCopyableParaIndent"
+      ],
+      "totalLines": 34,
+      "hasStructuralAnalysis": true
+    },
+    "src/lib/treeLayout.selfcheck.ts": {
+      "filePath": "src/lib/treeLayout.selfcheck.ts",
+      "contentHash": "c21f9e232304270bb56efe58697a5e1d771019cee5d66fc86d2d61d83805e9a9",
+      "functions": [
+        {
+          "name": "get",
+          "params": [
+            "id"
+          ],
+          "exported": false,
+          "lineCount": 1
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "./treeLayout.ts",
+          "specifiers": [
+            "applyAutoLayout",
+            "C"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 35,
+      "hasStructuralAnalysis": true
+    },
+    "src/lib/treeLayout.ts": {
+      "filePath": "src/lib/treeLayout.ts",
+      "contentHash": "332c416ec27f09ae536e411e8004a69f45c4dd5f12c117af45d567d864a4e937",
+      "functions": [
+        {
+          "name": "byY",
+          "params": [
+            "a",
+            "b"
+          ],
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "placePlotGrid",
+          "params": [
+            "list",
+            "originX",
+            "originY"
+          ],
+          "exported": false,
+          "lineCount": 10
+        },
+        {
+          "name": "plotBlockSpan",
+          "params": [
+            "count"
+          ],
+          "returnType": "number",
+          "exported": false,
+          "lineCount": 5
+        },
+        {
+          "name": "applyAutoLayout",
+          "params": [
+            "nodes",
+            "edges"
+          ],
+          "returnType": "void",
+          "exported": true,
+          "lineCount": 59
+        }
+      ],
+      "classes": [],
+      "imports": [],
+      "exports": [
+        "applyAutoLayout",
+        "__layoutConsts"
+      ],
+      "totalLines": 130,
+      "hasStructuralAnalysis": true
+    },
+    "src/lib/utils.ts": {
+      "filePath": "src/lib/utils.ts",
+      "contentHash": "340b34c6ed5ed3d07311c59c51a89c9ca86db91f18a35e82d153a79547a16ceb",
+      "functions": [
+        {
+          "name": "cn",
+          "params": [
+            "...inputs"
+          ],
+          "exported": true,
+          "lineCount": 3
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "clsx",
+          "specifiers": [
+            "ClassValue"
+          ]
+        },
+        {
+          "source": "clsx",
+          "specifiers": [
+            "clsx"
+          ]
+        },
+        {
+          "source": "tailwind-merge",
+          "specifiers": [
+            "twMerge"
+          ]
+        }
+      ],
+      "exports": [
+        "cn"
+      ],
+      "totalLines": 8,
+      "hasStructuralAnalysis": true
+    },
+    "src/main.ts": {
+      "filePath": "src/main.ts",
+      "contentHash": "fc14cfa93a2fafe6b60c05dea7ff02ea465875205f1dd67130f5ebaef4238f81",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "vue",
+          "specifiers": [
+            "createApp"
+          ]
+        },
+        {
+          "source": "./App.vue",
+          "specifiers": [
+            "App"
+          ]
+        },
+        {
+          "source": "./router",
+          "specifiers": [
+            "router"
+          ]
+        },
+        {
+          "source": "./style.css",
+          "specifiers": []
+        },
+        {
+          "source": "@vue-flow/core/dist/style.css",
+          "specifiers": []
+        },
+        {
+          "source": "@vue-flow/core/dist/theme-default.css",
+          "specifiers": []
+        },
+        {
+          "source": "@vue-flow/controls/dist/style.css",
+          "specifiers": []
+        },
+        {
+          "source": "@vue-flow/minimap/dist/style.css",
+          "specifiers": []
+        }
+      ],
+      "exports": [],
+      "totalLines": 11,
+      "hasStructuralAnalysis": true
+    },
+    "src/router/index.ts": {
+      "filePath": "src/router/index.ts",
+      "contentHash": "042bb7f796627ead364f0410aab9fb52d3e3c5d9327ce21aef53d0975eae2f3a",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "vue-router",
+          "specifiers": [
+            "createRouter",
+            "createWebHistory"
+          ]
+        },
+        {
+          "source": "@/views/LibraryView.vue",
+          "specifiers": [
+            "LibraryView"
+          ]
+        },
+        {
+          "source": "@/views/NovelsView.vue",
+          "specifiers": [
+            "NovelsView"
+          ]
+        },
+        {
+          "source": "@/views/WorkspaceView.vue",
+          "specifiers": [
+            "WorkspaceView"
+          ]
+        },
+        {
+          "source": "@/views/StatsView.vue",
+          "specifiers": [
+            "StatsView"
+          ]
+        },
+        {
+          "source": "@/views/SettingsView.vue",
+          "specifiers": [
+            "SettingsView"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 21,
+      "hasStructuralAnalysis": true
+    },
+    "src/style.css": {
+      "filePath": "src/style.css",
+      "contentHash": "c7faf0957f97d41c8d2a4723e2f3dc4b5ad630150993ecaf8244ea3fb6ab4626",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 143,
+      "hasStructuralAnalysis": false
+    },
+    "src/views/LibraryView.vue": {
+      "filePath": "src/views/LibraryView.vue",
+      "contentHash": "5095dc9164e93c7f6d517324b58192a634334d7d54be4c2415ea8564eb41a98b",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 550,
+      "hasStructuralAnalysis": false
+    },
+    "src/views/NovelsView.vue": {
+      "filePath": "src/views/NovelsView.vue",
+      "contentHash": "f2e25c033af5a9292686691c9968d5a6dd6e853af2cc7ba0faee0d50b25c8860",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 306,
+      "hasStructuralAnalysis": false
+    },
+    "src/views/SettingsView.vue": {
+      "filePath": "src/views/SettingsView.vue",
+      "contentHash": "9075e7e9eff5af83d9cab6fbe00618c9a6bf9ba2598acf9482213c7007ce7655",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 405,
+      "hasStructuralAnalysis": false
+    },
+    "src/views/StatsView.vue": {
+      "filePath": "src/views/StatsView.vue",
+      "contentHash": "35432e3ace5051804cad04c877dc446c67d8309ea001f38ccd3136a4aa89e0e4",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 405,
+      "hasStructuralAnalysis": false
+    },
+    "src/views/WorkspaceView.vue": {
+      "filePath": "src/views/WorkspaceView.vue",
+      "contentHash": "068bc94ed189d1dbad59499f57e5ff6532ee14292c1087652432327eda21e88f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 2234,
+      "hasStructuralAnalysis": false
+    },
+    "src/vite-env.d.ts": {
+      "filePath": "src/vite-env.d.ts",
+      "contentHash": "144cd674a13fe7c4152e6263ec484009f965a0be21e21c6bf6a0abeb3f318cb5",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 8,
+      "hasStructuralAnalysis": true
+    },
+    "tsconfig.json": {
+      "filePath": "tsconfig.json",
+      "contentHash": "7ca6f0c949e4716f8080baa357b6e8fc87e0cef605708d4344a3dbf258638025",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 26,
+      "hasStructuralAnalysis": true
+    },
+    "tsconfig.node.json": {
+      "filePath": "tsconfig.node.json",
+      "contentHash": "9e2abb169ea87b7190613a1d4da57ca608463a453bd4231fa3aeee5e308370dd",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 11,
+      "hasStructuralAnalysis": true
+    },
+    "vite.config.ts": {
+      "filePath": "vite.config.ts",
+      "contentHash": "b2552625d1992629227eb29462affe4352bd316d996f6c07ac6041b6f0253d56",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:path",
+          "specifiers": [
+            "path"
+          ]
+        },
+        {
+          "source": "vite",
+          "specifiers": [
+            "defineConfig"
+          ]
+        },
+        {
+          "source": "@vitejs/plugin-vue",
+          "specifiers": [
+            "vue"
+          ]
+        },
+        {
+          "source": "@tailwindcss/vite",
+          "specifiers": [
+            "tailwindcss"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 32,
+      "hasStructuralAnalysis": true
+    }
+  }
+}

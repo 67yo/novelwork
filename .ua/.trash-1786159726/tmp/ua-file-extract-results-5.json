@@ -1,0 +1,311 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 6,
+  "filesSkipped": [
+    "index.html"
+  ],
+  "analysisOutcomes": {
+    "structure": {
+      "succeeded": 6,
+      "failed": 0
+    },
+    "callGraph": {
+      "succeeded": 0,
+      "failed": 0,
+      "skipped": 6
+    }
+  },
+  "results": [
+    {
+      "path": "Project.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 150,
+      "nonEmptyLines": 108,
+      "sections": [
+        {
+          "heading": "Nove Work — 章节生成与精修策略",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "1. 章节预生成（Generate）",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "1.1 目的",
+          "level": 3,
+          "line": 23
+        },
+        {
+          "heading": "1.2 输入材料（按优先级）",
+          "level": 3,
+          "line": 27
+        },
+        {
+          "heading": "1.3 流程",
+          "level": 3,
+          "line": 46
+        },
+        {
+          "heading": "1.4 落地检查（`chapter_constraints`）",
+          "level": 3,
+          "line": 57
+        },
+        {
+          "heading": "1.5 硬性篇幅（预生成 / 精修共用）",
+          "level": 3,
+          "line": 64
+        },
+        {
+          "heading": "2. 章节精修（Refine）",
+          "level": 2,
+          "line": 77
+        },
+        {
+          "heading": "2.1 目的",
+          "level": 3,
+          "line": 79
+        },
+        {
+          "heading": "2.2 输入材料",
+          "level": 3,
+          "line": 83
+        },
+        {
+          "heading": "2.3 流程",
+          "level": 3,
+          "line": 95
+        },
+        {
+          "heading": "2.4 策略要点",
+          "level": 3,
+          "line": 104
+        },
+        {
+          "heading": "2.5 模式对比",
+          "level": 3,
+          "line": 111
+        },
+        {
+          "heading": "3. 章节记忆库（生成/精修共用）",
+          "level": 2,
+          "line": 121
+        },
+        {
+          "heading": "4. 相关设置与 UI",
+          "level": 2,
+          "line": 134
+        },
+        {
+          "heading": "5. 改动检查清单",
+          "level": 2,
+          "line": 143
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 16
+      }
+    },
+    {
+      "path": "README.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 44,
+      "nonEmptyLines": 31,
+      "sections": [
+        {
+          "heading": "Nove Work",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "技术栈",
+          "level": 2,
+          "line": 5
+        },
+        {
+          "heading": "开发",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "DeepSeek API Key",
+          "level": 2,
+          "line": 22
+        },
+        {
+          "heading": "Demo 功能",
+          "level": 2,
+          "line": 31
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 5
+      }
+    },
+    {
+      "path": "components.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 20,
+      "nonEmptyLines": 20,
+      "sections": [
+        {
+          "heading": "$schema",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "style",
+          "level": 1,
+          "line": 3
+        },
+        {
+          "heading": "typescript",
+          "level": 1,
+          "line": 4
+        },
+        {
+          "heading": "tailwind",
+          "level": 1,
+          "line": 5
+        },
+        {
+          "heading": "aliases",
+          "level": 1,
+          "line": 12
+        },
+        {
+          "heading": "iconLibrary",
+          "level": 1,
+          "line": 19
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 6
+      }
+    },
+    {
+      "path": "package.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 42,
+      "nonEmptyLines": 42,
+      "sections": [
+        {
+          "heading": "name",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "private",
+          "level": 1,
+          "line": 3
+        },
+        {
+          "heading": "version",
+          "level": 1,
+          "line": 4
+        },
+        {
+          "heading": "type",
+          "level": 1,
+          "line": 5
+        },
+        {
+          "heading": "scripts",
+          "level": 1,
+          "line": 6
+        },
+        {
+          "heading": "dependencies",
+          "level": 1,
+          "line": 12
+        },
+        {
+          "heading": "devDependencies",
+          "level": 1,
+          "line": 31
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": "tsconfig.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 25,
+      "nonEmptyLines": 25,
+      "sections": [
+        {
+          "heading": "compilerOptions",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "include",
+          "level": 1,
+          "line": 23
+        },
+        {
+          "heading": "references",
+          "level": 1,
+          "line": 24
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 3
+      }
+    },
+    {
+      "path": "tsconfig.node.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 10,
+      "nonEmptyLines": 10,
+      "sections": [
+        {
+          "heading": "compilerOptions",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "include",
+          "level": 1,
+          "line": 9
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 2
+      }
+    }
+  ]
+}

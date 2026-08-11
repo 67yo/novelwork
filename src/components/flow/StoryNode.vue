@@ -25,6 +25,13 @@ const chapterTarget = computed(() =>
 );
 const wordWritten = computed(() => t("workspace.wordWritten", { n: n.value?.word_count ?? 0 }));
 
+const plotBadge = computed(() => {
+  const s = (n.value?.side_plot?.status || "active").trim().toLowerCase();
+  if (s === "resolved" || s === "deferred") return s;
+  return "active";
+});
+const plotAbsorbed = computed(() => !!n.value?.side_plot?.absorbed);
+
 const kindIcon = computed((): { icon: Component; class: string } | null => {
   switch (kind.value) {
     case "chapter":
@@ -145,6 +152,28 @@ const rightHandleClass = computed(
           :class="kindIcon.class"
         />
         <span class="truncate">{{ n?.label }}</span>
+      </div>
+      <div class="mt-1 flex flex-wrap gap-1">
+        <span
+          class="rounded px-1 text-[10px]"
+          :class="
+            plotBadge === 'resolved'
+              ? 'bg-emerald-100 text-emerald-900'
+              : plotBadge === 'deferred' || plotAbsorbed
+                ? 'bg-muted text-muted-foreground'
+                : 'bg-sky-100 text-sky-900'
+          "
+        >
+          {{
+            plotAbsorbed
+              ? t("workspace.plotAbsorbedBadge")
+              : plotBadge === "resolved"
+                ? t("workspace.plotStatusResolved")
+                : plotBadge === "deferred"
+                  ? t("workspace.plotStatusDeferred")
+                  : t("workspace.plotStatusActive")
+          }}
+        </span>
       </div>
       <p class="mt-1 line-clamp-2 text-[11px] text-muted-foreground">{{ n?.outline }}</p>
     </template>

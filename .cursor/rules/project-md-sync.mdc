@@ -9,11 +9,11 @@ alwaysApply: true
 
 When you change any of the following, **update `Project.md` in the same change**:
 
-- `generate_chapter` / `preview_generate_chapter` / `refine_chapter` / `save_chapter` / `preview_chapter_outline_brief` / `generate_chapter_cards` / `plan_next_chapters` / `regenerate_chapter_outline` / `generate_chapter_plots` / `regenerate_chapter_memory` / `set_chapter_memory` / `update_novel_canon` / `sync_canon_settings`
-- Related helpers: `assemble_outline_gen_brief` / `root_linked_plots_and_knowledge` / `build_canon_context` / `root_generate_reference` / `chapter_context`
-- Related prompts in `src-tauri/src/prompts.rs` (`generate_chapter_*`, `refine_chapter_*`, `repair_*`, `repair_canon_*`, `outline_gen_brief`, `gen_chapter_cards_*`, `plan_next_chapters_*`, `gen_chapter_plots_*`, `extract_chapter_memory_*`, canon format helpers)
+- `generate_chapter` / `preview_generate_chapter` / `refine_chapter` / `save_chapter` / `preview_chapter_outline_brief` / `generate_chapter_cards` / `plan_next_chapters` / `regenerate_chapter_outline` / `generate_chapter_plots` / `consolidate_plot_cards` / `regenerate_chapter_memory` / `set_chapter_memory` / `update_novel_canon` / `sync_canon_settings`
+- Related helpers: `assemble_outline_gen_brief` / `root_linked_plots_and_knowledge` / `build_canon_context` / `root_generate_reference` / `chapter_context` / `plot_is_injectable`
+- Related prompts in `src-tauri/src/prompts.rs` (`generate_chapter_*`, `refine_chapter_*`, `repair_*`, `repair_canon_*`, `outline_gen_brief`, `gen_chapter_cards_*`, `plan_next_chapters_*`, `gen_chapter_plots_*`, `consolidate_plots_*`, `extract_chapter_memory_*`, canon format helpers)
 - `chapter_constraints.rs`, chapter memory extract/store timing, or `WORD_COUNT_TOLERANCE`
-- Workspace UI behavior for those flows (root generate cards, root canon binding, refine modes, memory panels)
+- Workspace UI behavior for those flows (root generate cards, root canon binding, **整理剧情**, refine modes, memory panels)
 
 ## How to update
 

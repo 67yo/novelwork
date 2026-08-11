@@ -1,0 +1,33 @@
+{
+  "projectRoot": "/Users/ablegao/code/novework",
+  "batchFiles": [
+    {"path": "src/i18n/index.ts", "language": "typescript", "sizeLines": 64, "fileCategory": "code"},
+    {"path": "src/i18n/messages.ts", "language": "typescript", "sizeLines": 1749, "fileCategory": "code"},
+    {"path": "src/lib/api.ts", "language": "typescript", "sizeLines": 321, "fileCategory": "code"},
+    {"path": "src/lib/chatFormat.ts", "language": "typescript", "sizeLines": 16, "fileCategory": "code"},
+    {"path": "src/lib/linediff.ts", "language": "typescript", "sizeLines": 33, "fileCategory": "code"},
+    {"path": "src/lib/md.selfcheck.mjs", "language": "javascript", "sizeLines": 29, "fileCategory": "code"},
+    {"path": "src/lib/md.ts", "language": "typescript", "sizeLines": 33, "fileCategory": "code"},
+    {"path": "src/lib/treeLayout.selfcheck.ts", "language": "typescript", "sizeLines": 34, "fileCategory": "code"},
+    {"path": "src/lib/treeLayout.ts", "language": "typescript", "sizeLines": 129, "fileCategory": "code"},
+    {"path": "src/lib/utils.ts", "language": "typescript", "sizeLines": 7, "fileCategory": "code"},
+    {"path": "src/style.css", "language": "css", "sizeLines": 142, "fileCategory": "markup"},
+    {"path": "src/vite-env.d.ts", "language": "typescript", "sizeLines": 7, "fileCategory": "code"},
+    {"path": "vite.config.ts", "language": "typescript", "sizeLines": 31, "fileCategory": "code"}
+  ],
+  "batchImportData": {
+    "src/i18n/index.ts": ["src/i18n/messages.ts"],
+    "src/i18n/messages.ts": [],
+    "src/lib/api.ts": [],
+    "src/lib/chatFormat.ts": [],
+    "src/lib/linediff.ts": [],
+    "src/lib/md.selfcheck.mjs": [],
+    "src/lib/md.ts": [],
+    "src/lib/treeLayout.selfcheck.ts": ["src/lib/treeLayout.ts"],
+    "src/lib/treeLayout.ts": [],
+    "src/lib/utils.ts": [],
+    "src/style.css": [],
+    "src/vite-env.d.ts": [],
+    "vite.config.ts": []
+  }
+}

@@ -361,7 +361,10 @@ fn search_chapter_memory(db: &Db, novel_id: &str, args: &Value) -> String {
     if q.is_empty() {
         return "query required".into();
     }
-    let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(12) as usize;
+    let limit = args
+        .get("limit")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(crate::kb_context::MEMORY_RETRIEVE_K as u64) as usize;
     let Ok(all) = db.list_chapter_memory(novel_id) else {
         return "db error".into();
     };
@@ -370,7 +373,10 @@ fn search_chapter_memory(db: &Db, novel_id: &str, args: &Value) -> String {
         return "(no hits)".into();
     }
     hits.into_iter()
-        .map(|(nid, c)| format!("[{nid}] {c}"))
+        .map(|(nid, c)| {
+            let snip = crate::kb_context::truncate_chars(&c, crate::kb_context::MEMORY_FACT_CAP);
+            format!("[memory:{nid}] {snip}")
+        })
         .collect::<Vec<_>>()
         .join("\n")
 }
@@ -425,28 +431,26 @@ fn search_knowledge(db: &Db, tree: &NovelTree, args: &Value) -> String {
     if q.is_empty() {
         return "query required".into();
     }
-    let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(8) as usize;
+    let limit = args
+        .get("limit")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(crate::kb_context::CANON_RETRIEVE_K as u64) as usize;
     let book_ids = linked_or_all_book_ids(db, tree);
     if book_ids.is_empty() {
         return "(no knowledge books)".into();
     }
-    let mut rows: Vec<(String, String)> = Vec::new();
-    for bid in &book_ids {
-        if let Ok(chunks) = db.list_knowledge_chunks(bid) {
-            for c in chunks {
-                rows.push((bid.clone(), c.content));
-            }
-        }
-    }
-    let hits = chapter_memory::rank_memory(&rows, q, limit.max(1));
+    let hits = crate::kb_context::retrieve_knowledge(
+        db,
+        &book_ids,
+        q,
+        limit.max(1),
+        crate::kb_context::CANON_CHUNK_CAP,
+    );
     if hits.is_empty() {
         return "(no hits)".into();
     }
     hits.into_iter()
-        .map(|(bid, c)| {
-            let preview: String = c.chars().take(500).collect();
-            format!("[book:{bid}] {preview}")
-        })
+        .map(|(sid, title, preview)| format!("[{sid}|{title}] {preview}"))
         .collect::<Vec<_>>()
         .join("\n---\n")
 }

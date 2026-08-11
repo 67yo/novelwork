@@ -5,27 +5,50 @@ use anyhow::{anyhow, Result};
 use chrono::Utc;
 use serde::Deserialize;
 
+pub fn models_list_url(base: &str) -> String {
+    let b = base.trim_end_matches('/');
+    if b.ends_with("/v1") {
+        format!("{b}/models")
+    } else {
+        format!("{b}/v1/models")
+    }
+}
+
+pub async fn fetch_openai_models(base_url: &str, api_key: &str) -> Result<Vec<String>> {
+    fetch_openai_compat(&models_list_url(base_url), api_key).await
+}
+
 pub async fn refresh(db: &Db) -> Result<ModelCatalog> {
-    let settings = db.get_settings()?;
+    let mut settings = db.get_settings()?;
     let mut catalog = db.get_model_catalog().unwrap_or_default();
     catalog.errors.clear();
 
-    if !settings.deepseek_api_key.trim().is_empty() {
-        match fetch_openai_compat(
-            &format!(
-                "{}/models",
-                settings.deepseek_base_url.trim_end_matches('/')
-            ),
-            &settings.deepseek_api_key,
-        )
-        .await
-        {
-            Ok(ids) => catalog.deepseek = ids,
+    for p in settings.compat_providers.iter_mut() {
+        if p.api_key.trim().is_empty() || p.protocol != "openai" {
+            continue;
+        }
+        match fetch_openai_models(&p.base_url, &p.api_key).await {
+            Ok(ids) => {
+                // Keep previously selected models that still exist; if none selected yet, take all.
+                if p.models.is_empty() {
+                    p.models = ids;
+                } else {
+                    let set: std::collections::HashSet<_> = ids.iter().cloned().collect();
+                    p.models.retain(|m| set.contains(m));
+                    if p.models.is_empty() {
+                        p.models = ids;
+                    }
+                }
+            }
             Err(e) => {
-                catalog.errors.insert("deepseek".into(), e.to_string());
+                catalog
+                    .errors
+                    .insert(format!("compat:{}", p.label), e.to_string());
             }
         }
     }
+
+    catalog.compat = settings.all_compat_model_ids();
 
     if !settings.gemini_api_key.trim().is_empty() {
         match fetch_gemini(&settings.gemini_api_key).await {
@@ -45,18 +68,32 @@ pub async fn refresh(db: &Db) -> Result<ModelCatalog> {
         }
     }
 
-    if !settings.grok_api_key.trim().is_empty() {
-        match fetch_openai_compat("https://api.x.ai/v1/models", &settings.grok_api_key).await {
-            Ok(ids) => catalog.grok = ids,
-            Err(e) => {
-                catalog.errors.insert("grok".into(), e.to_string());
-            }
-        }
-    }
-
     catalog.updated_at = Utc::now().to_rfc3339();
+    db.save_settings(&settings)?;
     db.save_model_catalog(&catalog)?;
     Ok(catalog)
+}
+
+/// Refresh models for one saved provider; replaces its models list with API result.
+pub async fn refresh_provider_models(db: &Db, provider_id: &str) -> Result<Vec<String>> {
+    let mut settings = db.get_settings()?;
+    let p = settings
+        .compat_providers
+        .iter_mut()
+        .find(|p| p.id == provider_id)
+        .ok_or_else(|| anyhow!("provider not found"))?;
+    if p.api_key.trim().is_empty() {
+        return Err(anyhow!("api key not configured"));
+    }
+    let ids = fetch_openai_models(&p.base_url, &p.api_key).await?;
+    p.models = ids.clone();
+    db.save_settings(&settings)?;
+
+    let mut catalog = db.get_model_catalog().unwrap_or_default();
+    catalog.compat = settings.all_compat_model_ids();
+    catalog.updated_at = Utc::now().to_rfc3339();
+    db.save_model_catalog(&catalog)?;
+    Ok(ids)
 }
 
 async fn fetch_openai_compat(url: &str, api_key: &str) -> Result<Vec<String>> {

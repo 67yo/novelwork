@@ -13,25 +13,52 @@ export type LayoutEdge = {
   kind: string;
 };
 
+/** 可选：Vue Flow 实测尺寸；缺省按 kind 估高 */
+export type LayoutSize = { w: number; h: number };
+
 const CHAR_X = 40;
 const MAIN_X = 320;
 const PLOT_X = 640;
 /** 剧情卡横排列距 */
 const PLOT_DX = 220;
+/** 剧情卡视觉宽度（与 StoryNode max-width 对齐） */
+const PLOT_CARD_W = 200;
 /** 同章剧情卡竖向紧凑间距 */
 const PLOT_DY = 100;
 /** 竖排最多几个，多出来的往右横排 */
 const MAX_PLOT_COL = 4;
 /** 人物/知识卡：多列时向左横排 */
 const SIDE_DX = 200;
+/** 侧卡视觉宽度（与 StoryNode max-width 对齐） */
+const SIDE_CARD_W = 200;
+/** 无实测时的人物/知识竖向步长（fallback） */
 const SIDE_DY = 100;
+/** 侧卡之间固定空隙（叠在实测高度之外） */
+const SIDE_GAP = 12;
 const MAX_SIDE_COL = 4;
+/** 知识最右列左缘相对人物最左列左缘：再左移 1.5 卡宽（卡宽 + 半卡空隙） */
+const KNOW_GAP_FROM_CHAR = SIDE_CARD_W + SIDE_CARD_W / 2;
 const TOP = 40;
-const ROOT_TO_CH = 160;
-/** 无剧情时章节之间的最小间距 */
+/** 无链接时主轴节点（根/章）之间的紧凑间距 */
+const MIN_CHAPTER_GAP_TIGHT = 72;
+/** 有链接时章节之间的最小间距 */
 const MIN_CHAPTER_GAP = 200;
 /** 剧情块下方再留一点再放下章 */
 const CH_PAD = 48;
+
+function defaultNodeH(kind: string): number {
+  if (kind === "character") return 96;
+  if (kind === "knowledge") return 88;
+  if (kind === "side_plot") return 72;
+  if (kind === "novel") return 100;
+  return 64;
+}
+
+function nodeH(n: LayoutNode, sizes?: Map<string, LayoutSize>): number {
+  const h = sizes?.get(n.id)?.h;
+  if (typeof h === "number" && h > 8) return h;
+  return defaultNodeH(n.kind);
+}
 
 function byY(a: LayoutNode, b: LayoutNode) {
   return (
@@ -65,6 +92,91 @@ function gridSpan(count: number, dy: number, maxCol: number): number {
   if (count <= 0) return 0;
   const rows = Math.min(count, maxCol);
   return rows * dy;
+}
+
+/** 侧卡块高度（不改 position）：按实测/估高叠满 maxCol 列 */
+function sideStackSpan(
+  list: LayoutNode[],
+  maxCol: number,
+  sizes?: Map<string, LayoutSize>,
+): number {
+  if (!list.length) return 0;
+  const nextY: number[] = [];
+  const counts: number[] = [];
+  let maxBottom = 0;
+  for (const n of list) {
+    let col = 0;
+    while ((counts[col] ?? 0) >= maxCol) col++;
+    const y = nextY[col] ?? 0;
+    const h = nodeH(n, sizes);
+    const bottom = y + h;
+    nextY[col] = bottom + SIDE_GAP;
+    counts[col] = (counts[col] ?? 0) + 1;
+    maxBottom = Math.max(maxBottom, bottom);
+  }
+  return maxBottom;
+}
+
+/**
+ * 人物/知识：按实测高度竖向叠放，满 MAX_SIDE_COL 张换下一列（向 dir）。
+ * @returns 相对 originY 的块高度
+ */
+function placeSideByHeight(
+  list: LayoutNode[],
+  originX: number,
+  originY: number,
+  dx: number,
+  maxCol: number,
+  dir: 1 | -1,
+  sizes?: Map<string, LayoutSize>,
+): number {
+  if (!list.length) return 0;
+  const nextY: number[] = [];
+  const counts: number[] = [];
+  let maxBottom = originY;
+  for (const n of list) {
+    let col = 0;
+    while ((counts[col] ?? 0) >= maxCol) col++;
+    const y = nextY[col] ?? originY;
+    n.position = { x: originX + dir * col * dx, y };
+    const h = nodeH(n, sizes);
+    const bottom = y + h;
+    nextY[col] = bottom + SIDE_GAP;
+    counts[col] = (counts[col] ?? 0) + 1;
+    maxBottom = Math.max(maxBottom, bottom);
+  }
+  return Math.max(0, maxBottom - originY);
+}
+
+/**
+ * 知识卡排在人物左侧：最右知识卡右缘与最左人物卡左缘间距 = 半个卡宽。
+ * 无人物时相对 CHAR_X 定位。
+ */
+function placeKnowLeftOfChars(
+  knows: LayoutNode[],
+  chars: LayoutNode[],
+  originY: number,
+  sizes?: Map<string, LayoutSize>,
+): number {
+  if (!knows.length) return 0;
+  const leftCharX = chars.length
+    ? Math.min(...chars.map((c) => c.position.x))
+    : CHAR_X;
+  const originX = leftCharX - KNOW_GAP_FROM_CHAR;
+  return placeSideByHeight(
+    knows,
+    originX,
+    originY,
+    SIDE_DX,
+    MAX_SIDE_COL,
+    -1,
+    sizes,
+  );
+}
+
+/** 与已占剧情格是否重叠（按排版间距估） */
+function plotOverlaps(ax: number, ay: number, bx: number, by: number): boolean {
+  return Math.abs(ax - bx) < PLOT_DX * 0.9 && Math.abs(ay - by) < PLOT_DY * 0.9;
 }
 
 type HostKind = "novel" | "chapter" | "side_plot";
@@ -123,130 +235,277 @@ function resolveHosts(
 /** 侧卡挂在剧情上时，尽量归到该剧情所属章节，方便跟章节对齐 */
 function liftSidePlotHosts(
   host: Map<string, string>,
-  plotHost: Map<string, string>,
+  plotPrimaryHost: Map<string, string>,
   byId: Map<string, LayoutNode>,
 ) {
   for (const [cardId, hid] of [...host.entries()]) {
     const h = byId.get(hid);
     if (h?.kind === "side_plot") {
-      const ch = plotHost.get(hid);
+      const ch = plotPrimaryHost.get(hid);
       if (ch) host.set(cardId, ch);
     }
   }
 }
 
-/**
- * 三列：人物/知识 | 根+章节 | 剧情。
- * 人物/知识按宿主（章/根）左侧紧凑网格；剧情按章右侧网格。就地改 position。
- */
-export function applyAutoLayout(nodes: LayoutNode[], edges: LayoutEdge[]): void {
-  const byId = new Map(nodes.map((n) => [n.id, n]));
-  const root = nodes.find((n) => n.kind === "novel");
-  if (root) root.position = { x: MAIN_X, y: TOP };
+/** 剧情 ↔ 主轴宿主（根/章节）：收集全部关联（边 + linked_side_plot_ids） */
+function collectPlotHosts(
+  hosts: LayoutNode[],
+  edges: LayoutEdge[],
+  byId: Map<string, LayoutNode>,
+): Map<string, string[]> {
+  const hostIds = new Set(hosts.map((c) => c.id));
+  const map = new Map<string, Set<string>>();
+  const add = (plotId: string, hostId: string) => {
+    if (!hostIds.has(hostId)) return;
+    const p = byId.get(plotId);
+    if (!p || p.kind !== "side_plot") return;
+    let set = map.get(plotId);
+    if (!set) {
+      set = new Set();
+      map.set(plotId, set);
+    }
+    set.add(hostId);
+  };
 
-  const chapters = nodes.filter((n) => n.kind === "chapter").sort(byY);
-
-  const plotHost = new Map<string, string>();
-  for (const ch of chapters) {
-    for (const pid of ch.linked_side_plot_ids ?? []) plotHost.set(pid, ch.id);
+  for (const h of hosts) {
+    for (const pid of h.linked_side_plot_ids ?? []) add(pid, h.id);
   }
   for (const e of edges) {
     if (e.kind !== "side_plot") continue;
     const s = byId.get(e.source);
     const t = byId.get(e.target);
     if (!s || !t) continue;
-    if (s.kind === "chapter" && t.kind === "side_plot") plotHost.set(t.id, s.id);
-    else if (t.kind === "chapter" && s.kind === "side_plot") plotHost.set(s.id, t.id);
+    const sHost = s.kind === "chapter" || s.kind === "novel";
+    const tHost = t.kind === "chapter" || t.kind === "novel";
+    if (sHost && t.kind === "side_plot") add(t.id, s.id);
+    else if (tHost && s.kind === "side_plot") add(s.id, t.id);
+  }
+
+  const out = new Map<string, string[]>();
+  for (const [pid, set] of map) {
+    const list = [...set].sort((a, b) => {
+      const ca = byId.get(a)!;
+      const cb = byId.get(b)!;
+      return byY(ca, cb);
+    });
+    out.set(pid, list);
+  }
+  return out;
+}
+
+/** 主轴节点是否链了其他卡片（有则拉开，无则贴近） */
+function hostHasLinkedCards(
+  host: LayoutNode,
+  plotHosts: Map<string, string[]>,
+  plotsByHost: Map<string, LayoutNode[]>,
+  charsByHost: Map<string, LayoutNode[]>,
+  knowsByHost: Map<string, LayoutNode[]>,
+): boolean {
+  if ((plotsByHost.get(host.id)?.length ?? 0) > 0) return true;
+  if ((charsByHost.get(host.id)?.length ?? 0) > 0) return true;
+  if ((knowsByHost.get(host.id)?.length ?? 0) > 0) return true;
+  for (const chs of plotHosts.values()) {
+    if (chs.includes(host.id)) return true;
+  }
+  if ((host.linked_side_plot_ids?.length ?? 0) > 0) return true;
+  if ((host.linked_character_ids?.length ?? 0) > 0) return true;
+  if ((host.linked_knowledge_ids?.length ?? 0) > 0) return true;
+  return false;
+}
+
+/**
+ * 多章共用剧情：落在所链章节垂直中点。
+ * 最左一列相对所链章「单链剧情最右」再空半个卡宽（卡右缘 → 多链卡左缘）。
+ */
+function placeMultiChapterPlots(
+  multis: LayoutNode[],
+  plotChapters: Map<string, string[]>,
+  byId: Map<string, LayoutNode>,
+  plotsByChapter: Map<string, LayoutNode[]>,
+  occupied: { x: number; y: number }[],
+) {
+  const ranked = [...multis].sort((a, b) => {
+    const mid = (p: LayoutNode) => {
+      const chs = (plotChapters.get(p.id) ?? [])
+        .map((id) => byId.get(id))
+        .filter((n): n is LayoutNode => !!n);
+      if (!chs.length) return p.position.y;
+      const ys = chs.map((c) => c.position.y);
+      return (Math.min(...ys) + Math.max(...ys)) / 2;
+    };
+    return mid(a) - mid(b) || a.id.localeCompare(b.id);
+  });
+
+  for (const p of ranked) {
+    const chIds = plotChapters.get(p.id) ?? [];
+    const chs = chIds
+      .map((id) => byId.get(id))
+      .filter((n): n is LayoutNode => !!n);
+    const ys = chs.map((c) => c.position.y);
+    const midY =
+      ys.length > 0 ? (Math.min(...ys) + Math.max(...ys)) / 2 : p.position.y;
+
+    let rightmostSingleX = -Infinity;
+    for (const cid of chIds) {
+      for (const ex of plotsByChapter.get(cid) ?? []) {
+        rightmostSingleX = Math.max(rightmostSingleX, ex.position.x);
+      }
+    }
+    // 单链卡左缘 + 卡宽 = 右缘；再 + 半卡宽 = 多链卡左缘
+    const baseX =
+      rightmostSingleX === -Infinity
+        ? PLOT_X
+        : rightmostSingleX + PLOT_CARD_W + PLOT_CARD_W / 2;
+
+    let x = baseX;
+    // ponytail: 若与已占（含其他多链）重叠则再右移；天花板防死循环
+    for (let step = 0; step < 20; step++) {
+      const cx = baseX + step * PLOT_DX;
+      if (!occupied.some((o) => plotOverlaps(cx, midY, o.x, o.y))) {
+        x = cx;
+        break;
+      }
+    }
+    p.position = { x, y: midY };
+    occupied.push({ x, y: midY });
+  }
+}
+
+/**
+ * 四带：知识（更左）| 人物 | 根+章节 | 剧情。
+ * 主轴（根与章节）按 y 排序一列排布；无链接卡片时竖向贴近，有链接则按侧块高度拉开。
+ * @param sizes Vue Flow `dimensions`，人物卡尤需真实高度以免重叠
+ */
+export function applyAutoLayout(
+  nodes: LayoutNode[],
+  edges: LayoutEdge[],
+  sizes?: Map<string, LayoutSize>,
+): void {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const root = nodes.find((n) => n.kind === "novel");
+  const chapters = nodes.filter((n) => n.kind === "chapter");
+  // 根与章节同一主轴，按当前 y 排序（根也当章节卡处理）
+  const spine = [...(root ? [root] : []), ...chapters].sort(byY);
+  const plotHosts = collectPlotHosts(spine, edges, byId);
+
+  // 人物宿主解析：多宿主剧情取最早一宿主作 primary
+  const plotPrimaryHost = new Map<string, string>();
+  for (const [pid, chs] of plotHosts) {
+    if (chs[0]) plotPrimaryHost.set(pid, chs[0]);
   }
 
   const charHost = resolveHosts(nodes, edges, "character", "linked_character_ids", "character");
   const knowHost = resolveHosts(nodes, edges, "knowledge", "linked_knowledge_ids", "knowledge");
-  liftSidePlotHosts(charHost, plotHost, byId);
-  liftSidePlotHosts(knowHost, plotHost, byId);
+  liftSidePlotHosts(charHost, plotPrimaryHost, byId);
+  liftSidePlotHosts(knowHost, plotPrimaryHost, byId);
 
-  const plotsByChapter = new Map<string, LayoutNode[]>();
+  const plotsByHost = new Map<string, LayoutNode[]>();
+  const multiPlots: LayoutNode[] = [];
   const orphanPlots: LayoutNode[] = [];
   for (const p of nodes.filter((n) => n.kind === "side_plot")) {
-    const hid = plotHost.get(p.id);
-    if (hid && chapters.some((c) => c.id === hid)) {
-      const list = plotsByChapter.get(hid) ?? [];
+    const chs = plotHosts.get(p.id) ?? [];
+    if (chs.length >= 2) {
+      multiPlots.push(p);
+    } else if (chs.length === 1) {
+      const hid = chs[0]!;
+      const list = plotsByHost.get(hid) ?? [];
       list.push(p);
-      plotsByChapter.set(hid, list);
-    } else orphanPlots.push(p);
+      plotsByHost.set(hid, list);
+    } else {
+      orphanPlots.push(p);
+    }
   }
 
-  const sideByHost = new Map<string, LayoutNode[]>();
-  const orphanSide: LayoutNode[] = [];
-  const pushSide = (n: LayoutNode, hid: string | undefined) => {
-    if (hid && (hid === root?.id || chapters.some((c) => c.id === hid))) {
-      const list = sideByHost.get(hid) ?? [];
+  const charsByHost = new Map<string, LayoutNode[]>();
+  const knowsByHost = new Map<string, LayoutNode[]>();
+  const orphanChars: LayoutNode[] = [];
+  const orphanKnows: LayoutNode[] = [];
+  const spineIds = new Set(spine.map((h) => h.id));
+  const pushHosted = (
+    n: LayoutNode,
+    hid: string | undefined,
+    byHost: Map<string, LayoutNode[]>,
+    orphans: LayoutNode[],
+  ) => {
+    if (hid && spineIds.has(hid)) {
+      const list = byHost.get(hid) ?? [];
       list.push(n);
-      sideByHost.set(hid, list);
-    } else orphanSide.push(n);
+      byHost.set(hid, list);
+    } else orphans.push(n);
   };
   for (const n of nodes.filter((n) => n.kind === "character")) {
-    pushSide(n, charHost.get(n.id));
+    pushHosted(n, charHost.get(n.id), charsByHost, orphanChars);
   }
   for (const n of nodes.filter((n) => n.kind === "knowledge")) {
-    pushSide(n, knowHost.get(n.id));
+    pushHosted(n, knowHost.get(n.id), knowsByHost, orphanKnows);
   }
-  for (const list of sideByHost.values()) {
-    list.sort((a, b) => {
-      // 同宿主：人物在前，知识在后，再按原 y
-      const ka = a.kind === "character" ? 0 : 1;
-      const kb = b.kind === "character" ? 0 : 1;
-      return ka - kb || byY(a, b);
-    });
-  }
+  for (const list of charsByHost.values()) list.sort(byY);
+  for (const list of knowsByHost.values()) list.sort(byY);
 
-  const rootSide = root ? (sideByHost.get(root.id) ?? []).slice() : [];
-  const rootSideSpan = gridSpan(rootSide.length, SIDE_DY, MAX_SIDE_COL);
+  const occupiedPlots: { x: number; y: number }[] = [];
 
-  // 先按左右块高度拉开章节，再落网格
-  let y = TOP + Math.max(ROOT_TO_CH, rootSideSpan + CH_PAD);
-  for (const ch of chapters) {
-    ch.position = { x: MAIN_X, y };
-    const plots = (plotsByChapter.get(ch.id) ?? []).sort(byY);
-    const side = sideByHost.get(ch.id) ?? [];
+  let y = TOP;
+  for (const host of spine) {
+    host.position = { x: MAIN_X, y };
+    const plots = (plotsByHost.get(host.id) ?? []).sort(byY);
+    const chars = charsByHost.get(host.id) ?? [];
+    const knows = knowsByHost.get(host.id) ?? [];
+    placeGrid(plots, PLOT_X, y, PLOT_DX, PLOT_DY, MAX_PLOT_COL, 1);
+    for (const p of plots) occupiedPlots.push({ ...p.position });
+    const charSpan = placeSideByHeight(
+      chars,
+      CHAR_X,
+      y,
+      SIDE_DX,
+      MAX_SIDE_COL,
+      -1,
+      sizes,
+    );
+    const knowSpan = placeKnowLeftOfChars(knows, chars, y, sizes);
     const span = Math.max(
       gridSpan(plots.length, PLOT_DY, MAX_PLOT_COL),
-      gridSpan(side.length, SIDE_DY, MAX_SIDE_COL),
+      charSpan,
+      knowSpan,
     );
-    placeGrid(plots, PLOT_X, y, PLOT_DX, PLOT_DY, MAX_PLOT_COL, 1);
-    placeGrid(side, CHAR_X, y, SIDE_DX, SIDE_DY, MAX_SIDE_COL, -1);
-    y = ch.position.y + Math.max(MIN_CHAPTER_GAP, span + CH_PAD);
+    const linked = hostHasLinkedCards(host, plotHosts, plotsByHost, charsByHost, knowsByHost);
+    const step = linked
+      ? Math.max(MIN_CHAPTER_GAP, span + CH_PAD)
+      : Math.max(MIN_CHAPTER_GAP_TIGHT, nodeH(host, sizes) + SIDE_GAP);
+    y = host.position.y + step;
   }
 
-  if (root && rootSide.length) {
-    placeGrid(rootSide, CHAR_X, TOP, SIDE_DX, SIDE_DY, MAX_SIDE_COL, -1);
-  }
+  // 多宿主共用：垂直中点；最左列距单链最右半个卡宽
+  placeMultiChapterPlots(multiPlots, plotHosts, byId, plotsByHost, occupiedPlots);
 
   if (orphanPlots.length) {
     placeGrid(orphanPlots.sort(byY), PLOT_X, y, PLOT_DX, PLOT_DY, MAX_PLOT_COL, 1);
+    for (const p of orphanPlots) occupiedPlots.push({ ...p.position });
     y += gridSpan(orphanPlots.length, PLOT_DY, MAX_PLOT_COL) + CH_PAD;
   }
-  if (orphanSide.length) {
-    orphanSide.sort((a, b) => {
-      const ka = a.kind === "character" ? 0 : 1;
-      const kb = b.kind === "character" ? 0 : 1;
-      return ka - kb || byY(a, b);
-    });
-    placeGrid(orphanSide, CHAR_X, y, SIDE_DX, SIDE_DY, MAX_SIDE_COL, -1);
+  if (orphanChars.length) {
+    placeSideByHeight(orphanChars.sort(byY), CHAR_X, y, SIDE_DX, MAX_SIDE_COL, -1, sizes);
+  }
+  if (orphanKnows.length) {
+    placeKnowLeftOfChars(orphanKnows.sort(byY), orphanChars, y, sizes);
   }
 }
 
 export const __layoutConsts = {
   CHAR_X,
+  KNOW_GAP_FROM_CHAR,
+  SIDE_CARD_W,
   MAIN_X,
   PLOT_X,
   PLOT_DX,
+  PLOT_CARD_W,
   PLOT_DY,
   MAX_PLOT_COL,
   SIDE_DX,
   SIDE_DY,
+  SIDE_GAP,
   MAX_SIDE_COL,
   TOP,
   MIN_CHAPTER_GAP,
+  MIN_CHAPTER_GAP_TIGHT,
   CH_PAD,
-  ROOT_TO_CH,
 };

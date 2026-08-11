@@ -1,0 +1,124 @@
+[
+  {
+    "id": "layer:ui",
+    "name": "前端界面层",
+    "description": "Vue 3 页面、路由、组件库与全局样式，构成小说创作桌面端的用户交互界面。",
+    "nodeIds": [
+      "file:index.html",
+      "file:src/App.vue",
+      "file:src/main.ts",
+      "file:src/router/index.ts",
+      "file:src/style.css",
+      "file:src/views/LibraryView.vue",
+      "file:src/views/NovelsView.vue",
+      "file:src/views/SettingsView.vue",
+      "file:src/views/StatsView.vue",
+      "file:src/views/WorkspaceView.vue",
+      "file:src/components/CharacterCardPanel.vue",
+      "file:src/components/flow/StoryNode.vue",
+      "file:src/components/ui/button/Button.vue",
+      "file:src/components/ui/button/index.ts",
+      "file:src/components/ui/card/Card.vue",
+      "file:src/components/ui/card/CardContent.vue",
+      "file:src/components/ui/card/CardHeader.vue",
+      "file:src/components/ui/card/CardTitle.vue",
+      "file:src/components/ui/card/index.ts",
+      "file:src/components/ui/input/Input.vue",
+      "file:src/components/ui/input/index.ts",
+      "file:src/components/ui/separator/Separator.vue",
+      "file:src/components/ui/separator/index.ts",
+      "file:src/components/ui/textarea/Textarea.vue",
+      "file:src/components/ui/textarea/index.ts"
+    ]
+  },
+  {
+    "id": "layer:frontend-client",
+    "name": "前端客户端层",
+    "description": "前端 invoke API 封装、i18n、Markdown/树布局等共享工具，连接界面与 Tauri 后端。",
+    "nodeIds": [
+      "file:src/i18n/index.ts",
+      "file:src/i18n/messages.ts",
+      "file:src/lib/api.ts",
+      "file:src/lib/chatFormat.ts",
+      "file:src/lib/linediff.ts",
+      "file:src/lib/md.selfcheck.mjs",
+      "file:src/lib/md.ts",
+      "file:src/lib/treeLayout.selfcheck.ts",
+      "file:src/lib/treeLayout.ts",
+      "file:src/lib/utils.ts",
+      "file:src/vite-env.d.ts"
+    ]
+  },
+  {
+    "id": "layer:service",
+    "name": "Rust 业务服务层",
+    "description": "章节生成/精修、知识库、LLM 调用、提示词与目录等 Rust 领域逻辑及 Tauri commands 入口。",
+    "nodeIds": [
+      "file:src-tauri/src/catalog.rs",
+      "file:src-tauri/src/chapter_constraints.rs",
+      "file:src-tauri/src/chapter_memory.rs",
+      "file:src-tauri/src/chunk.rs",
+      "file:src-tauri/src/commands.rs",
+      "file:src-tauri/src/knowledge.rs",
+      "file:src-tauri/src/llm.rs",
+      "file:src-tauri/src/paths.rs",
+      "file:src-tauri/src/prompts.rs",
+      "file:src-tauri/src/sample.rs",
+      "file:src-tauri/src/secret.rs"
+    ]
+  },
+  {
+    "id": "layer:data",
+    "name": "数据持久化层",
+    "description": "SQLite 访问与领域数据模型，为小说、章节与知识库提供本地持久化。",
+    "nodeIds": [
+      "file:src-tauri/src/db.rs",
+      "file:src-tauri/src/models.rs"
+    ]
+  },
+  {
+    "id": "layer:desktop-shell",
+    "name": "Tauri 桌面壳层",
+    "description": "Tauri 应用入口、权限能力、构建脚本与桌面图标/配置，承载桌面运行时外壳。",
+    "nodeIds": [
+      "file:src-tauri/src/main.rs",
+      "file:src-tauri/src/lib.rs",
+      "file:src-tauri/build.rs",
+      "config:src-tauri/capabilities/default.json",
+      "config:src-tauri/tauri.conf.json",
+      "file:src-tauri/icons/icon.icns"
+    ]
+  },
+  {
+    "id": "layer:config",
+    "name": "工程配置层",
+    "description": "前端/Vite/TypeScript、Cargo 与 Understand-Anything 等工程与工具链配置。",
+    "nodeIds": [
+      "config:package.json",
+      "config:tsconfig.json",
+      "config:tsconfig.node.json",
+      "config:components.json",
+      "file:vite.config.ts",
+      "config:src-tauri/Cargo.toml",
+      "config:.ua/config.json",
+      "file:.ua/.understandignore",
+      "config:.ua/tmp/ua-scan-files.json"
+    ]
+  },
+  {
+    "id": "layer:documentation",
+    "name": "文档与规范层",
+    "description": "项目说明、产品文档、Cursor 编码规范以及分析流水线生成的清单类文档。",
+    "nodeIds": [
+      "document:README.md",
+      "document:Project.md",
+      "file:.cursor/rules/i18n-sync.mdc",
+      "file:.cursor/rules/no-window-confirm.mdc",
+      "document:.ua/tmp/commit.txt",
+      "document:.ua/tmp/dir-tree.txt",
+      "document:.ua/tmp/manifest-cargo.txt",
+      "document:.ua/tmp/manifest-pkg.txt",
+      "document:.ua/tmp/readme.txt"
+    ]
+  }
+]

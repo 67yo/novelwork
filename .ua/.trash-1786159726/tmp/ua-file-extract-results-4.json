@@ -1,0 +1,75 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 1,
+  "filesSkipped": [
+    ".ua/tmp/commit.txt",
+    ".ua/tmp/dir-tree.txt",
+    ".ua/tmp/manifest-cargo.txt",
+    ".ua/tmp/manifest-pkg.txt",
+    ".ua/tmp/readme.txt"
+  ],
+  "analysisOutcomes": {
+    "structure": {
+      "succeeded": 1,
+      "failed": 0
+    },
+    "callGraph": {
+      "succeeded": 0,
+      "failed": 0,
+      "skipped": 1
+    }
+  },
+  "results": [
+    {
+      "path": ".ua/tmp/ua-scan-files.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 471,
+      "nonEmptyLines": 471,
+      "sections": [
+        {
+          "heading": "scriptCompleted",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "contentDigest",
+          "level": 1,
+          "line": 3
+        },
+        {
+          "heading": "files",
+          "level": 1,
+          "line": 4
+        },
+        {
+          "heading": "totalFiles",
+          "level": 1,
+          "line": 444
+        },
+        {
+          "heading": "filteredByIgnore",
+          "level": 1,
+          "line": 445
+        },
+        {
+          "heading": "estimatedComplexity",
+          "level": 1,
+          "line": 446
+        },
+        {
+          "heading": "stats",
+          "level": 1,
+          "line": 447
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    }
+  ]
+}

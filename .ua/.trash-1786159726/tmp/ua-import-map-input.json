@@ -1,0 +1,370 @@
+{
+  "projectRoot": "/Users/ablegao/code/novework",
+  "files": [
+    {
+      "path": ".cursor/rules/i18n-sync.mdc",
+      "language": "mdc",
+      "fileCategory": "code"
+    },
+    {
+      "path": ".cursor/rules/no-window-confirm.mdc",
+      "language": "mdc",
+      "fileCategory": "code"
+    },
+    {
+      "path": ".ua/.understandignore",
+      "language": "unknown",
+      "fileCategory": "code"
+    },
+    {
+      "path": ".ua/config.json",
+      "language": "json",
+      "fileCategory": "config"
+    },
+    {
+      "path": ".ua/tmp/commit.txt",
+      "language": "txt",
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".ua/tmp/dir-tree.txt",
+      "language": "txt",
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".ua/tmp/manifest-cargo.txt",
+      "language": "txt",
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".ua/tmp/manifest-pkg.txt",
+      "language": "txt",
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".ua/tmp/readme.txt",
+      "language": "txt",
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".ua/tmp/ua-scan-files.json",
+      "language": "json",
+      "fileCategory": "config"
+    },
+    {
+      "path": "Project.md",
+      "language": "markdown",
+      "fileCategory": "docs"
+    },
+    {
+      "path": "README.md",
+      "language": "markdown",
+      "fileCategory": "docs"
+    },
+    {
+      "path": "components.json",
+      "language": "json",
+      "fileCategory": "config"
+    },
+    {
+      "path": "index.html",
+      "language": "html",
+      "fileCategory": "markup"
+    },
+    {
+      "path": "package.json",
+      "language": "json",
+      "fileCategory": "config"
+    },
+    {
+      "path": "src-tauri/Cargo.toml",
+      "language": "toml",
+      "fileCategory": "config"
+    },
+    {
+      "path": "src-tauri/build.rs",
+      "language": "rust",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src-tauri/capabilities/default.json",
+      "language": "json",
+      "fileCategory": "config"
+    },
+    {
+      "path": "src-tauri/icons/icon.icns",
+      "language": "icns",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src-tauri/src/catalog.rs",
+      "language": "rust",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src-tauri/src/chapter_constraints.rs",
+      "language": "rust",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src-tauri/src/chapter_memory.rs",
+      "language": "rust",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src-tauri/src/chunk.rs",
+      "language": "rust",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src-tauri/src/commands.rs",
+      "language": "rust",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src-tauri/src/db.rs",
+      "language": "rust",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src-tauri/src/knowledge.rs",
+      "language": "rust",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src-tauri/src/lib.rs",
+      "language": "rust",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src-tauri/src/llm.rs",
+      "language": "rust",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src-tauri/src/main.rs",
+      "language": "rust",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src-tauri/src/models.rs",
+      "language": "rust",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src-tauri/src/paths.rs",
+      "language": "rust",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src-tauri/src/prompts.rs",
+      "language": "rust",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src-tauri/src/sample.rs",
+      "language": "rust",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src-tauri/src/secret.rs",
+      "language": "rust",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src-tauri/tauri.conf.json",
+      "language": "json",
+      "fileCategory": "config"
+    },
+    {
+      "path": "src/App.vue",
+      "language": "vue",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/components/CharacterCardPanel.vue",
+      "language": "vue",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/components/flow/StoryNode.vue",
+      "language": "vue",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/components/ui/button/Button.vue",
+      "language": "vue",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/components/ui/button/index.ts",
+      "language": "typescript",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/components/ui/card/Card.vue",
+      "language": "vue",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/components/ui/card/CardContent.vue",
+      "language": "vue",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/components/ui/card/CardHeader.vue",
+      "language": "vue",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/components/ui/card/CardTitle.vue",
+      "language": "vue",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/components/ui/card/index.ts",
+      "language": "typescript",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/components/ui/input/Input.vue",
+      "language": "vue",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/components/ui/input/index.ts",
+      "language": "typescript",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/components/ui/separator/Separator.vue",
+      "language": "vue",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/components/ui/separator/index.ts",
+      "language": "typescript",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/components/ui/textarea/Textarea.vue",
+      "language": "vue",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/components/ui/textarea/index.ts",
+      "language": "typescript",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/i18n/index.ts",
+      "language": "typescript",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/i18n/messages.ts",
+      "language": "typescript",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/lib/api.ts",
+      "language": "typescript",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/lib/chatFormat.ts",
+      "language": "typescript",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/lib/linediff.ts",
+      "language": "typescript",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/lib/md.selfcheck.mjs",
+      "language": "javascript",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/lib/md.ts",
+      "language": "typescript",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/lib/treeLayout.selfcheck.ts",
+      "language": "typescript",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/lib/treeLayout.ts",
+      "language": "typescript",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/lib/utils.ts",
+      "language": "typescript",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/main.ts",
+      "language": "typescript",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/router/index.ts",
+      "language": "typescript",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/style.css",
+      "language": "css",
+      "fileCategory": "markup"
+    },
+    {
+      "path": "src/views/LibraryView.vue",
+      "language": "vue",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/views/NovelsView.vue",
+      "language": "vue",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/views/SettingsView.vue",
+      "language": "vue",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/views/StatsView.vue",
+      "language": "vue",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/views/WorkspaceView.vue",
+      "language": "vue",
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/vite-env.d.ts",
+      "language": "typescript",
+      "fileCategory": "code"
+    },
+    {
+      "path": "tsconfig.json",
+      "language": "json",
+      "fileCategory": "config"
+    },
+    {
+      "path": "tsconfig.node.json",
+      "language": "json",
+      "fileCategory": "config"
+    },
+    {
+      "path": "vite.config.ts",
+      "language": "typescript",
+      "fileCategory": "code"
+    }
+  ]
+}

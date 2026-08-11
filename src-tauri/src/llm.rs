@@ -1,6 +1,5 @@
 use crate::models::AppSettings;
 use anyhow::{anyhow, Result};
-use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -36,13 +35,60 @@ async fn wait_cancel(cancel: &Option<Arc<AtomicBool>>) {
     }
 }
 
-/// Thin DeepSeek client. Uses OpenAI-compatible chat API.
+struct CompatEndpoint<'a> {
+    api_key: &'a str,
+    base_url: &'a str,
+    label: &'a str,
+}
+
+fn compat_endpoint<'a>(settings: &'a AppSettings, model: &str) -> CompatEndpoint<'a> {
+    if let Some(p) = settings.resolve_compat(model) {
+        CompatEndpoint {
+            api_key: p.api_key.as_str(),
+            base_url: p.base_url.as_str(),
+            label: if p.label.trim().is_empty() {
+                "OpenAI"
+            } else {
+                p.label.as_str()
+            },
+        }
+    } else {
+        CompatEndpoint {
+            api_key: "",
+            base_url: "",
+            label: "OpenAI",
+        }
+    }
+}
+
+fn chat_completions_url(base: &str) -> String {
+    let b = base.trim_end_matches('/');
+    if b.ends_with("/v1") {
+        format!("{b}/chat/completions")
+    } else {
+        format!("{b}/v1/chat/completions")
+    }
+}
+
+/// Kimi / Moonshot 部分模型（如 K2）只允许 temperature=1。
+fn chat_temperature_with_hint(model: &str, label: &str, base_url: &str, preferred: f32) -> f32 {
+    let blob = format!("{model} {label} {base_url}").to_ascii_lowercase();
+    if blob.contains("kimi") || blob.contains("moonshot") {
+        1.0
+    } else {
+        preferred
+    }
+}
+
+/// OpenAI-compatible chat via configured compat_providers.
+/// `json_object`: 请求 `response_format=json_object`（Kimi 等模型更稳出可解析 JSON）。
 pub async fn complete(
     settings: &AppSettings,
     system: &str,
     user: &str,
     model: Option<&str>,
     cancel: Option<Arc<AtomicBool>>,
+    json_object: bool,
 ) -> Result<CompletionResult> {
     let model = model
         .filter(|m| !m.trim().is_empty())
@@ -53,7 +99,8 @@ pub async fn complete(
         return Err(anyhow!("cancelled"));
     }
 
-    if settings.deepseek_api_key.trim().is_empty() {
+    let ep = compat_endpoint(settings, &model);
+    if ep.api_key.trim().is_empty() {
         let content = mock_complete(system, user);
         let prompt_tokens = ((system.len() + user.len()) / 4) as u32;
         let completion_tokens = (content.len() / 4) as u32;
@@ -71,27 +118,27 @@ pub async fn complete(
     rig_bridge::warm_client(settings);
     let _ = adk_bridge::describe();
 
-    let base = settings.deepseek_base_url.trim_end_matches('/');
-    let url = format!("{base}/v1/chat/completions");
-    let body = ChatRequest {
-        model: model.clone(),
-        messages: vec![
-            ChatMessage {
-                role: "system".into(),
-                content: system.into(),
-            },
-            ChatMessage {
-                role: "user".into(),
-                content: user.into(),
-            },
+    let url = chat_completions_url(ep.base_url);
+    let mut body = json!({
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
         ],
-        temperature: 0.8,
-    };
+        "temperature": if json_object {
+            0.2
+        } else {
+            chat_temperature_with_hint(&model, ep.label, ep.base_url, 0.8)
+        },
+    });
+    if json_object {
+        body["response_format"] = json!({"type": "json_object"});
+    }
 
     let client = reqwest::Client::new();
     let send = client
         .post(&url)
-        .bearer_auth(&settings.deepseek_api_key)
+        .bearer_auth(ep.api_key)
         .json(&body)
         .send();
 
@@ -110,27 +157,27 @@ pub async fn complete(
             r = resp.text() => r.unwrap_or_default(),
             _ = wait_cancel(&cancel) => return Err(anyhow!("cancelled")),
         };
-        return Err(anyhow!("DeepSeek API {status}: {text}"));
+        return Err(anyhow!("{} API {status}: {text}", ep.label));
     }
 
-    let parsed: ChatResponse = tokio::select! {
+    let parsed: Value = tokio::select! {
         r = resp.json() => r?,
         _ = wait_cancel(&cancel) => return Err(anyhow!("cancelled")),
     };
-    let content = parsed
-        .choices
-        .into_iter()
-        .next()
-        .and_then(|c| c.message.content)
-        .unwrap_or_default();
+    let content = extract_assistant_text(&parsed);
 
-    let (prompt_tokens, completion_tokens, total_tokens) = if let Some(u) = parsed.usage {
-        let total = if u.total_tokens > 0 {
-            u.total_tokens
-        } else {
-            u.prompt_tokens.saturating_add(u.completion_tokens)
-        };
-        (u.prompt_tokens, u.completion_tokens, total)
+    let (prompt_tokens, completion_tokens, total_tokens) = if let Some(u) = parsed.get("usage") {
+        let p = u.get("prompt_tokens").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+        let c = u
+            .get("completion_tokens")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as u32;
+        let total = u
+            .get("total_tokens")
+            .and_then(|v| v.as_u64())
+            .map(|t| t as u32)
+            .unwrap_or_else(|| p.saturating_add(c));
+        (p, c, total)
     } else {
         let p = ((system.len() + user.len()) / 4) as u32;
         let c = (content.len() / 4) as u32;
@@ -145,6 +192,28 @@ pub async fn complete(
         completion_tokens,
         total_tokens,
     })
+}
+
+/// 从 chat.completions 响应取出助手正文（兼容 string / multipart content）。
+fn extract_assistant_text(parsed: &Value) -> String {
+    let msg = parsed.pointer("/choices/0/message").unwrap_or(&Value::Null);
+    let from_content = match msg.get("content") {
+        Some(Value::String(s)) => s.clone(),
+        Some(Value::Array(parts)) => parts
+            .iter()
+            .filter_map(|p| p.get("text").and_then(|t| t.as_str()))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        _ => String::new(),
+    };
+    if !from_content.trim().is_empty() {
+        return from_content;
+    }
+    // 少数兼容网关把终稿放在其它字段；仍不使用 reasoning_content（那是思维链）
+    msg.get("output_text")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string()
 }
 
 #[derive(Debug, Clone)]
@@ -181,7 +250,8 @@ pub async fn complete_tool_round(
         return Err(anyhow!("cancelled"));
     }
 
-    if settings.deepseek_api_key.trim().is_empty() {
+    let ep = compat_endpoint(settings, &model);
+    if ep.api_key.trim().is_empty() {
         let user = messages
             .iter()
             .rev()
@@ -206,20 +276,19 @@ pub async fn complete_tool_round(
         });
     }
 
-    let base = settings.deepseek_base_url.trim_end_matches('/');
-    let url = format!("{base}/v1/chat/completions");
+    let url = chat_completions_url(ep.base_url);
     let body = json!({
         "model": model,
         "messages": messages,
         "tools": tools,
         "tool_choice": "auto",
-        "temperature": 0.7,
+        "temperature": chat_temperature_with_hint(&model, ep.label, ep.base_url, 0.7),
     });
 
     let client = reqwest::Client::new();
     let send = client
         .post(&url)
-        .bearer_auth(&settings.deepseek_api_key)
+        .bearer_auth(ep.api_key)
         .json(&body)
         .send();
 
@@ -238,7 +307,7 @@ pub async fn complete_tool_round(
             r = resp.text() => r.unwrap_or_default(),
             _ = wait_cancel(&cancel) => return Err(anyhow!("cancelled")),
         };
-        return Err(anyhow!("DeepSeek API {status}: {text}"));
+        return Err(anyhow!("{} API {status}: {text}", ep.label));
     }
 
     let parsed: Value = tokio::select! {
@@ -329,57 +398,24 @@ fn truncate(s: &str, n: usize) -> String {
     }
 }
 
-#[derive(Serialize)]
-struct ChatRequest {
-    model: String,
-    messages: Vec<ChatMessage>,
-    temperature: f32,
-}
-
-#[derive(Serialize)]
-struct ChatMessage {
-    role: String,
-    content: String,
-}
-
-#[derive(Deserialize)]
-struct ChatResponse {
-    choices: Vec<Choice>,
-    #[serde(default)]
-    usage: Option<Usage>,
-}
-
-#[derive(Deserialize)]
-struct Usage {
-    #[serde(default)]
-    prompt_tokens: u32,
-    #[serde(default)]
-    completion_tokens: u32,
-    #[serde(default)]
-    total_tokens: u32,
-}
-
-#[derive(Deserialize)]
-struct Choice {
-    message: ChoiceMessage,
-}
-
-#[derive(Deserialize)]
-struct ChoiceMessage {
-    content: Option<String>,
-}
-
 mod rig_bridge {
     use crate::models::AppSettings;
     use rig_core::providers::openai;
 
-    /// Wire rig-core OpenAI-compatible client to DeepSeek base URL.
+    /// Wire rig-core OpenAI-compatible client to first configured provider.
     pub fn warm_client(settings: &AppSettings) {
+        let Some(p) = settings
+            .compat_providers
+            .iter()
+            .find(|p| !p.api_key.trim().is_empty())
+        else {
+            return;
+        };
         let _ = openai::Client::builder()
-            .api_key(&settings.deepseek_api_key)
-            .base_url(&settings.deepseek_base_url)
+            .api_key(&p.api_key)
+            .base_url(&p.base_url)
             .build()
-            .or_else(|_| openai::Client::new(&settings.deepseek_api_key));
+            .or_else(|_| openai::Client::new(&p.api_key));
     }
 }
 
@@ -387,5 +423,23 @@ mod adk_bridge {
     /// Skills injection lives in `crate::skills` (adk-rust `skills` feature).
     pub fn describe() -> &'static str {
         "adk-rust skills enabled for chat"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::chat_temperature_with_hint;
+
+    #[test]
+    fn kimi_forces_temperature_one() {
+        assert_eq!(chat_temperature_with_hint("kimi-k2.5", "", "", 0.8), 1.0);
+        assert_eq!(
+            chat_temperature_with_hint("custom", "Kimi", "https://api.moonshot.ai", 0.7),
+            1.0
+        );
+        assert_eq!(
+            chat_temperature_with_hint("deepseek-chat", "DeepSeek", "https://api.deepseek.com", 0.8),
+            0.8
+        );
     }
 }

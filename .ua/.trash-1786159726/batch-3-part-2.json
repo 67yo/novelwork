@@ -1,0 +1,1031 @@
+{
+  "nodes": [
+    {
+      "id": "file:src-tauri/src/models.rs",
+      "type": "file",
+      "name": "models.rs",
+      "filePath": "src-tauri/src/models.rs",
+      "summary": "后端共享序列化数据模型：设置、知识库、小说树、聊天与 Token 统计等结构体与枚举。",
+      "tags": [
+        "type-definition",
+        "data-model",
+        "serialization"
+      ],
+      "complexity": "complex",
+      "languageNotes": "大量 Serde 可序列化结构体，供 Tauri 命令与前端 IPC 共用。"
+    },
+    {
+      "id": "class:src-tauri/src/models.rs:AppSettings",
+      "type": "class",
+      "name": "AppSettings",
+      "filePath": "src-tauri/src/models.rs",
+      "lineRange": [
+        4,
+        20
+      ],
+      "summary": "应用设置：多厂商 API 密钥、Base URL、各场景默认模型与 UI 语言。",
+      "tags": [
+        "type-definition",
+        "settings",
+        "data-model"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:src-tauri/src/models.rs:ModelCatalog",
+      "type": "class",
+      "name": "ModelCatalog",
+      "filePath": "src-tauri/src/models.rs",
+      "lineRange": [
+        23,
+        36
+      ],
+      "summary": "各厂商可用模型 ID 列表及刷新时间、错误信息。",
+      "tags": [
+        "type-definition",
+        "model-catalog",
+        "data-model"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:src-tauri/src/models.rs:SettingsView",
+      "type": "class",
+      "name": "SettingsView",
+      "filePath": "src-tauri/src/models.rs",
+      "lineRange": [
+        88,
+        108
+      ],
+      "summary": "面向前端的设置视图（密钥脱敏与是否已配置标志）。",
+      "tags": [
+        "type-definition",
+        "settings",
+        "dto"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:src-tauri/src/models.rs:SaveSettingsInput",
+      "type": "class",
+      "name": "SaveSettingsInput",
+      "filePath": "src-tauri/src/models.rs",
+      "lineRange": [
+        112,
+        139
+      ],
+      "summary": "保存设置的输入 DTO，允许部分字段更新。",
+      "tags": [
+        "type-definition",
+        "settings",
+        "dto"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:src-tauri/src/models.rs:KnowledgeBook",
+      "type": "class",
+      "name": "KnowledgeBook",
+      "filePath": "src-tauri/src/models.rs",
+      "lineRange": [
+        142,
+        153
+      ],
+      "summary": "知识库书籍元数据：标题、题材、分块数、归档等。",
+      "tags": [
+        "type-definition",
+        "knowledge",
+        "data-model"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:src-tauri/src/models.rs:KnowledgeChunk",
+      "type": "class",
+      "name": "KnowledgeChunk",
+      "filePath": "src-tauri/src/models.rs",
+      "lineRange": [
+        156,
+        159
+      ],
+      "summary": "知识库文本分块（索引与内容）。",
+      "tags": [
+        "type-definition",
+        "knowledge",
+        "data-model"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:src-tauri/src/models.rs:NovelProject",
+      "type": "class",
+      "name": "NovelProject",
+      "filePath": "src-tauri/src/models.rs",
+      "lineRange": [
+        162,
+        182
+      ],
+      "summary": "小说项目实体：大纲、封面、知识策略与字数/章数约束。",
+      "tags": [
+        "type-definition",
+        "novel",
+        "data-model"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:src-tauri/src/models.rs:CreateNovelInput",
+      "type": "class",
+      "name": "CreateNovelInput",
+      "filePath": "src-tauri/src/models.rs",
+      "lineRange": [
+        196,
+        203
+      ],
+      "summary": "创建小说的输入参数。",
+      "tags": [
+        "type-definition",
+        "novel",
+        "dto"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:src-tauri/src/models.rs:ChatTurn",
+      "type": "class",
+      "name": "ChatTurn",
+      "filePath": "src-tauri/src/models.rs",
+      "lineRange": [
+        207,
+        210
+      ],
+      "summary": "对话轮次（角色与内容）。",
+      "tags": [
+        "type-definition",
+        "chat",
+        "dto"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:src-tauri/src/models.rs:NovelCreateChatInput",
+      "type": "class",
+      "name": "NovelCreateChatInput",
+      "filePath": "src-tauri/src/models.rs",
+      "lineRange": [
+        214,
+        219
+      ],
+      "summary": "建书对话输入：消息列表与是否强制创建。",
+      "tags": [
+        "type-definition",
+        "chat",
+        "dto"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:src-tauri/src/models.rs:NovelCreateChatResult",
+      "type": "class",
+      "name": "NovelCreateChatResult",
+      "filePath": "src-tauri/src/models.rs",
+      "lineRange": [
+        222,
+        226
+      ],
+      "summary": "建书对话结果：回复、是否 mock、可选新建小说。",
+      "tags": [
+        "type-definition",
+        "chat",
+        "dto"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:src-tauri/src/models.rs:NodeKind",
+      "type": "class",
+      "name": "NodeKind",
+      "filePath": "src-tauri/src/models.rs",
+      "lineRange": [
+        230,
+        236
+      ],
+      "summary": "故事树节点类型枚举：小说/章节/角色/支线/知识。",
+      "tags": [
+        "type-definition",
+        "story-tree",
+        "enum"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:src-tauri/src/models.rs:TreeNode",
+      "type": "class",
+      "name": "TreeNode",
+      "filePath": "src-tauri/src/models.rs",
+      "lineRange": [
+        239,
+        266
+      ],
+      "summary": "故事树节点：类型、大纲、角色卡、关联 ID 与画布位置。",
+      "tags": [
+        "type-definition",
+        "story-tree",
+        "data-model"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:src-tauri/src/models.rs:NodePosition",
+      "type": "class",
+      "name": "NodePosition",
+      "filePath": "src-tauri/src/models.rs",
+      "lineRange": [
+        269,
+        272
+      ],
+      "summary": "画布节点坐标。",
+      "tags": [
+        "type-definition",
+        "story-tree"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:src-tauri/src/models.rs:CharacterCard",
+      "type": "class",
+      "name": "CharacterCard",
+      "filePath": "src-tauri/src/models.rs",
+      "lineRange": [
+        275,
+        282
+      ],
+      "summary": "角色卡字段：身份、性格、口头禅、立场等。",
+      "tags": [
+        "type-definition",
+        "character",
+        "data-model"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:src-tauri/src/models.rs:KnowledgeCardPayload",
+      "type": "class",
+      "name": "KnowledgeCardPayload",
+      "filePath": "src-tauri/src/models.rs",
+      "lineRange": [
+        286,
+        294
+      ],
+      "summary": "知识卡载荷：书籍 ID、抽取提示与已抽取内容。",
+      "tags": [
+        "type-definition",
+        "knowledge",
+        "data-model"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:src-tauri/src/models.rs:TreeEdge",
+      "type": "class",
+      "name": "TreeEdge",
+      "filePath": "src-tauri/src/models.rs",
+      "lineRange": [
+        297,
+        309
+      ],
+      "summary": "故事树边：源/目标、类型与 Vue Flow handle。",
+      "tags": [
+        "type-definition",
+        "story-tree",
+        "data-model"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:src-tauri/src/models.rs:NovelTree",
+      "type": "class",
+      "name": "NovelTree",
+      "filePath": "src-tauri/src/models.rs",
+      "lineRange": [
+        312,
+        316
+      ],
+      "summary": "整棵故事树：节点与边集合。",
+      "tags": [
+        "type-definition",
+        "story-tree",
+        "data-model"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:src-tauri/src/models.rs:ChatMessage",
+      "type": "class",
+      "name": "ChatMessage",
+      "filePath": "src-tauri/src/models.rs",
+      "lineRange": [
+        319,
+        325
+      ],
+      "summary": "持久化聊天消息记录。",
+      "tags": [
+        "type-definition",
+        "chat",
+        "data-model"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:src-tauri/src/models.rs:GenerateResult",
+      "type": "class",
+      "name": "GenerateResult",
+      "filePath": "src-tauri/src/models.rs",
+      "lineRange": [
+        328,
+        332
+      ],
+      "summary": "章节生成/润色结果。",
+      "tags": [
+        "type-definition",
+        "generation",
+        "dto"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:src-tauri/src/models.rs:CardChatResult",
+      "type": "class",
+      "name": "CardChatResult",
+      "filePath": "src-tauri/src/models.rs",
+      "lineRange": [
+        335,
+        338
+      ],
+      "summary": "卡片对话结果：回复与更新后的树。",
+      "tags": [
+        "type-definition",
+        "chat",
+        "dto"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:src-tauri/src/models.rs:TokenUsageHourRow",
+      "type": "class",
+      "name": "TokenUsageHourRow",
+      "filePath": "src-tauri/src/models.rs",
+      "lineRange": [
+        341,
+        347
+      ],
+      "summary": "按小时与模型的 Token 用量行。",
+      "tags": [
+        "type-definition",
+        "analytics",
+        "data-model"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:src-tauri/src/models.rs:TokenUsageNovelRow",
+      "type": "class",
+      "name": "TokenUsageNovelRow",
+      "filePath": "src-tauri/src/models.rs",
+      "lineRange": [
+        350,
+        355
+      ],
+      "summary": "按小说汇总的 Token 用量行。",
+      "tags": [
+        "type-definition",
+        "analytics",
+        "data-model"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:src-tauri/src/models.rs:TokenUsageDay",
+      "type": "class",
+      "name": "TokenUsageDay",
+      "filePath": "src-tauri/src/models.rs",
+      "lineRange": [
+        358,
+        363
+      ],
+      "summary": "日级 Token 用量聚合视图。",
+      "tags": [
+        "type-definition",
+        "analytics",
+        "data-model"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:src-tauri/src/models.rs:TokenUsageModelRow",
+      "type": "class",
+      "name": "TokenUsageModelRow",
+      "filePath": "src-tauri/src/models.rs",
+      "lineRange": [
+        366,
+        369
+      ],
+      "summary": "按模型汇总的 Token 用量。",
+      "tags": [
+        "type-definition",
+        "analytics",
+        "data-model"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:src-tauri/src/models.rs:TokenUsageMonth",
+      "type": "class",
+      "name": "TokenUsageMonth",
+      "filePath": "src-tauri/src/models.rs",
+      "lineRange": [
+        372,
+        377
+      ],
+      "summary": "月级 Token 用量聚合视图。",
+      "tags": [
+        "type-definition",
+        "analytics",
+        "data-model"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/models.rs:all_ids",
+      "type": "function",
+      "name": "all_ids",
+      "filePath": "src-tauri/src/models.rs",
+      "lineRange": [
+        39,
+        48
+      ],
+      "summary": "合并各厂商模型 ID 并去重排序。",
+      "tags": [
+        "utility",
+        "model-catalog"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/models.rs:seed",
+      "type": "function",
+      "name": "seed",
+      "filePath": "src-tauri/src/models.rs",
+      "lineRange": [
+        50,
+        64
+      ],
+      "summary": "构造带默认 DeepSeek 模型列表的初始 ModelCatalog。",
+      "tags": [
+        "factory",
+        "model-catalog"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/models.rs:default",
+      "type": "function",
+      "name": "default",
+      "filePath": "src-tauri/src/models.rs",
+      "lineRange": [
+        68,
+        84
+      ],
+      "summary": "提供 AppSettings 的默认配置（密钥空、默认 DeepSeek 模型）。",
+      "tags": [
+        "factory",
+        "settings"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src-tauri/src/sample.rs",
+      "type": "file",
+      "name": "sample.rs",
+      "filePath": "src-tauri/src/sample.rs",
+      "summary": "在空库时植入「雾港回声」示例小说及其完整故事树 JSON，便于首次体验。",
+      "tags": [
+        "factory",
+        "seed-data",
+        "demo"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/sample.rs:ensure_sample",
+      "type": "function",
+      "name": "ensure_sample",
+      "filePath": "src-tauri/src/sample.rs",
+      "lineRange": [
+        8,
+        37
+      ],
+      "summary": "若无小说则写入示例项目元数据与故事树文件。",
+      "tags": [
+        "factory",
+        "seed-data"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/sample.rs:sample_tree",
+      "type": "function",
+      "name": "sample_tree",
+      "filePath": "src-tauri/src/sample.rs",
+      "lineRange": [
+        39,
+        235
+      ],
+      "summary": "构建示例小说的完整 NovelTree（章节、角色、支线等节点）。",
+      "tags": [
+        "factory",
+        "seed-data",
+        "story-tree"
+      ],
+      "complexity": "complex"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:AppSettings",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:AppSettings",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:ModelCatalog",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:ModelCatalog",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:SettingsView",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:SettingsView",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:SaveSettingsInput",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:SaveSettingsInput",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:KnowledgeBook",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:KnowledgeBook",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:KnowledgeChunk",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:KnowledgeChunk",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:NovelProject",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:NovelProject",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:CreateNovelInput",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:CreateNovelInput",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:ChatTurn",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:ChatTurn",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:NovelCreateChatInput",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:NovelCreateChatInput",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:NovelCreateChatResult",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:NovelCreateChatResult",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:NodeKind",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:NodeKind",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:TreeNode",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:TreeNode",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:NodePosition",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:NodePosition",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:CharacterCard",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:CharacterCard",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:KnowledgeCardPayload",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:KnowledgeCardPayload",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:TreeEdge",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:TreeEdge",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:NovelTree",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:NovelTree",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:ChatMessage",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:ChatMessage",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:GenerateResult",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:GenerateResult",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:CardChatResult",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:CardChatResult",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:TokenUsageHourRow",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:TokenUsageHourRow",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:TokenUsageNovelRow",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:TokenUsageNovelRow",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:TokenUsageDay",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:TokenUsageDay",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:TokenUsageModelRow",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:TokenUsageModelRow",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:TokenUsageMonth",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "class:src-tauri/src/models.rs:TokenUsageMonth",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "function:src-tauri/src/models.rs:all_ids",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "function:src-tauri/src/models.rs:all_ids",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "function:src-tauri/src/models.rs:seed",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "function:src-tauri/src/models.rs:seed",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/models.rs",
+      "target": "function:src-tauri/src/models.rs:default",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/sample.rs",
+      "target": "file:src-tauri/src/db.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src-tauri/src/sample.rs",
+      "target": "file:src-tauri/src/models.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src-tauri/src/sample.rs",
+      "target": "file:src-tauri/src/paths.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src-tauri/src/sample.rs",
+      "target": "function:src-tauri/src/sample.rs:ensure_sample",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/sample.rs",
+      "target": "function:src-tauri/src/sample.rs:ensure_sample",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/sample.rs",
+      "target": "function:src-tauri/src/sample.rs:sample_tree",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "function:src-tauri/src/sample.rs:ensure_sample",
+      "target": "function:src-tauri/src/sample.rs:sample_tree",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/sample.rs:ensure_sample",
+      "target": "function:src-tauri/src/db.rs:list_novels",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/sample.rs:ensure_sample",
+      "target": "function:src-tauri/src/db.rs:upsert_novel",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/sample.rs:ensure_sample",
+      "target": "function:src-tauri/src/paths.rs:novel_meta_path",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/sample.rs:ensure_sample",
+      "target": "function:src-tauri/src/paths.rs:novel_tree_path",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    }
+  ]
+}

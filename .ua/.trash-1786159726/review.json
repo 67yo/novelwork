@@ -1,0 +1,32 @@
+{
+  "issues": [],
+  "warnings": [
+    "Node 'file:.cursor/rules/no-window-confirm.mdc' has no edges (orphan)",
+    "Node 'file:src/vite-env.d.ts' has no edges (orphan)",
+    "Node 'file:vite.config.ts' has no edges (orphan)"
+  ],
+  "stats": {
+    "totalNodes": 420,
+    "totalEdges": 718,
+    "totalLayers": 7,
+    "tourSteps": 12,
+    "nodeTypes": {
+      "file": 57,
+      "class": 34,
+      "function": 313,
+      "document": 7,
+      "config": 9
+    },
+    "edgeTypes": {
+      "contains": 347,
+      "exports": 172,
+      "imports": 42,
+      "calls": 119,
+      "documents": 4,
+      "related": 18,
+      "configures": 5,
+      "depends_on": 9,
+      "tested_by": 2
+    }
+  }
+}

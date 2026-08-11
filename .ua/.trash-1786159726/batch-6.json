@@ -1,0 +1,345 @@
+{
+  "nodes": [
+    {
+      "id": "file:.cursor/rules/i18n-sync.mdc",
+      "type": "file",
+      "name": "i18n-sync.mdc",
+      "filePath": ".cursor/rules/i18n-sync.mdc",
+      "summary": "Cursor 规则：要求 UI 文案以 zhCN 为源，同步更新 en/zh-TW/ja/de/fr，禁止硬编码用户可见字符串。",
+      "tags": ["cursor-rule", "i18n", "文档规范", "always-apply"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:.cursor/rules/no-window-confirm.mdc",
+      "type": "file",
+      "name": "no-window-confirm.mdc",
+      "filePath": ".cursor/rules/no-window-confirm.mdc",
+      "summary": "Cursor 规则：禁止使用 window.confirm/prompt/alert，要求用应用内模态框，高风险删除需二次确认。",
+      "tags": ["cursor-rule", "ux", "确认对话框", "always-apply"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:.ua/.understandignore",
+      "type": "file",
+      "name": ".understandignore",
+      "filePath": ".ua/.understandignore",
+      "summary": "Understand-Anything 分析忽略列表，排除构建产物、本地环境文件与 Tauri target 等噪声路径。",
+      "tags": ["configuration", "ignore-list", "分析工具", "gitignore-style"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:.ua/config.json",
+      "type": "config",
+      "name": "config.json",
+      "filePath": ".ua/config.json",
+      "summary": "Understand-Anything 项目配置，将知识图谱文本输出语言设为中文（zh）。",
+      "tags": ["configuration", "understand-anything", "i18n", "输出语言"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:src-tauri/Cargo.toml",
+      "type": "config",
+      "name": "Cargo.toml",
+      "filePath": "src-tauri/Cargo.toml",
+      "summary": "Tauri 后端 Rust crate 清单：定义 nove-work / nove_work_lib，并声明 Tauri、SQLite、LLM 与向量库等依赖。",
+      "tags": ["configuration", "rust", "cargo", "依赖管理", "tauri"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src-tauri/build.rs",
+      "type": "file",
+      "name": "build.rs",
+      "filePath": "src-tauri/build.rs",
+      "summary": "Cargo 构建脚本入口，调用 tauri_build::build 生成 Tauri 构建时资源与绑定。",
+      "tags": ["build-system", "tauri", "entry-point", "rust"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:src-tauri/capabilities/default.json",
+      "type": "config",
+      "name": "default.json",
+      "filePath": "src-tauri/capabilities/default.json",
+      "summary": "Tauri 2 默认能力配置：为 main 窗口授予 core、opener 与 dialog 默认权限。",
+      "tags": ["configuration", "tauri", "permissions", "security"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src-tauri/icons/icon.icns",
+      "type": "file",
+      "name": "icon.icns",
+      "filePath": "src-tauri/icons/icon.icns",
+      "summary": "macOS 应用图标资源（.icns），供 Tauri 打包配置引用。",
+      "tags": ["asset", "icon", "macos", "bundle"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src-tauri/src/main.rs",
+      "type": "file",
+      "name": "main.rs",
+      "filePath": "src-tauri/src/main.rs",
+      "summary": "桌面应用二进制入口：在 Windows release 隐藏控制台，并委托 nove_work_lib::run 启动。",
+      "tags": ["entry-point", "tauri", "rust", "desktop"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:src-tauri/tauri.conf.json",
+      "type": "config",
+      "name": "tauri.conf.json",
+      "filePath": "src-tauri/tauri.conf.json",
+      "summary": "Tauri 应用主配置：产品名、窗口尺寸、前后端构建命令、资源协议与打包图标列表。",
+      "tags": ["configuration", "tauri", "build-system", "desktop"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/components/CharacterCardPanel.vue",
+      "type": "file",
+      "name": "CharacterCardPanel.vue",
+      "filePath": "src/components/CharacterCardPanel.vue",
+      "summary": "展示角色卡详情的只读面板：姓名、性别、定位、阵营、性格、文风与座右铭，文案走 i18n。",
+      "tags": ["component", "character", "ui", "i18n"],
+      "complexity": "simple",
+      "languageNotes": "Vue 3 `<script setup>` 组件，通过 props 接收 CharacterCard。"
+    },
+    {
+      "id": "file:src/components/flow/StoryNode.vue",
+      "type": "file",
+      "name": "StoryNode.vue",
+      "filePath": "src/components/flow/StoryNode.vue",
+      "summary": "Vue Flow 故事树节点：按 novel/chapter/character/side_plot/knowledge 渲染样式、封面、字数目标与连接手柄。",
+      "tags": ["component", "vue-flow", "story-tree", "ui"],
+      "complexity": "moderate",
+      "languageNotes": "大量 computed 驱动节点外观与 Handle 颜色，适配多种 TreeNode.kind。"
+    },
+    {
+      "id": "file:src/components/ui/button/Button.vue",
+      "type": "file",
+      "name": "Button.vue",
+      "filePath": "src/components/ui/button/Button.vue",
+      "summary": "基础按钮组件，支持 variant/size/disabled，并用 cn 合并 Tailwind 类名。",
+      "tags": ["component", "ui", "button", "design-system"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/components/ui/button/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "src/components/ui/button/index.ts",
+      "summary": "Button 组件桶文件，再导出默认 Button.vue。",
+      "tags": ["barrel", "exports", "ui", "entry-point"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/components/ui/card/Card.vue",
+      "type": "file",
+      "name": "Card.vue",
+      "filePath": "src/components/ui/card/Card.vue",
+      "summary": "卡片容器根组件，提供圆角边框与阴影的 slot 包装。",
+      "tags": ["component", "ui", "card", "design-system"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/components/ui/card/CardContent.vue",
+      "type": "file",
+      "name": "CardContent.vue",
+      "filePath": "src/components/ui/card/CardContent.vue",
+      "summary": "卡片内容区布局组件，统一内边距样式。",
+      "tags": ["component", "ui", "card", "layout"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/components/ui/card/CardHeader.vue",
+      "type": "file",
+      "name": "CardHeader.vue",
+      "filePath": "src/components/ui/card/CardHeader.vue",
+      "summary": "卡片头部布局组件，纵向排列标题与附属内容。",
+      "tags": ["component", "ui", "card", "layout"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/components/ui/card/CardTitle.vue",
+      "type": "file",
+      "name": "CardTitle.vue",
+      "filePath": "src/components/ui/card/CardTitle.vue",
+      "summary": "卡片标题排版组件，使用加粗紧凑的标题样式。",
+      "tags": ["component", "ui", "card", "typography"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/components/ui/card/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "src/components/ui/card/index.ts",
+      "summary": "Card 系列组件桶文件，统一导出 Card/Header/Title/Content。",
+      "tags": ["barrel", "exports", "ui", "entry-point"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/components/ui/input/Input.vue",
+      "type": "file",
+      "name": "Input.vue",
+      "filePath": "src/components/ui/input/Input.vue",
+      "summary": "受控输入框组件，支持 v-model、数字类型转换与禁用/只读状态。",
+      "tags": ["component", "ui", "input", "form"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/components/ui/input/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "src/components/ui/input/index.ts",
+      "summary": "Input 组件桶文件，再导出默认 Input.vue。",
+      "tags": ["barrel", "exports", "ui", "entry-point"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/components/ui/separator/Separator.vue",
+      "type": "file",
+      "name": "Separator.vue",
+      "filePath": "src/components/ui/separator/Separator.vue",
+      "summary": "水平/垂直分隔线组件，用于界面区块分割。",
+      "tags": ["component", "ui", "separator", "layout"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/components/ui/separator/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "src/components/ui/separator/index.ts",
+      "summary": "Separator 组件桶文件，再导出默认 Separator.vue。",
+      "tags": ["barrel", "exports", "ui", "entry-point"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/components/ui/textarea/Textarea.vue",
+      "type": "file",
+      "name": "Textarea.vue",
+      "filePath": "src/components/ui/textarea/Textarea.vue",
+      "summary": "受控多行文本框组件，支持 v-model、占位符与行数配置。",
+      "tags": ["component", "ui", "textarea", "form"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/components/ui/textarea/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "src/components/ui/textarea/index.ts",
+      "summary": "Textarea 组件桶文件，再导出默认 Textarea.vue。",
+      "tags": ["barrel", "exports", "ui", "entry-point"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "config:src-tauri/Cargo.toml",
+      "target": "file:src-tauri/build.rs",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "config:src-tauri/Cargo.toml",
+      "target": "file:src-tauri/src/main.rs",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "config:src-tauri/tauri.conf.json",
+      "target": "file:src-tauri/src/main.rs",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "config:src-tauri/tauri.conf.json",
+      "target": "file:src-tauri/icons/icon.icns",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "config:src-tauri/capabilities/default.json",
+      "target": "file:src-tauri/src/main.rs",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "config:.ua/config.json",
+      "target": "file:.ua/.understandignore",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:.cursor/rules/i18n-sync.mdc",
+      "target": "file:src/components/CharacterCardPanel.vue",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:.cursor/rules/i18n-sync.mdc",
+      "target": "file:src/components/flow/StoryNode.vue",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:src/components/ui/button/index.ts",
+      "target": "file:src/components/ui/button/Button.vue",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:src/components/ui/card/index.ts",
+      "target": "file:src/components/ui/card/Card.vue",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:src/components/ui/card/index.ts",
+      "target": "file:src/components/ui/card/CardHeader.vue",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:src/components/ui/card/index.ts",
+      "target": "file:src/components/ui/card/CardTitle.vue",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:src/components/ui/card/index.ts",
+      "target": "file:src/components/ui/card/CardContent.vue",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:src/components/ui/input/index.ts",
+      "target": "file:src/components/ui/input/Input.vue",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:src/components/ui/separator/index.ts",
+      "target": "file:src/components/ui/separator/Separator.vue",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:src/components/ui/textarea/index.ts",
+      "target": "file:src/components/ui/textarea/Textarea.vue",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    }
+  ]
+}

@@ -1,0 +1,119 @@
+{
+  "nodes": [
+    {
+      "id": "document:Project.md",
+      "type": "document",
+      "name": "Project.md",
+      "filePath": "Project.md",
+      "summary": "记录 Nove Work 章节预生成与精修的产品约定，涵盖输入材料优先级、落地检查、硬性篇幅、章节记忆库及改动检查清单。",
+      "tags": ["documentation", "product-spec", "chapter-pipeline", "llm-workflow"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:README.md",
+      "type": "document",
+      "name": "README.md",
+      "filePath": "README.md",
+      "summary": "项目总览与快速上手说明，介绍技术栈、本地开发命令、DeepSeek API Key 配置，以及 Demo 功能与数据目录结构。",
+      "tags": ["documentation", "entry-point", "getting-started", "overview"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:components.json",
+      "type": "config",
+      "name": "components.json",
+      "filePath": "components.json",
+      "summary": "shadcn-vue 组件脚手架配置，指定 new-york 风格、Tailwind 入口 CSS、路径别名与 lucide 图标库。",
+      "tags": ["configuration", "shadcn-vue", "ui-components", "aliases"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:index.html",
+      "type": "file",
+      "name": "index.html",
+      "filePath": "index.html",
+      "summary": "Vite 前端 HTML 入口，挂载 #app 容器并以模块方式加载 src/main.ts。",
+      "tags": ["entry-point", "markup", "vite", "bootstrap"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:package.json",
+      "type": "config",
+      "name": "package.json",
+      "filePath": "package.json",
+      "summary": "前端包清单，定义 Vite/Vue/Tauri 脚本及 Vue Flow、Tailwind、reka-ui 等运行与开发依赖。",
+      "tags": ["configuration", "dependencies", "build-system", "npm-scripts"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:tsconfig.json",
+      "type": "config",
+      "name": "tsconfig.json",
+      "filePath": "tsconfig.json",
+      "summary": "前端 TypeScript 编译配置：严格模式、bundler 解析、@/* 路径别名，并引用 tsconfig.node.json。",
+      "tags": ["configuration", "typescript", "build-system", "path-aliases"],
+      "complexity": "simple",
+      "languageNotes": "通过 project references 关联 Node/Vite 侧 tsconfig。"
+    },
+    {
+      "id": "config:tsconfig.node.json",
+      "type": "config",
+      "name": "tsconfig.node.json",
+      "filePath": "tsconfig.node.json",
+      "summary": "供 Vite 配置文件使用的 TypeScript 工程引用配置，启用 composite 并仅包含 vite.config.ts。",
+      "tags": ["configuration", "typescript", "vite", "build-system"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:README.md",
+      "target": "config:package.json",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:README.md",
+      "target": "document:Project.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:Project.md",
+      "target": "document:README.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "config:package.json",
+      "target": "file:index.html",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "config:tsconfig.json",
+      "target": "config:tsconfig.node.json",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "config:components.json",
+      "target": "config:package.json",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "config:tsconfig.json",
+      "target": "file:index.html",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

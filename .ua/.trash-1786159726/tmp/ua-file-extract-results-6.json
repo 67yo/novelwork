@@ -1,0 +1,353 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 11,
+  "filesSkipped": [
+    ".cursor/rules/i18n-sync.mdc",
+    ".cursor/rules/no-window-confirm.mdc",
+    ".ua/.understandignore",
+    "src-tauri/icons/icon.icns",
+    "src/components/CharacterCardPanel.vue",
+    "src/components/flow/StoryNode.vue",
+    "src/components/ui/button/Button.vue",
+    "src/components/ui/card/Card.vue",
+    "src/components/ui/card/CardContent.vue",
+    "src/components/ui/card/CardHeader.vue",
+    "src/components/ui/card/CardTitle.vue",
+    "src/components/ui/input/Input.vue",
+    "src/components/ui/separator/Separator.vue",
+    "src/components/ui/textarea/Textarea.vue"
+  ],
+  "analysisOutcomes": {
+    "structure": {
+      "succeeded": 11,
+      "failed": 0
+    },
+    "callGraph": {
+      "succeeded": 7,
+      "failed": 0,
+      "skipped": 4
+    }
+  },
+  "results": [
+    {
+      "path": ".ua/config.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 3,
+      "nonEmptyLines": 3,
+      "sections": [
+        {
+          "heading": "outputLanguage",
+          "level": 1,
+          "line": 2
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      }
+    },
+    {
+      "path": "src-tauri/Cargo.toml",
+      "language": "toml",
+      "fileCategory": "config",
+      "totalLines": 42,
+      "nonEmptyLines": 39,
+      "sections": [
+        {
+          "heading": "package",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "lib",
+          "level": 1,
+          "line": 8
+        },
+        {
+          "heading": "build-dependencies",
+          "level": 1,
+          "line": 12
+        },
+        {
+          "heading": "dependencies",
+          "level": 1,
+          "line": 15
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 4
+      }
+    },
+    {
+      "path": "src-tauri/build.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 3,
+      "nonEmptyLines": 3,
+      "functions": [
+        {
+          "name": "main",
+          "startLine": 1,
+          "endLine": 3,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "main",
+          "callee": "tauri_build::build",
+          "lineNumber": 2
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src-tauri/capabilities/default.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 11,
+      "nonEmptyLines": 11,
+      "sections": [
+        {
+          "heading": "$schema",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "identifier",
+          "level": 1,
+          "line": 3
+        },
+        {
+          "heading": "description",
+          "level": 1,
+          "line": 4
+        },
+        {
+          "heading": "windows",
+          "level": 1,
+          "line": 5
+        },
+        {
+          "heading": "permissions",
+          "level": 1,
+          "line": 6
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 5
+      }
+    },
+    {
+      "path": "src-tauri/src/main.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 6,
+      "nonEmptyLines": 5,
+      "functions": [
+        {
+          "name": "main",
+          "startLine": 4,
+          "endLine": 6,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "main",
+          "callee": "nove_work_lib::run",
+          "lineNumber": 5
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src-tauri/tauri.conf.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 41,
+      "nonEmptyLines": 41,
+      "sections": [
+        {
+          "heading": "$schema",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "productName",
+          "level": 1,
+          "line": 3
+        },
+        {
+          "heading": "version",
+          "level": 1,
+          "line": 4
+        },
+        {
+          "heading": "identifier",
+          "level": 1,
+          "line": 5
+        },
+        {
+          "heading": "build",
+          "level": 1,
+          "line": 6
+        },
+        {
+          "heading": "app",
+          "level": 1,
+          "line": 12
+        },
+        {
+          "heading": "bundle",
+          "level": 1,
+          "line": 30
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": "src/components/ui/button/index.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 1,
+      "nonEmptyLines": 1,
+      "exports": [
+        {
+          "name": "Button",
+          "line": 1,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/components/ui/card/index.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 4,
+      "nonEmptyLines": 4,
+      "exports": [
+        {
+          "name": "Card",
+          "line": 1,
+          "isDefault": false
+        },
+        {
+          "name": "CardHeader",
+          "line": 2,
+          "isDefault": false
+        },
+        {
+          "name": "CardTitle",
+          "line": 3,
+          "isDefault": false
+        },
+        {
+          "name": "CardContent",
+          "line": 4,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 4,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/components/ui/input/index.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 1,
+      "nonEmptyLines": 1,
+      "exports": [
+        {
+          "name": "Input",
+          "line": 1,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/components/ui/separator/index.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 1,
+      "nonEmptyLines": 1,
+      "exports": [
+        {
+          "name": "Separator",
+          "line": 1,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/components/ui/textarea/index.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 1,
+      "nonEmptyLines": 1,
+      "exports": [
+        {
+          "name": "Textarea",
+          "line": 1,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    }
+  ]
+}

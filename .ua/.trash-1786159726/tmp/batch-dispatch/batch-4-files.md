@@ -1,0 +1,6 @@
+1. `.ua/tmp/commit.txt` (1 lines, language: `txt`, fileCategory: `docs`)
+2. `.ua/tmp/dir-tree.txt` (27 lines, language: `txt`, fileCategory: `docs`)
+3. `.ua/tmp/manifest-cargo.txt` (42 lines, language: `txt`, fileCategory: `docs`)
+4. `.ua/tmp/manifest-pkg.txt` (42 lines, language: `txt`, fileCategory: `docs`)
+5. `.ua/tmp/readme.txt` (44 lines, language: `txt`, fileCategory: `docs`)
+6. `.ua/tmp/ua-scan-files.json` (464 lines, language: `json`, fileCategory: `config`)

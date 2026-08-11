@@ -15,11 +15,9 @@ async function refreshKey() {
   try {
     const s = await api.getSettings();
     keyOk.value =
-      s.deepseek_api_key_configured ||
-      s.chatgpt_api_key_configured ||
+      (s.compat_providers || []).some((p) => p.api_key_configured) ||
       s.gemini_api_key_configured ||
-      s.claude_api_key_configured ||
-      s.grok_api_key_configured;
+      s.claude_api_key_configured;
     setLocalePreference((s.ui_locale || "system") as LocalePreference);
   } catch {
     keyOk.value = false;

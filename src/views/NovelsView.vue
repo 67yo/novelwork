@@ -4,6 +4,7 @@ import { useRouter } from "vue-router";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { api, type ChatTurn, type NovelProject } from "@/lib/api";
 import { formatChatContent } from "@/lib/chatFormat";
+import { usePersistedChatModel } from "@/lib/chatModel";
 import { useI18n } from "@/i18n";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -23,6 +24,12 @@ const chatInput = ref("");
 const busy = ref(false);
 const error = ref("");
 const listEl = ref<HTMLElement | null>(null);
+const {
+  model: chatModel,
+  options: chatModelOptions,
+  load: loadChatModel,
+  persist: persistChatModel,
+} = usePersistedChatModel("create_model");
 
 const visible = computed(() =>
   novels.value.filter((n) => (tab.value === "archived" ? n.archived : !n.archived)),
@@ -42,7 +49,10 @@ function openCreate() {
   resetMessages();
 }
 
-onMounted(refresh);
+onMounted(() => {
+  void refresh();
+  void loadChatModel(t("settings.deprecated"));
+});
 
 function closeCreate() {
   showCreate.value = false;
@@ -80,7 +90,7 @@ async function send(forceCreate = false) {
       await scrollBottom();
     }
 
-    const r = await api.createNovelChat(messages.value, forceCreate);
+    const r = await api.createNovelChat(messages.value, forceCreate, chatModel.value);
     messages.value = [...messages.value, { role: "assistant", content: r.reply }];
     await scrollBottom();
     if (r.used_mock) {
@@ -203,7 +213,16 @@ async function confirmDelete() {
           :placeholder="t('novels.placeholder')"
           @keydown="onChatKeydown"
         />
-        <div class="flex flex-wrap gap-2">
+        <div class="flex flex-wrap items-center gap-2">
+          <select
+            v-model="chatModel"
+            class="h-9 min-w-[9rem] flex-1 rounded-md border border-input bg-background px-2 text-xs"
+            :aria-label="t('chat.pickModel')"
+            :disabled="busy"
+            @change="persistChatModel"
+          >
+            <option v-for="m in chatModelOptions" :key="m.id" :value="m.id">{{ m.label }}</option>
+          </select>
           <Button v-if="busy" variant="destructive" @click="stopChat">
             {{ t("workspace.stop") }}
           </Button>
