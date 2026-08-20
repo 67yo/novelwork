@@ -1,0 +1,8 @@
+1. `src/App.vue` (84 lines, language: `vue`, fileCategory: `code`)
+2. `src/main.ts` (10 lines, language: `typescript`, fileCategory: `code`)
+3. `src/router/index.ts` (20 lines, language: `typescript`, fileCategory: `code`)
+4. `src/views/LibraryView.vue` (549 lines, language: `vue`, fileCategory: `code`)
+5. `src/views/NovelsView.vue` (305 lines, language: `vue`, fileCategory: `code`)
+6. `src/views/SettingsView.vue` (404 lines, language: `vue`, fileCategory: `code`)
+7. `src/views/StatsView.vue` (404 lines, language: `vue`, fileCategory: `code`)
+8. `src/views/WorkspaceView.vue` (2233 lines, language: `vue`, fileCategory: `code`)

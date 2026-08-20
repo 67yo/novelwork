@@ -1,0 +1,524 @@
+{
+  "nodes": [
+    {
+      "id": "file:src-tauri/src/chapter_constraints.rs",
+      "type": "file",
+      "name": "chapter_constraints.rs",
+      "filePath": "src-tauri/src/chapter_constraints.rs",
+      "summary": "从章节大纲解析落地节拍，并校验正文是否覆盖约定剧情点，为生成/修复流程提供契约文本。",
+      "tags": [
+        "validation",
+        "service",
+        "chapter",
+        "约束"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:src-tauri/src/chapter_constraints.rs:LandBeat",
+      "type": "class",
+      "name": "LandBeat",
+      "filePath": "src-tauri/src/chapter_constraints.rs",
+      "lineRange": [
+        7,
+        12
+      ],
+      "summary": "表示需在正文中落地的大纲节拍，含类型、标题与原文。",
+      "tags": [
+        "data-model",
+        "validation",
+        "节拍"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/chapter_constraints.rs:outline_beats",
+      "type": "function",
+      "name": "outline_beats",
+      "filePath": "src-tauri/src/chapter_constraints.rs",
+      "lineRange": [
+        15,
+        54
+      ],
+      "summary": "从大纲文本提取可落地的剧情节拍列表。",
+      "tags": [
+        "validation",
+        "chapter",
+        "约束"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/chapter_constraints.rs:format_contract",
+      "type": "function",
+      "name": "format_contract",
+      "filePath": "src-tauri/src/chapter_constraints.rs",
+      "lineRange": [
+        56,
+        98
+      ],
+      "summary": "将节拍格式化为生成契约说明文本。",
+      "tags": [
+        "validation",
+        "chapter",
+        "约束"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/chapter_constraints.rs:beat_landed",
+      "type": "function",
+      "name": "beat_landed",
+      "filePath": "src-tauri/src/chapter_constraints.rs",
+      "lineRange": [
+        101,
+        145
+      ],
+      "summary": "判断正文是否覆盖某个节拍的关键信息。",
+      "tags": [
+        "validation",
+        "chapter",
+        "约束"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/chapter_constraints.rs:missing_beats",
+      "type": "function",
+      "name": "missing_beats",
+      "filePath": "src-tauri/src/chapter_constraints.rs",
+      "lineRange": [
+        147,
+        149
+      ],
+      "summary": "返回正文尚未覆盖的节拍集合。",
+      "tags": [
+        "validation",
+        "chapter",
+        "约束"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/chapter_constraints.rs:format_missing",
+      "type": "function",
+      "name": "format_missing",
+      "filePath": "src-tauri/src/chapter_constraints.rs",
+      "lineRange": [
+        151,
+        161
+      ],
+      "summary": "将缺失节拍格式化为修复提示文案。",
+      "tags": [
+        "validation",
+        "chapter",
+        "约束"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src-tauri/src/chapter_memory.rs",
+      "type": "file",
+      "name": "chapter_memory.rs",
+      "filePath": "src-tauri/src/chapter_memory.rs",
+      "summary": "管理章节记忆的 LanceDB 读写、文本切分与查询词打分排序，供润色与续写检索相关记忆。",
+      "tags": [
+        "service",
+        "data-model",
+        "vector-store",
+        "记忆"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:src-tauri/src/chapter_memory.rs:upsert_lance",
+      "type": "function",
+      "name": "upsert_lance",
+      "filePath": "src-tauri/src/chapter_memory.rs",
+      "lineRange": [
+        14,
+        56
+      ],
+      "summary": "将章节记忆分块写入或更新 LanceDB 表。",
+      "tags": [
+        "vector-store",
+        "memory",
+        "记忆"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/chapter_memory.rs:delete_lance",
+      "type": "function",
+      "name": "delete_lance",
+      "filePath": "src-tauri/src/chapter_memory.rs",
+      "lineRange": [
+        58,
+        73
+      ],
+      "summary": "删除指定小说节点的 LanceDB 记忆分块。",
+      "tags": [
+        "vector-store",
+        "memory",
+        "记忆"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/chapter_memory.rs:delete_lance_novel",
+      "type": "function",
+      "name": "delete_lance_novel",
+      "filePath": "src-tauri/src/chapter_memory.rs",
+      "lineRange": [
+        75,
+        87
+      ],
+      "summary": "删除整本小说的 LanceDB 记忆数据。",
+      "tags": [
+        "vector-store",
+        "memory",
+        "记忆"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/chapter_memory.rs:is_section_header",
+      "type": "function",
+      "name": "is_section_header",
+      "filePath": "src-tauri/src/chapter_memory.rs",
+      "lineRange": [
+        89,
+        103
+      ],
+      "summary": "识别记忆文本中的章节/小节标题行。",
+      "tags": [
+        "vector-store",
+        "memory",
+        "记忆"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/chapter_memory.rs:split_memory_text",
+      "type": "function",
+      "name": "split_memory_text",
+      "filePath": "src-tauri/src/chapter_memory.rs",
+      "lineRange": [
+        111,
+        202
+      ],
+      "summary": "按结构与长度切分章节记忆文本为可检索块。",
+      "tags": [
+        "vector-store",
+        "memory",
+        "记忆"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:src-tauri/src/chapter_memory.rs:score_memory",
+      "type": "function",
+      "name": "score_memory",
+      "filePath": "src-tauri/src/chapter_memory.rs",
+      "lineRange": [
+        205,
+        214
+      ],
+      "summary": "根据查询词对记忆内容打相关性分数。",
+      "tags": [
+        "vector-store",
+        "memory",
+        "记忆"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/chapter_memory.rs:query_terms",
+      "type": "function",
+      "name": "query_terms",
+      "filePath": "src-tauri/src/chapter_memory.rs",
+      "lineRange": [
+        216,
+        275
+      ],
+      "summary": "从查询文本提取用于记忆检索的关键词。",
+      "tags": [
+        "vector-store",
+        "memory",
+        "记忆"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/chapter_memory.rs:rank_memory",
+      "type": "function",
+      "name": "rank_memory",
+      "filePath": "src-tauri/src/chapter_memory.rs",
+      "lineRange": [
+        278,
+        294
+      ],
+      "summary": "对记忆行按相关性排序并截取 Top-N。",
+      "tags": [
+        "vector-store",
+        "memory",
+        "记忆"
+      ],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:src-tauri/src/chapter_constraints.rs",
+      "target": "class:src-tauri/src/chapter_constraints.rs:LandBeat",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/chapter_constraints.rs",
+      "target": "class:src-tauri/src/chapter_constraints.rs:LandBeat",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/chapter_constraints.rs",
+      "target": "function:src-tauri/src/chapter_constraints.rs:outline_beats",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/chapter_constraints.rs",
+      "target": "function:src-tauri/src/chapter_constraints.rs:outline_beats",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/chapter_constraints.rs",
+      "target": "function:src-tauri/src/chapter_constraints.rs:format_contract",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/chapter_constraints.rs",
+      "target": "function:src-tauri/src/chapter_constraints.rs:format_contract",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/chapter_constraints.rs",
+      "target": "function:src-tauri/src/chapter_constraints.rs:beat_landed",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/chapter_constraints.rs",
+      "target": "function:src-tauri/src/chapter_constraints.rs:beat_landed",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/chapter_constraints.rs",
+      "target": "function:src-tauri/src/chapter_constraints.rs:missing_beats",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/chapter_constraints.rs",
+      "target": "function:src-tauri/src/chapter_constraints.rs:missing_beats",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/chapter_constraints.rs",
+      "target": "function:src-tauri/src/chapter_constraints.rs:format_missing",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/chapter_constraints.rs",
+      "target": "function:src-tauri/src/chapter_constraints.rs:format_missing",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/chapter_memory.rs",
+      "target": "function:src-tauri/src/chapter_memory.rs:upsert_lance",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/chapter_memory.rs",
+      "target": "function:src-tauri/src/chapter_memory.rs:upsert_lance",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/chapter_memory.rs",
+      "target": "function:src-tauri/src/chapter_memory.rs:delete_lance",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/chapter_memory.rs",
+      "target": "function:src-tauri/src/chapter_memory.rs:delete_lance",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/chapter_memory.rs",
+      "target": "function:src-tauri/src/chapter_memory.rs:delete_lance_novel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/chapter_memory.rs",
+      "target": "function:src-tauri/src/chapter_memory.rs:delete_lance_novel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/chapter_memory.rs",
+      "target": "function:src-tauri/src/chapter_memory.rs:is_section_header",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/chapter_memory.rs",
+      "target": "function:src-tauri/src/chapter_memory.rs:split_memory_text",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/chapter_memory.rs",
+      "target": "function:src-tauri/src/chapter_memory.rs:split_memory_text",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/chapter_memory.rs",
+      "target": "function:src-tauri/src/chapter_memory.rs:score_memory",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/chapter_memory.rs",
+      "target": "function:src-tauri/src/chapter_memory.rs:score_memory",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/chapter_memory.rs",
+      "target": "function:src-tauri/src/chapter_memory.rs:query_terms",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/chapter_memory.rs",
+      "target": "function:src-tauri/src/chapter_memory.rs:query_terms",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/chapter_memory.rs",
+      "target": "function:src-tauri/src/chapter_memory.rs:rank_memory",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/chapter_memory.rs",
+      "target": "function:src-tauri/src/chapter_memory.rs:rank_memory",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/chapter_constraints.rs",
+      "target": "file:src-tauri/src/chapter_memory.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src-tauri/src/chapter_memory.rs",
+      "target": "file:src-tauri/src/chunk.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src-tauri/src/chapter_memory.rs",
+      "target": "file:src-tauri/src/paths.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "function:src-tauri/src/chapter_constraints.rs:beat_landed",
+      "target": "function:src-tauri/src/chapter_memory.rs:query_terms",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/chapter_constraints.rs:beat_landed",
+      "target": "function:src-tauri/src/chapter_memory.rs:score_memory",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/chapter_memory.rs:delete_lance",
+      "target": "function:src-tauri/src/paths.rs:lancedb_dir",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/chapter_memory.rs:delete_lance_novel",
+      "target": "function:src-tauri/src/paths.rs:lancedb_dir",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/chapter_memory.rs:split_memory_text",
+      "target": "function:src-tauri/src/chunk.rs:chunk_text",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/chapter_memory.rs:upsert_lance",
+      "target": "function:src-tauri/src/paths.rs:lancedb_dir",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    }
+  ]
+}

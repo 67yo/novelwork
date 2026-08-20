@@ -1,0 +1,54 @@
+{
+  "projectRoot": "/Users/ablegao/code/novework",
+  "batchFiles": [
+    {
+      "path": "src-tauri/src/catalog.rs",
+      "language": "rust",
+      "sizeLines": 153,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src-tauri/src/db.rs",
+      "language": "rust",
+      "sizeLines": 808,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src-tauri/src/llm.rs",
+      "language": "rust",
+      "sizeLines": 232,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src-tauri/src/models.rs",
+      "language": "rust",
+      "sizeLines": 419,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src-tauri/src/sample.rs",
+      "language": "rust",
+      "sizeLines": 235,
+      "fileCategory": "code"
+    }
+  ],
+  "batchImportData": {
+    "src-tauri/src/catalog.rs": [
+      "src-tauri/src/db.rs",
+      "src-tauri/src/models.rs"
+    ],
+    "src-tauri/src/db.rs": [
+      "src-tauri/src/models.rs",
+      "src-tauri/src/paths.rs"
+    ],
+    "src-tauri/src/llm.rs": [
+      "src-tauri/src/models.rs"
+    ],
+    "src-tauri/src/models.rs": [],
+    "src-tauri/src/sample.rs": [
+      "src-tauri/src/db.rs",
+      "src-tauri/src/models.rs",
+      "src-tauri/src/paths.rs"
+    ]
+  }
+}

@@ -1,0 +1,1363 @@
+{
+  "schemaVersion": 1,
+  "algorithm": "louvain",
+  "totalFiles": 73,
+  "totalBatches": 7,
+  "exportsByPath": {
+    ".cursor/rules/i18n-sync.mdc": [],
+    ".cursor/rules/no-window-confirm.mdc": [],
+    ".ua/.understandignore": [],
+    "src-tauri/build.rs": [],
+    "src-tauri/icons/icon.icns": [],
+    "src-tauri/src/catalog.rs": [
+      "refresh"
+    ],
+    "src-tauri/src/chapter_constraints.rs": [
+      "LandBeat",
+      "outline_beats",
+      "format_contract",
+      "beat_landed",
+      "missing_beats",
+      "format_missing"
+    ],
+    "src-tauri/src/chapter_memory.rs": [
+      "upsert_lance",
+      "delete_lance",
+      "delete_lance_novel",
+      "split_memory_text",
+      "score_memory",
+      "query_terms",
+      "rank_memory"
+    ],
+    "src-tauri/src/chunk.rs": [
+      "chunk_text"
+    ],
+    "src-tauri/src/commands.rs": [
+      "get_settings",
+      "save_settings",
+      "refresh_model_catalog",
+      "list_genres",
+      "list_knowledge_bases",
+      "rename_knowledge",
+      "update_knowledge",
+      "list_knowledge_chunks",
+      "archive_knowledge",
+      "delete_knowledge",
+      "import_knowledge_text",
+      "import_knowledge_url",
+      "reextract_knowledge",
+      "list_novels",
+      "get_novel",
+      "archive_novel",
+      "delete_novel",
+      "create_novel",
+      "update_novel_plan",
+      "create_novel_chat",
+      "get_tree",
+      "save_tree",
+      "delete_tree_card",
+      "get_chapter",
+      "get_chapter_memory",
+      "generate_chapter",
+      "refine_chapter",
+      "plan_next_chapters",
+      "list_chat_messages",
+      "chat_send",
+      "extract_knowledge_card",
+      "card_chat_send",
+      "pick_cover",
+      "set_cover",
+      "pick_text_file",
+      "app_data_root",
+      "get_token_usage",
+      "get_token_usage_month",
+      "init_state",
+      "chat_cancel"
+    ],
+    "src-tauri/src/db.rs": [
+      "Db",
+      "open",
+      "get_settings",
+      "save_settings",
+      "get_model_catalog",
+      "save_model_catalog",
+      "list_knowledge",
+      "get_knowledge",
+      "set_knowledge_archived",
+      "delete_knowledge",
+      "unlink_knowledge_from_novels",
+      "rename_knowledge",
+      "update_knowledge",
+      "list_knowledge_chunks",
+      "insert_knowledge",
+      "replace_knowledge_content",
+      "list_novels",
+      "get_novel",
+      "upsert_novel",
+      "delete_novel",
+      "replace_chapter_memory",
+      "delete_chapter_memory",
+      "list_chapter_memory_for_nodes",
+      "list_chapter_memory",
+      "list_chat",
+      "insert_chat",
+      "add_token_usage",
+      "list_token_usage_day",
+      "list_token_usage_by_novel",
+      "list_token_usage_month"
+    ],
+    "src-tauri/src/knowledge.rs": [
+      "SourceChapter",
+      "ParsedSource",
+      "full_text",
+      "toc_lines",
+      "style_samples",
+      "upsert_chunks",
+      "delete_chunks",
+      "split_book",
+      "build_knowledge_chunks",
+      "guess_meta",
+      "load_source",
+      "load_source_from_url",
+      "fetch_url_main",
+      "extract_http_urls",
+      "fetch_urls_context",
+      "with_fetched_url_context",
+      "extract_main_html",
+      "html_to_text"
+    ],
+    "src-tauri/src/lib.rs": [
+      "AppState",
+      "arm_chat_cancel",
+      "request_chat_cancel",
+      "clear_chat_cancel",
+      "run"
+    ],
+    "src-tauri/src/llm.rs": [
+      "CompletionResult",
+      "complete"
+    ],
+    "src-tauri/src/main.rs": [],
+    "src-tauri/src/models.rs": [
+      "AppSettings",
+      "ModelCatalog",
+      "all_ids",
+      "seed",
+      "SettingsView",
+      "SaveSettingsInput",
+      "KnowledgeBook",
+      "KnowledgeChunk",
+      "NovelProject",
+      "CreateNovelInput",
+      "ChatTurn",
+      "NovelCreateChatInput",
+      "NovelCreateChatResult",
+      "NodeKind",
+      "TreeNode",
+      "NodePosition",
+      "CharacterCard",
+      "KnowledgeCardPayload",
+      "TreeEdge",
+      "NovelTree",
+      "ChatMessage",
+      "GenerateResult",
+      "CardChatResult",
+      "TokenUsageHourRow",
+      "TokenUsageNovelRow",
+      "TokenUsageDay",
+      "TokenUsageModelRow",
+      "TokenUsageMonth"
+    ],
+    "src-tauri/src/paths.rs": [
+      "app_root",
+      "db_path",
+      "lancedb_dir",
+      "novels_dir",
+      "novel_dir",
+      "novel_meta_path",
+      "novel_tree_path",
+      "chapter_path"
+    ],
+    "src-tauri/src/prompts.rs": [
+      "PromptLocale",
+      "from_preference",
+      "for_interaction",
+      "detect_from_text",
+      "is_zh",
+      "output_language",
+      "language_rule",
+      "knowledge_extract_system",
+      "knowledge_url_extract_system",
+      "knowledge_extract_user",
+      "default_knowledge_book_prompt",
+      "default_knowledge_url_prompt",
+      "parse_title_author",
+      "apply_analysis_meta",
+      "extract_genres_from_analysis",
+      "merge_genre_tags",
+      "create_novel_system",
+      "create_novel_empty_user",
+      "untitled_novel",
+      "chat_created_novel",
+      "ChapterContextLabels",
+      "chapter_context_labels",
+      "generate_chapter_system",
+      "generate_chapter_user",
+      "repair_chapter_system",
+      "length_repair_chapter_system",
+      "length_repair_chapter_user",
+      "repair_chapter_user",
+      "generate_footer",
+      "word_count_off_note",
+      "generate_done_msg",
+      "refine_chapter_system",
+      "refine_chapter_user",
+      "refine_done_msg",
+      "extract_chapter_memory_system",
+      "extract_chapter_memory_user",
+      "workspace_chat_system",
+      "gen_chapter_cards_system",
+      "gen_chapter_cards_user",
+      "plan_next_chapters_system",
+      "plan_next_chapters_user",
+      "plan_next_done_msg",
+      "gen_chapter_plots_system",
+      "gen_chapter_plots_user",
+      "knowledge_card_extract_system",
+      "knowledge_card_extract_user",
+      "card_chat_system",
+      "default_new_character",
+      "prev_chapter_memory_block",
+      "prev_chapter_block"
+    ],
+    "src-tauri/src/sample.rs": [
+      "ensure_sample"
+    ],
+    "src-tauri/src/secret.rs": [
+      "encrypt_secret",
+      "decrypt_secret"
+    ],
+    "src/App.vue": [],
+    "src/components/CharacterCardPanel.vue": [],
+    "src/components/flow/StoryNode.vue": [],
+    "src/components/ui/button/Button.vue": [],
+    "src/components/ui/button/index.ts": [
+      "Button"
+    ],
+    "src/components/ui/card/Card.vue": [],
+    "src/components/ui/card/CardContent.vue": [],
+    "src/components/ui/card/CardHeader.vue": [],
+    "src/components/ui/card/CardTitle.vue": [],
+    "src/components/ui/card/index.ts": [
+      "Card",
+      "CardHeader",
+      "CardTitle",
+      "CardContent"
+    ],
+    "src/components/ui/input/Input.vue": [],
+    "src/components/ui/input/index.ts": [
+      "Input"
+    ],
+    "src/components/ui/separator/Separator.vue": [],
+    "src/components/ui/separator/index.ts": [
+      "Separator"
+    ],
+    "src/components/ui/textarea/Textarea.vue": [],
+    "src/components/ui/textarea/index.ts": [
+      "Textarea"
+    ],
+    "src/i18n/index.ts": [
+      "LOCALE_OPTIONS",
+      "LocaleCode",
+      "LocalePreference",
+      "MessageKey",
+      "detectSystemLocale",
+      "resolvedLocale",
+      "getLocalePreference",
+      "setLocalePreference",
+      "t",
+      "useI18n"
+    ],
+    "src/i18n/messages.ts": [
+      "LOCALE_OPTIONS",
+      "zhCN",
+      "en",
+      "zhTW",
+      "ja",
+      "de",
+      "fr",
+      "dictionaries"
+    ],
+    "src/lib/api.ts": [
+      "extractKnowledgeCard",
+      "api"
+    ],
+    "src/lib/chatFormat.ts": [
+      "formatChatContent"
+    ],
+    "src/lib/linediff.ts": [
+      "diffLines"
+    ],
+    "src/lib/md.selfcheck.mjs": [],
+    "src/lib/md.ts": [
+      "stripChapterMeta",
+      "renderChapterMd",
+      "withCopyableParaIndent"
+    ],
+    "src/lib/treeLayout.selfcheck.ts": [],
+    "src/lib/treeLayout.ts": [
+      "applyAutoLayout",
+      "__layoutConsts"
+    ],
+    "src/lib/utils.ts": [
+      "cn"
+    ],
+    "src/main.ts": [],
+    "src/router/index.ts": [],
+    "src/views/LibraryView.vue": [],
+    "src/views/NovelsView.vue": [],
+    "src/views/SettingsView.vue": [],
+    "src/views/StatsView.vue": [],
+    "src/views/WorkspaceView.vue": [],
+    "src/vite-env.d.ts": [],
+    "vite.config.ts": []
+  },
+  "batches": [
+    {
+      "batchIndex": 1,
+      "files": [
+        {
+          "path": "src-tauri/src/chapter_constraints.rs",
+          "language": "rust",
+          "sizeLines": 196,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src-tauri/src/chapter_memory.rs",
+          "language": "rust",
+          "sizeLines": 323,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src-tauri/src/chunk.rs",
+          "language": "rust",
+          "sizeLines": 38,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src-tauri/src/commands.rs",
+          "language": "rust",
+          "sizeLines": 4645,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src-tauri/src/knowledge.rs",
+          "language": "rust",
+          "sizeLines": 958,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src-tauri/src/lib.rs",
+          "language": "rust",
+          "sizeLines": 106,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src-tauri/src/paths.rs",
+          "language": "rust",
+          "sizeLines": 47,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src-tauri/src/prompts.rs",
+          "language": "rust",
+          "sizeLines": 1430,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src-tauri/src/secret.rs",
+          "language": "rust",
+          "sizeLines": 84,
+          "fileCategory": "code"
+        }
+      ],
+      "batchImportData": {
+        "src-tauri/src/chapter_constraints.rs": [
+          "src-tauri/src/chapter_memory.rs"
+        ],
+        "src-tauri/src/chapter_memory.rs": [
+          "src-tauri/src/chunk.rs",
+          "src-tauri/src/paths.rs"
+        ],
+        "src-tauri/src/chunk.rs": [],
+        "src-tauri/src/commands.rs": [
+          "src-tauri/src/chapter_constraints.rs",
+          "src-tauri/src/db.rs",
+          "src-tauri/src/knowledge.rs",
+          "src-tauri/src/models.rs",
+          "src-tauri/src/paths.rs",
+          "src-tauri/src/prompts.rs"
+        ],
+        "src-tauri/src/knowledge.rs": [
+          "src-tauri/src/chunk.rs",
+          "src-tauri/src/paths.rs"
+        ],
+        "src-tauri/src/lib.rs": [
+          "src-tauri/src/catalog.rs",
+          "src-tauri/src/chapter_constraints.rs",
+          "src-tauri/src/chapter_memory.rs",
+          "src-tauri/src/chunk.rs",
+          "src-tauri/src/commands.rs",
+          "src-tauri/src/db.rs",
+          "src-tauri/src/knowledge.rs",
+          "src-tauri/src/llm.rs",
+          "src-tauri/src/models.rs",
+          "src-tauri/src/paths.rs",
+          "src-tauri/src/prompts.rs",
+          "src-tauri/src/sample.rs",
+          "src-tauri/src/secret.rs"
+        ],
+        "src-tauri/src/paths.rs": [],
+        "src-tauri/src/prompts.rs": [],
+        "src-tauri/src/secret.rs": []
+      },
+      "neighborMap": {
+        "src-tauri/src/commands.rs": [
+          {
+            "path": "src-tauri/src/db.rs",
+            "batchIndex": 3,
+            "symbols": [
+              "Db",
+              "open",
+              "get_settings",
+              "save_settings",
+              "get_model_catalog",
+              "save_model_catalog",
+              "list_knowledge",
+              "get_knowledge",
+              "set_knowledge_archived",
+              "delete_knowledge",
+              "unlink_knowledge_from_novels",
+              "rename_knowledge",
+              "update_knowledge",
+              "list_knowledge_chunks",
+              "insert_knowledge",
+              "replace_knowledge_content",
+              "list_novels",
+              "get_novel",
+              "upsert_novel",
+              "delete_novel",
+              "replace_chapter_memory",
+              "delete_chapter_memory",
+              "list_chapter_memory_for_nodes",
+              "list_chapter_memory",
+              "list_chat",
+              "insert_chat",
+              "add_token_usage",
+              "list_token_usage_day",
+              "list_token_usage_by_novel",
+              "list_token_usage_month"
+            ]
+          },
+          {
+            "path": "src-tauri/src/models.rs",
+            "batchIndex": 3,
+            "symbols": [
+              "AppSettings",
+              "ModelCatalog",
+              "all_ids",
+              "seed",
+              "SettingsView",
+              "SaveSettingsInput",
+              "KnowledgeBook",
+              "KnowledgeChunk",
+              "NovelProject",
+              "CreateNovelInput",
+              "ChatTurn",
+              "NovelCreateChatInput",
+              "NovelCreateChatResult",
+              "NodeKind",
+              "TreeNode",
+              "NodePosition",
+              "CharacterCard",
+              "KnowledgeCardPayload",
+              "TreeEdge",
+              "NovelTree",
+              "ChatMessage",
+              "GenerateResult",
+              "CardChatResult",
+              "TokenUsageHourRow",
+              "TokenUsageNovelRow",
+              "TokenUsageDay",
+              "TokenUsageModelRow",
+              "TokenUsageMonth"
+            ]
+          }
+        ],
+        "src-tauri/src/lib.rs": [
+          {
+            "path": "src-tauri/src/catalog.rs",
+            "batchIndex": 3,
+            "symbols": [
+              "refresh"
+            ]
+          },
+          {
+            "path": "src-tauri/src/db.rs",
+            "batchIndex": 3,
+            "symbols": [
+              "Db",
+              "open",
+              "get_settings",
+              "save_settings",
+              "get_model_catalog",
+              "save_model_catalog",
+              "list_knowledge",
+              "get_knowledge",
+              "set_knowledge_archived",
+              "delete_knowledge",
+              "unlink_knowledge_from_novels",
+              "rename_knowledge",
+              "update_knowledge",
+              "list_knowledge_chunks",
+              "insert_knowledge",
+              "replace_knowledge_content",
+              "list_novels",
+              "get_novel",
+              "upsert_novel",
+              "delete_novel",
+              "replace_chapter_memory",
+              "delete_chapter_memory",
+              "list_chapter_memory_for_nodes",
+              "list_chapter_memory",
+              "list_chat",
+              "insert_chat",
+              "add_token_usage",
+              "list_token_usage_day",
+              "list_token_usage_by_novel",
+              "list_token_usage_month"
+            ]
+          },
+          {
+            "path": "src-tauri/src/llm.rs",
+            "batchIndex": 3,
+            "symbols": [
+              "CompletionResult",
+              "complete"
+            ]
+          },
+          {
+            "path": "src-tauri/src/models.rs",
+            "batchIndex": 3,
+            "symbols": [
+              "AppSettings",
+              "ModelCatalog",
+              "all_ids",
+              "seed",
+              "SettingsView",
+              "SaveSettingsInput",
+              "KnowledgeBook",
+              "KnowledgeChunk",
+              "NovelProject",
+              "CreateNovelInput",
+              "ChatTurn",
+              "NovelCreateChatInput",
+              "NovelCreateChatResult",
+              "NodeKind",
+              "TreeNode",
+              "NodePosition",
+              "CharacterCard",
+              "KnowledgeCardPayload",
+              "TreeEdge",
+              "NovelTree",
+              "ChatMessage",
+              "GenerateResult",
+              "CardChatResult",
+              "TokenUsageHourRow",
+              "TokenUsageNovelRow",
+              "TokenUsageDay",
+              "TokenUsageModelRow",
+              "TokenUsageMonth"
+            ]
+          },
+          {
+            "path": "src-tauri/src/sample.rs",
+            "batchIndex": 3,
+            "symbols": [
+              "ensure_sample"
+            ]
+          }
+        ],
+        "src-tauri/src/paths.rs": [
+          {
+            "path": "src-tauri/src/db.rs",
+            "batchIndex": 3,
+            "symbols": [
+              "Db",
+              "open",
+              "get_settings",
+              "save_settings",
+              "get_model_catalog",
+              "save_model_catalog",
+              "list_knowledge",
+              "get_knowledge",
+              "set_knowledge_archived",
+              "delete_knowledge",
+              "unlink_knowledge_from_novels",
+              "rename_knowledge",
+              "update_knowledge",
+              "list_knowledge_chunks",
+              "insert_knowledge",
+              "replace_knowledge_content",
+              "list_novels",
+              "get_novel",
+              "upsert_novel",
+              "delete_novel",
+              "replace_chapter_memory",
+              "delete_chapter_memory",
+              "list_chapter_memory_for_nodes",
+              "list_chapter_memory",
+              "list_chat",
+              "insert_chat",
+              "add_token_usage",
+              "list_token_usage_day",
+              "list_token_usage_by_novel",
+              "list_token_usage_month"
+            ]
+          },
+          {
+            "path": "src-tauri/src/sample.rs",
+            "batchIndex": 3,
+            "symbols": [
+              "ensure_sample"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "batchIndex": 2,
+      "files": [
+        {
+          "path": "src/App.vue",
+          "language": "vue",
+          "sizeLines": 84,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src/main.ts",
+          "language": "typescript",
+          "sizeLines": 10,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src/router/index.ts",
+          "language": "typescript",
+          "sizeLines": 20,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src/views/LibraryView.vue",
+          "language": "vue",
+          "sizeLines": 549,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src/views/NovelsView.vue",
+          "language": "vue",
+          "sizeLines": 305,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src/views/SettingsView.vue",
+          "language": "vue",
+          "sizeLines": 404,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src/views/StatsView.vue",
+          "language": "vue",
+          "sizeLines": 404,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src/views/WorkspaceView.vue",
+          "language": "vue",
+          "sizeLines": 2233,
+          "fileCategory": "code"
+        }
+      ],
+      "batchImportData": {
+        "src/App.vue": [],
+        "src/main.ts": [
+          "src/App.vue",
+          "src/router/index.ts",
+          "src/style.css"
+        ],
+        "src/router/index.ts": [
+          "src/views/LibraryView.vue",
+          "src/views/NovelsView.vue",
+          "src/views/SettingsView.vue",
+          "src/views/StatsView.vue",
+          "src/views/WorkspaceView.vue"
+        ],
+        "src/views/LibraryView.vue": [],
+        "src/views/NovelsView.vue": [],
+        "src/views/SettingsView.vue": [],
+        "src/views/StatsView.vue": [],
+        "src/views/WorkspaceView.vue": []
+      },
+      "neighborMap": {
+        "src/main.ts": [
+          {
+            "path": "src/style.css",
+            "batchIndex": 7,
+            "symbols": []
+          }
+        ]
+      }
+    },
+    {
+      "batchIndex": 3,
+      "files": [
+        {
+          "path": "src-tauri/src/catalog.rs",
+          "language": "rust",
+          "sizeLines": 153,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src-tauri/src/db.rs",
+          "language": "rust",
+          "sizeLines": 808,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src-tauri/src/llm.rs",
+          "language": "rust",
+          "sizeLines": 232,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src-tauri/src/models.rs",
+          "language": "rust",
+          "sizeLines": 419,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src-tauri/src/sample.rs",
+          "language": "rust",
+          "sizeLines": 235,
+          "fileCategory": "code"
+        }
+      ],
+      "batchImportData": {
+        "src-tauri/src/catalog.rs": [
+          "src-tauri/src/db.rs",
+          "src-tauri/src/models.rs"
+        ],
+        "src-tauri/src/db.rs": [
+          "src-tauri/src/models.rs",
+          "src-tauri/src/paths.rs"
+        ],
+        "src-tauri/src/llm.rs": [
+          "src-tauri/src/models.rs"
+        ],
+        "src-tauri/src/models.rs": [],
+        "src-tauri/src/sample.rs": [
+          "src-tauri/src/db.rs",
+          "src-tauri/src/models.rs",
+          "src-tauri/src/paths.rs"
+        ]
+      },
+      "neighborMap": {
+        "src-tauri/src/catalog.rs": [
+          {
+            "path": "src-tauri/src/lib.rs",
+            "batchIndex": 1,
+            "symbols": [
+              "AppState",
+              "arm_chat_cancel",
+              "request_chat_cancel",
+              "clear_chat_cancel",
+              "run"
+            ]
+          }
+        ],
+        "src-tauri/src/db.rs": [
+          {
+            "path": "src-tauri/src/paths.rs",
+            "batchIndex": 1,
+            "symbols": [
+              "app_root",
+              "db_path",
+              "lancedb_dir",
+              "novels_dir",
+              "novel_dir",
+              "novel_meta_path",
+              "novel_tree_path",
+              "chapter_path"
+            ]
+          },
+          {
+            "path": "src-tauri/src/commands.rs",
+            "batchIndex": 1,
+            "symbols": [
+              "get_settings",
+              "save_settings",
+              "refresh_model_catalog",
+              "list_genres",
+              "list_knowledge_bases",
+              "rename_knowledge",
+              "update_knowledge",
+              "list_knowledge_chunks",
+              "archive_knowledge",
+              "delete_knowledge",
+              "import_knowledge_text",
+              "import_knowledge_url",
+              "reextract_knowledge",
+              "list_novels",
+              "get_novel",
+              "archive_novel",
+              "delete_novel",
+              "create_novel",
+              "update_novel_plan",
+              "create_novel_chat",
+              "get_tree",
+              "save_tree",
+              "delete_tree_card",
+              "get_chapter",
+              "get_chapter_memory",
+              "generate_chapter",
+              "refine_chapter",
+              "plan_next_chapters",
+              "list_chat_messages",
+              "chat_send",
+              "extract_knowledge_card",
+              "card_chat_send",
+              "pick_cover",
+              "set_cover",
+              "pick_text_file",
+              "app_data_root",
+              "get_token_usage",
+              "get_token_usage_month",
+              "init_state",
+              "chat_cancel"
+            ]
+          },
+          {
+            "path": "src-tauri/src/lib.rs",
+            "batchIndex": 1,
+            "symbols": [
+              "AppState",
+              "arm_chat_cancel",
+              "request_chat_cancel",
+              "clear_chat_cancel",
+              "run"
+            ]
+          }
+        ],
+        "src-tauri/src/llm.rs": [
+          {
+            "path": "src-tauri/src/lib.rs",
+            "batchIndex": 1,
+            "symbols": [
+              "AppState",
+              "arm_chat_cancel",
+              "request_chat_cancel",
+              "clear_chat_cancel",
+              "run"
+            ]
+          }
+        ],
+        "src-tauri/src/models.rs": [
+          {
+            "path": "src-tauri/src/commands.rs",
+            "batchIndex": 1,
+            "symbols": [
+              "get_settings",
+              "save_settings",
+              "refresh_model_catalog",
+              "list_genres",
+              "list_knowledge_bases",
+              "rename_knowledge",
+              "update_knowledge",
+              "list_knowledge_chunks",
+              "archive_knowledge",
+              "delete_knowledge",
+              "import_knowledge_text",
+              "import_knowledge_url",
+              "reextract_knowledge",
+              "list_novels",
+              "get_novel",
+              "archive_novel",
+              "delete_novel",
+              "create_novel",
+              "update_novel_plan",
+              "create_novel_chat",
+              "get_tree",
+              "save_tree",
+              "delete_tree_card",
+              "get_chapter",
+              "get_chapter_memory",
+              "generate_chapter",
+              "refine_chapter",
+              "plan_next_chapters",
+              "list_chat_messages",
+              "chat_send",
+              "extract_knowledge_card",
+              "card_chat_send",
+              "pick_cover",
+              "set_cover",
+              "pick_text_file",
+              "app_data_root",
+              "get_token_usage",
+              "get_token_usage_month",
+              "init_state",
+              "chat_cancel"
+            ]
+          },
+          {
+            "path": "src-tauri/src/lib.rs",
+            "batchIndex": 1,
+            "symbols": [
+              "AppState",
+              "arm_chat_cancel",
+              "request_chat_cancel",
+              "clear_chat_cancel",
+              "run"
+            ]
+          }
+        ],
+        "src-tauri/src/sample.rs": [
+          {
+            "path": "src-tauri/src/paths.rs",
+            "batchIndex": 1,
+            "symbols": [
+              "app_root",
+              "db_path",
+              "lancedb_dir",
+              "novels_dir",
+              "novel_dir",
+              "novel_meta_path",
+              "novel_tree_path",
+              "chapter_path"
+            ]
+          },
+          {
+            "path": "src-tauri/src/lib.rs",
+            "batchIndex": 1,
+            "symbols": [
+              "AppState",
+              "arm_chat_cancel",
+              "request_chat_cancel",
+              "clear_chat_cancel",
+              "run"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "batchIndex": 4,
+      "files": [
+        {
+          "path": ".ua/tmp/commit.txt",
+          "language": "txt",
+          "sizeLines": 1,
+          "fileCategory": "docs"
+        },
+        {
+          "path": ".ua/tmp/dir-tree.txt",
+          "language": "txt",
+          "sizeLines": 27,
+          "fileCategory": "docs"
+        },
+        {
+          "path": ".ua/tmp/manifest-cargo.txt",
+          "language": "txt",
+          "sizeLines": 42,
+          "fileCategory": "docs"
+        },
+        {
+          "path": ".ua/tmp/manifest-pkg.txt",
+          "language": "txt",
+          "sizeLines": 42,
+          "fileCategory": "docs"
+        },
+        {
+          "path": ".ua/tmp/readme.txt",
+          "language": "txt",
+          "sizeLines": 44,
+          "fileCategory": "docs"
+        },
+        {
+          "path": ".ua/tmp/ua-scan-files.json",
+          "language": "json",
+          "sizeLines": 464,
+          "fileCategory": "config"
+        }
+      ],
+      "batchImportData": {
+        ".ua/tmp/commit.txt": [],
+        ".ua/tmp/dir-tree.txt": [],
+        ".ua/tmp/manifest-cargo.txt": [],
+        ".ua/tmp/manifest-pkg.txt": [],
+        ".ua/tmp/readme.txt": [],
+        ".ua/tmp/ua-scan-files.json": []
+      },
+      "neighborMap": {}
+    },
+    {
+      "batchIndex": 5,
+      "files": [
+        {
+          "path": "Project.md",
+          "language": "markdown",
+          "sizeLines": 150,
+          "fileCategory": "docs"
+        },
+        {
+          "path": "README.md",
+          "language": "markdown",
+          "sizeLines": 44,
+          "fileCategory": "docs"
+        },
+        {
+          "path": "components.json",
+          "language": "json",
+          "sizeLines": 20,
+          "fileCategory": "config"
+        },
+        {
+          "path": "index.html",
+          "language": "html",
+          "sizeLines": 14,
+          "fileCategory": "markup"
+        },
+        {
+          "path": "package.json",
+          "language": "json",
+          "sizeLines": 42,
+          "fileCategory": "config"
+        },
+        {
+          "path": "tsconfig.json",
+          "language": "json",
+          "sizeLines": 25,
+          "fileCategory": "config"
+        },
+        {
+          "path": "tsconfig.node.json",
+          "language": "json",
+          "sizeLines": 10,
+          "fileCategory": "config"
+        }
+      ],
+      "batchImportData": {
+        "Project.md": [],
+        "README.md": [],
+        "components.json": [],
+        "index.html": [],
+        "package.json": [],
+        "tsconfig.json": [],
+        "tsconfig.node.json": []
+      },
+      "neighborMap": {}
+    },
+    {
+      "batchIndex": 6,
+      "files": [
+        {
+          "path": ".cursor/rules/i18n-sync.mdc",
+          "language": "mdc",
+          "sizeLines": 17,
+          "fileCategory": "code"
+        },
+        {
+          "path": ".cursor/rules/no-window-confirm.mdc",
+          "language": "mdc",
+          "sizeLines": 41,
+          "fileCategory": "code"
+        },
+        {
+          "path": ".ua/.understandignore",
+          "language": "unknown",
+          "sizeLines": 84,
+          "fileCategory": "code"
+        },
+        {
+          "path": ".ua/config.json",
+          "language": "json",
+          "sizeLines": 2,
+          "fileCategory": "config"
+        },
+        {
+          "path": "src-tauri/Cargo.toml",
+          "language": "toml",
+          "sizeLines": 42,
+          "fileCategory": "config"
+        },
+        {
+          "path": "src-tauri/build.rs",
+          "language": "rust",
+          "sizeLines": 3,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src-tauri/capabilities/default.json",
+          "language": "json",
+          "sizeLines": 11,
+          "fileCategory": "config"
+        },
+        {
+          "path": "src-tauri/icons/icon.icns",
+          "language": "icns",
+          "sizeLines": 462,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src-tauri/src/main.rs",
+          "language": "rust",
+          "sizeLines": 6,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src-tauri/tauri.conf.json",
+          "language": "json",
+          "sizeLines": 41,
+          "fileCategory": "config"
+        },
+        {
+          "path": "src/components/CharacterCardPanel.vue",
+          "language": "vue",
+          "sizeLines": 49,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src/components/flow/StoryNode.vue",
+          "language": "vue",
+          "sizeLines": 235,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src/components/ui/button/Button.vue",
+          "language": "vue",
+          "sizeLines": 42,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src/components/ui/button/index.ts",
+          "language": "typescript",
+          "sizeLines": 1,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src/components/ui/card/Card.vue",
+          "language": "vue",
+          "sizeLines": 12,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src/components/ui/card/CardContent.vue",
+          "language": "vue",
+          "sizeLines": 8,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src/components/ui/card/CardHeader.vue",
+          "language": "vue",
+          "sizeLines": 8,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src/components/ui/card/CardTitle.vue",
+          "language": "vue",
+          "sizeLines": 8,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src/components/ui/card/index.ts",
+          "language": "typescript",
+          "sizeLines": 4,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src/components/ui/input/Input.vue",
+          "language": "vue",
+          "sizeLines": 46,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src/components/ui/input/index.ts",
+          "language": "typescript",
+          "sizeLines": 1,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src/components/ui/separator/Separator.vue",
+          "language": "vue",
+          "sizeLines": 18,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src/components/ui/separator/index.ts",
+          "language": "typescript",
+          "sizeLines": 1,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src/components/ui/textarea/Textarea.vue",
+          "language": "vue",
+          "sizeLines": 33,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src/components/ui/textarea/index.ts",
+          "language": "typescript",
+          "sizeLines": 1,
+          "fileCategory": "code"
+        }
+      ],
+      "batchImportData": {
+        ".cursor/rules/i18n-sync.mdc": [],
+        ".cursor/rules/no-window-confirm.mdc": [],
+        ".ua/.understandignore": [],
+        ".ua/config.json": [],
+        "src-tauri/Cargo.toml": [],
+        "src-tauri/build.rs": [],
+        "src-tauri/capabilities/default.json": [],
+        "src-tauri/icons/icon.icns": [],
+        "src-tauri/src/main.rs": [],
+        "src-tauri/tauri.conf.json": [],
+        "src/components/CharacterCardPanel.vue": [],
+        "src/components/flow/StoryNode.vue": [],
+        "src/components/ui/button/Button.vue": [],
+        "src/components/ui/button/index.ts": [],
+        "src/components/ui/card/Card.vue": [],
+        "src/components/ui/card/CardContent.vue": [],
+        "src/components/ui/card/CardHeader.vue": [],
+        "src/components/ui/card/CardTitle.vue": [],
+        "src/components/ui/card/index.ts": [],
+        "src/components/ui/input/Input.vue": [],
+        "src/components/ui/input/index.ts": [],
+        "src/components/ui/separator/Separator.vue": [],
+        "src/components/ui/separator/index.ts": [],
+        "src/components/ui/textarea/Textarea.vue": [],
+        "src/components/ui/textarea/index.ts": []
+      },
+      "neighborMap": {}
+    },
+    {
+      "batchIndex": 7,
+      "files": [
+        {
+          "path": "src/i18n/index.ts",
+          "language": "typescript",
+          "sizeLines": 64,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src/i18n/messages.ts",
+          "language": "typescript",
+          "sizeLines": 1749,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src/lib/api.ts",
+          "language": "typescript",
+          "sizeLines": 321,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src/lib/chatFormat.ts",
+          "language": "typescript",
+          "sizeLines": 16,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src/lib/linediff.ts",
+          "language": "typescript",
+          "sizeLines": 33,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src/lib/md.selfcheck.mjs",
+          "language": "javascript",
+          "sizeLines": 29,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src/lib/md.ts",
+          "language": "typescript",
+          "sizeLines": 33,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src/lib/treeLayout.selfcheck.ts",
+          "language": "typescript",
+          "sizeLines": 34,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src/lib/treeLayout.ts",
+          "language": "typescript",
+          "sizeLines": 129,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src/lib/utils.ts",
+          "language": "typescript",
+          "sizeLines": 7,
+          "fileCategory": "code"
+        },
+        {
+          "path": "src/style.css",
+          "language": "css",
+          "sizeLines": 142,
+          "fileCategory": "markup"
+        },
+        {
+          "path": "src/vite-env.d.ts",
+          "language": "typescript",
+          "sizeLines": 7,
+          "fileCategory": "code"
+        },
+        {
+          "path": "vite.config.ts",
+          "language": "typescript",
+          "sizeLines": 31,
+          "fileCategory": "code"
+        }
+      ],
+      "batchImportData": {
+        "src/i18n/index.ts": [
+          "src/i18n/messages.ts"
+        ],
+        "src/i18n/messages.ts": [],
+        "src/lib/api.ts": [],
+        "src/lib/chatFormat.ts": [],
+        "src/lib/linediff.ts": [],
+        "src/lib/md.selfcheck.mjs": [],
+        "src/lib/md.ts": [],
+        "src/lib/treeLayout.selfcheck.ts": [
+          "src/lib/treeLayout.ts"
+        ],
+        "src/lib/treeLayout.ts": [],
+        "src/lib/utils.ts": [],
+        "src/style.css": [],
+        "src/vite-env.d.ts": [],
+        "vite.config.ts": []
+      },
+      "neighborMap": {
+        "src/style.css": [
+          {
+            "path": "src/main.ts",
+            "batchIndex": 2,
+            "symbols": []
+          }
+        ]
+      }
+    }
+  ]
+}

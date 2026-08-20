@@ -1,0 +1,1327 @@
+{
+  "nodes": [
+    {
+      "id": "file:src-tauri/src/catalog.rs",
+      "type": "file",
+      "name": "catalog.rs",
+      "filePath": "src-tauri/src/catalog.rs",
+      "summary": "从 OpenAI 兼容、Gemini、Claude 等提供商拉取可用模型列表，并写入本地模型目录缓存。",
+      "tags": [
+        "service",
+        "api-handler",
+        "model-catalog",
+        "http-client"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "使用 reqwest 异步请求各厂商 Models API，结果经 Db 持久化。"
+    },
+    {
+      "id": "function:src-tauri/src/catalog.rs:refresh",
+      "type": "function",
+      "name": "refresh",
+      "filePath": "src-tauri/src/catalog.rs",
+      "lineRange": [
+        8,
+        60
+      ],
+      "summary": "刷新各厂商模型目录并保存到数据库，收集错误信息。",
+      "tags": [
+        "api-handler",
+        "model-catalog",
+        "orchestration"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/catalog.rs:fetch_openai_compat",
+      "type": "function",
+      "name": "fetch_openai_compat",
+      "filePath": "src-tauri/src/catalog.rs",
+      "lineRange": [
+        62,
+        83
+      ],
+      "summary": "请求 OpenAI 兼容 /models 接口并解析模型 ID 列表。",
+      "tags": [
+        "http-client",
+        "api-handler"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/catalog.rs:fetch_gemini",
+      "type": "function",
+      "name": "fetch_gemini",
+      "filePath": "src-tauri/src/catalog.rs",
+      "lineRange": [
+        85,
+        125
+      ],
+      "summary": "请求 Gemini 模型列表，过滤支持 generateContent 的模型。",
+      "tags": [
+        "http-client",
+        "api-handler"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/catalog.rs:fetch_claude",
+      "type": "function",
+      "name": "fetch_claude",
+      "filePath": "src-tauri/src/catalog.rs",
+      "lineRange": [
+        127,
+        153
+      ],
+      "summary": "请求 Anthropic Models API 并返回排序去重的模型 ID。",
+      "tags": [
+        "http-client",
+        "api-handler"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src-tauri/src/db.rs",
+      "type": "file",
+      "name": "db.rs",
+      "filePath": "src-tauri/src/db.rs",
+      "summary": "SQLite 数据访问层，封装设置、知识库、小说、章节记忆、聊天记录与 Token 用量的读写与迁移。",
+      "tags": [
+        "data-model",
+        "database",
+        "persistence",
+        "service"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Db 以 Mutex 包装 rusqlite::Connection，方法均为同步 SQL 封装。"
+    },
+    {
+      "id": "class:src-tauri/src/db.rs:Db",
+      "type": "class",
+      "name": "Db",
+      "filePath": "src-tauri/src/db.rs",
+      "lineRange": [
+        7,
+        9
+      ],
+      "summary": "SQLite 连接包装器，提供设置/知识库/小说/记忆/聊天/用量的全部 CRUD。",
+      "tags": [
+        "database",
+        "service",
+        "singleton"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:src-tauri/src/db.rs:open",
+      "type": "function",
+      "name": "open",
+      "filePath": "src-tauri/src/db.rs",
+      "lineRange": [
+        12,
+        105
+      ],
+      "summary": "打开或创建 SQLite，执行建表与必要迁移后返回 Db。",
+      "tags": [
+        "database",
+        "migration",
+        "entry-point"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/db.rs:get_settings",
+      "type": "function",
+      "name": "get_settings",
+      "filePath": "src-tauri/src/db.rs",
+      "lineRange": [
+        107,
+        166
+      ],
+      "summary": "读取 AppSettings，缺失时回退默认值。",
+      "tags": [
+        "database",
+        "settings"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/db.rs:save_settings",
+      "type": "function",
+      "name": "save_settings",
+      "filePath": "src-tauri/src/db.rs",
+      "lineRange": [
+        168,
+        194
+      ],
+      "summary": "将 AppSettings 序列化写入 settings 表。",
+      "tags": [
+        "database",
+        "settings"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/db.rs:get_model_catalog",
+      "type": "function",
+      "name": "get_model_catalog",
+      "filePath": "src-tauri/src/db.rs",
+      "lineRange": [
+        196,
+        211
+      ],
+      "summary": "读取模型目录 JSON，失败时返回 seed 目录。",
+      "tags": [
+        "database",
+        "model-catalog"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/db.rs:save_model_catalog",
+      "type": "function",
+      "name": "save_model_catalog",
+      "filePath": "src-tauri/src/db.rs",
+      "lineRange": [
+        213,
+        222
+      ],
+      "summary": "持久化 ModelCatalog 到 settings。",
+      "tags": [
+        "database",
+        "model-catalog"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/db.rs:list_knowledge",
+      "type": "function",
+      "name": "list_knowledge",
+      "filePath": "src-tauri/src/db.rs",
+      "lineRange": [
+        224,
+        247
+      ],
+      "summary": "列出全部知识库书籍元数据。",
+      "tags": [
+        "database",
+        "knowledge"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/db.rs:get_knowledge",
+      "type": "function",
+      "name": "get_knowledge",
+      "filePath": "src-tauri/src/db.rs",
+      "lineRange": [
+        249,
+        254
+      ],
+      "summary": "按 ID 查找单本知识库。",
+      "tags": [
+        "database",
+        "knowledge"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/db.rs:set_knowledge_archived",
+      "type": "function",
+      "name": "set_knowledge_archived",
+      "filePath": "src-tauri/src/db.rs",
+      "lineRange": [
+        256,
+        266
+      ],
+      "summary": "设置知识库归档状态。",
+      "tags": [
+        "database",
+        "knowledge"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/db.rs:delete_knowledge",
+      "type": "function",
+      "name": "delete_knowledge",
+      "filePath": "src-tauri/src/db.rs",
+      "lineRange": [
+        268,
+        276
+      ],
+      "summary": "删除知识库及其分块。",
+      "tags": [
+        "database",
+        "knowledge"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/db.rs:unlink_knowledge_from_novels",
+      "type": "function",
+      "name": "unlink_knowledge_from_novels",
+      "filePath": "src-tauri/src/db.rs",
+      "lineRange": [
+        279,
+        289
+      ],
+      "summary": "从小说的 knowledge_ids 中解除指定知识库关联。",
+      "tags": [
+        "database",
+        "knowledge"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/db.rs:rename_knowledge",
+      "type": "function",
+      "name": "rename_knowledge",
+      "filePath": "src-tauri/src/db.rs",
+      "lineRange": [
+        291,
+        305
+      ],
+      "summary": "重命名知识库标题。",
+      "tags": [
+        "database",
+        "knowledge"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/db.rs:update_knowledge",
+      "type": "function",
+      "name": "update_knowledge",
+      "filePath": "src-tauri/src/db.rs",
+      "lineRange": [
+        307,
+        334
+      ],
+      "summary": "更新知识库标题、作者、抽取提示与题材。",
+      "tags": [
+        "database",
+        "knowledge"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/db.rs:list_knowledge_chunks",
+      "type": "function",
+      "name": "list_knowledge_chunks",
+      "filePath": "src-tauri/src/db.rs",
+      "lineRange": [
+        336,
+        351
+      ],
+      "summary": "列出某知识库的全部分块内容。",
+      "tags": [
+        "database",
+        "knowledge"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/db.rs:insert_knowledge",
+      "type": "function",
+      "name": "insert_knowledge",
+      "filePath": "src-tauri/src/db.rs",
+      "lineRange": [
+        353,
+        378
+      ],
+      "summary": "插入新知识库书籍及分块。",
+      "tags": [
+        "database",
+        "knowledge"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/db.rs:replace_knowledge_content",
+      "type": "function",
+      "name": "replace_knowledge_content",
+      "filePath": "src-tauri/src/db.rs",
+      "lineRange": [
+        381,
+        418
+      ],
+      "summary": "替换知识库元数据与分块内容（事务）。",
+      "tags": [
+        "database",
+        "knowledge"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/db.rs:list_novels",
+      "type": "function",
+      "name": "list_novels",
+      "filePath": "src-tauri/src/db.rs",
+      "lineRange": [
+        420,
+        430
+      ],
+      "summary": "列出全部小说项目。",
+      "tags": [
+        "database",
+        "novel"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/db.rs:get_novel",
+      "type": "function",
+      "name": "get_novel",
+      "filePath": "src-tauri/src/db.rs",
+      "lineRange": [
+        432,
+        442
+      ],
+      "summary": "按 ID 读取小说项目。",
+      "tags": [
+        "database",
+        "novel"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/db.rs:upsert_novel",
+      "type": "function",
+      "name": "upsert_novel",
+      "filePath": "src-tauri/src/db.rs",
+      "lineRange": [
+        444,
+        476
+      ],
+      "summary": "插入或更新小说项目行。",
+      "tags": [
+        "database",
+        "novel"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/db.rs:delete_novel",
+      "type": "function",
+      "name": "delete_novel",
+      "filePath": "src-tauri/src/db.rs",
+      "lineRange": [
+        478,
+        484
+      ],
+      "summary": "按 ID 删除小说项目。",
+      "tags": [
+        "database",
+        "novel"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/db.rs:replace_chapter_memory",
+      "type": "function",
+      "name": "replace_chapter_memory",
+      "filePath": "src-tauri/src/db.rs",
+      "lineRange": [
+        486,
+        512
+      ],
+      "summary": "替换某章节节点的记忆分块。",
+      "tags": [
+        "database",
+        "chapter-memory"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/db.rs:delete_chapter_memory",
+      "type": "function",
+      "name": "delete_chapter_memory",
+      "filePath": "src-tauri/src/db.rs",
+      "lineRange": [
+        514,
+        521
+      ],
+      "summary": "删除某章节节点的记忆。",
+      "tags": [
+        "database",
+        "chapter-memory"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/db.rs:list_chapter_memory_for_nodes",
+      "type": "function",
+      "name": "list_chapter_memory_for_nodes",
+      "filePath": "src-tauri/src/db.rs",
+      "lineRange": [
+        524,
+        546
+      ],
+      "summary": "批量查询指定节点的章节记忆。",
+      "tags": [
+        "database",
+        "chapter-memory"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/db.rs:list_chapter_memory",
+      "type": "function",
+      "name": "list_chapter_memory",
+      "filePath": "src-tauri/src/db.rs",
+      "lineRange": [
+        549,
+        558
+      ],
+      "summary": "列出小说下全部章节记忆。",
+      "tags": [
+        "database",
+        "chapter-memory"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/db.rs:list_chat",
+      "type": "function",
+      "name": "list_chat",
+      "filePath": "src-tauri/src/db.rs",
+      "lineRange": [
+        560,
+        576
+      ],
+      "summary": "列出小说聊天消息。",
+      "tags": [
+        "database",
+        "chat"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/db.rs:insert_chat",
+      "type": "function",
+      "name": "insert_chat",
+      "filePath": "src-tauri/src/db.rs",
+      "lineRange": [
+        578,
+        585
+      ],
+      "summary": "插入一条聊天消息。",
+      "tags": [
+        "database",
+        "chat"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/db.rs:add_token_usage",
+      "type": "function",
+      "name": "add_token_usage",
+      "filePath": "src-tauri/src/db.rs",
+      "lineRange": [
+        587,
+        616
+      ],
+      "summary": "累加按日/时/模型/小说的 Token 用量。",
+      "tags": [
+        "database",
+        "analytics"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/db.rs:list_token_usage_day",
+      "type": "function",
+      "name": "list_token_usage_day",
+      "filePath": "src-tauri/src/db.rs",
+      "lineRange": [
+        618,
+        637
+      ],
+      "summary": "按日汇总小时级 Token 用量。",
+      "tags": [
+        "database",
+        "analytics"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/db.rs:list_token_usage_by_novel",
+      "type": "function",
+      "name": "list_token_usage_by_novel",
+      "filePath": "src-tauri/src/db.rs",
+      "lineRange": [
+        640,
+        701
+      ],
+      "summary": "按日汇总各小说 Token 用量并关联标题。",
+      "tags": [
+        "database",
+        "analytics"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/db.rs:list_token_usage_month",
+      "type": "function",
+      "name": "list_token_usage_month",
+      "filePath": "src-tauri/src/db.rs",
+      "lineRange": [
+        704,
+        723
+      ],
+      "summary": "按月汇总模型 Token 用量。",
+      "tags": [
+        "database",
+        "analytics"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/db.rs:migrate_token_usage_novel_id",
+      "type": "function",
+      "name": "migrate_token_usage_novel_id",
+      "filePath": "src-tauri/src/db.rs",
+      "lineRange": [
+        727,
+        755
+      ],
+      "summary": "为 token_usage 表补齐 novel_id 列的迁移逻辑。",
+      "tags": [
+        "database",
+        "migration"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/db.rs:map_novel",
+      "type": "function",
+      "name": "map_novel",
+      "filePath": "src-tauri/src/db.rs",
+      "lineRange": [
+        757,
+        774
+      ],
+      "summary": "将 SQL 行映射为 NovelProject。",
+      "tags": [
+        "database",
+        "serialization"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src-tauri/src/llm.rs",
+      "type": "file",
+      "name": "llm.rs",
+      "filePath": "src-tauri/src/llm.rs",
+      "summary": "统一 LLM 补全入口：调用 DeepSeek 兼容 Chat API，支持取消令牌与无密钥时的 mock 回退。",
+      "tags": [
+        "service",
+        "llm",
+        "http-client",
+        "api-handler"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "通过 AtomicBool 取消标志与 tokio 竞态实现可中断请求。"
+    },
+    {
+      "id": "class:src-tauri/src/llm.rs:CompletionResult",
+      "type": "class",
+      "name": "CompletionResult",
+      "filePath": "src-tauri/src/llm.rs",
+      "lineRange": [
+        9,
+        16
+      ],
+      "summary": "LLM 补全结果：内容、是否 mock、模型名与 Token 用量字段。",
+      "tags": [
+        "type-definition",
+        "llm",
+        "data-model"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/llm.rs:wait_cancel",
+      "type": "function",
+      "name": "wait_cancel",
+      "filePath": "src-tauri/src/llm.rs",
+      "lineRange": [
+        25,
+        36
+      ],
+      "summary": "轮询取消标志直至取消或超时窗口结束。",
+      "tags": [
+        "cancellation",
+        "async"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/llm.rs:complete",
+      "type": "function",
+      "name": "complete",
+      "filePath": "src-tauri/src/llm.rs",
+      "lineRange": [
+        39,
+        147
+      ],
+      "summary": "执行聊天补全：校验密钥、发请求、解析用量，支持取消与 mock。",
+      "tags": [
+        "llm",
+        "api-handler",
+        "service"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:src-tauri/src/llm.rs:mock_complete",
+      "type": "function",
+      "name": "mock_complete",
+      "filePath": "src-tauri/src/llm.rs",
+      "lineRange": [
+        149,
+        162
+      ],
+      "summary": "无 API 密钥时生成占位补全结果。",
+      "tags": [
+        "llm",
+        "mock",
+        "fallback"
+      ],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:src-tauri/src/catalog.rs",
+      "target": "file:src-tauri/src/db.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src-tauri/src/catalog.rs",
+      "target": "file:src-tauri/src/models.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src-tauri/src/catalog.rs",
+      "target": "function:src-tauri/src/catalog.rs:refresh",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/catalog.rs",
+      "target": "function:src-tauri/src/catalog.rs:refresh",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/catalog.rs",
+      "target": "function:src-tauri/src/catalog.rs:fetch_openai_compat",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/catalog.rs",
+      "target": "function:src-tauri/src/catalog.rs:fetch_gemini",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/catalog.rs",
+      "target": "function:src-tauri/src/catalog.rs:fetch_claude",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "file:src-tauri/src/models.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "file:src-tauri/src/paths.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "class:src-tauri/src/db.rs:Db",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "class:src-tauri/src/db.rs:Db",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:open",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:open",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:get_settings",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:get_settings",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:save_settings",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:save_settings",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:get_model_catalog",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:get_model_catalog",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:save_model_catalog",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:save_model_catalog",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:list_knowledge",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:list_knowledge",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:get_knowledge",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:get_knowledge",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:set_knowledge_archived",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:set_knowledge_archived",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:delete_knowledge",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:delete_knowledge",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:unlink_knowledge_from_novels",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:unlink_knowledge_from_novels",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:rename_knowledge",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:rename_knowledge",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:update_knowledge",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:update_knowledge",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:list_knowledge_chunks",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:list_knowledge_chunks",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:insert_knowledge",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:insert_knowledge",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:replace_knowledge_content",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:replace_knowledge_content",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:list_novels",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:list_novels",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:get_novel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:get_novel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:upsert_novel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:upsert_novel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:delete_novel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:delete_novel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:replace_chapter_memory",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:replace_chapter_memory",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:delete_chapter_memory",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:delete_chapter_memory",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:list_chapter_memory_for_nodes",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:list_chapter_memory_for_nodes",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:list_chapter_memory",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:list_chapter_memory",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:list_chat",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:list_chat",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:insert_chat",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:insert_chat",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:add_token_usage",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:add_token_usage",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:list_token_usage_day",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:list_token_usage_day",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:list_token_usage_by_novel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:list_token_usage_by_novel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:list_token_usage_month",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:list_token_usage_month",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:migrate_token_usage_novel_id",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/db.rs",
+      "target": "function:src-tauri/src/db.rs:map_novel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/llm.rs",
+      "target": "file:src-tauri/src/models.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src-tauri/src/llm.rs",
+      "target": "class:src-tauri/src/llm.rs:CompletionResult",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/llm.rs",
+      "target": "class:src-tauri/src/llm.rs:CompletionResult",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/llm.rs",
+      "target": "function:src-tauri/src/llm.rs:wait_cancel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/llm.rs",
+      "target": "function:src-tauri/src/llm.rs:complete",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/llm.rs",
+      "target": "function:src-tauri/src/llm.rs:complete",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/llm.rs",
+      "target": "function:src-tauri/src/llm.rs:mock_complete",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "function:src-tauri/src/catalog.rs:refresh",
+      "target": "function:src-tauri/src/catalog.rs:fetch_openai_compat",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/catalog.rs:refresh",
+      "target": "function:src-tauri/src/catalog.rs:fetch_gemini",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/catalog.rs:refresh",
+      "target": "function:src-tauri/src/catalog.rs:fetch_claude",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/catalog.rs:refresh",
+      "target": "function:src-tauri/src/db.rs:save_model_catalog",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/catalog.rs:refresh",
+      "target": "function:src-tauri/src/db.rs:get_settings",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/db.rs:get_knowledge",
+      "target": "function:src-tauri/src/db.rs:list_knowledge",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/db.rs:get_model_catalog",
+      "target": "function:src-tauri/src/models.rs:seed",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/db.rs:open",
+      "target": "function:src-tauri/src/db.rs:migrate_token_usage_novel_id",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/db.rs:get_novel",
+      "target": "function:src-tauri/src/db.rs:map_novel",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/db.rs:list_novels",
+      "target": "function:src-tauri/src/db.rs:map_novel",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/llm.rs:complete",
+      "target": "function:src-tauri/src/llm.rs:mock_complete",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/llm.rs:complete",
+      "target": "function:src-tauri/src/llm.rs:wait_cancel",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    }
+  ]
+}

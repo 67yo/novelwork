@@ -1,0 +1,3831 @@
+{
+  "nodes": [
+    {
+      "id": "file:src-tauri/src/chunk.rs",
+      "type": "file",
+      "name": "chunk.rs",
+      "filePath": "src-tauri/src/chunk.rs",
+      "summary": "按字符数切分长文本并保留重叠窗口，供知识库与章节记忆入库复用。",
+      "tags": [
+        "utility",
+        "text-processing",
+        "分块"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/chunk.rs:chunk_text",
+      "type": "function",
+      "name": "chunk_text",
+      "filePath": "src-tauri/src/chunk.rs",
+      "lineRange": [
+        2,
+        21
+      ],
+      "summary": "按指定大小与重叠将文本切成字符窗口列表。",
+      "tags": [
+        "utility",
+        "text-processing",
+        "分块"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src-tauri/src/commands.rs",
+      "type": "file",
+      "name": "commands.rs",
+      "filePath": "src-tauri/src/commands.rs",
+      "summary": "Tauri 命令层：设置、知识库、小说树、章节生成/润色/续写、工作区聊天与用量统计等前端可调用入口。",
+      "tags": [
+        "api-handler",
+        "entry-point",
+        "tauri-commands",
+        "编排"
+      ],
+      "complexity": "complex",
+      "languageNotes": "大量 #[tauri::command] 异步处理器，配合 State<AppState> 与事件推送。"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:llm_complete",
+      "type": "function",
+      "name": "llm_complete",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        42,
+        74
+      ],
+      "summary": "封装带取消与用量统计的 LLM 补全调用。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:enrich_user_with_urls_progress",
+      "type": "function",
+      "name": "enrich_user_with_urls_progress",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        82,
+        92
+      ],
+      "summary": "抓取用户消息中的 URL 并向前端推送进度。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:mask_key",
+      "type": "function",
+      "name": "mask_key",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        94,
+        107
+      ],
+      "summary": "对 API Key 做脱敏显示。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:get_settings",
+      "type": "function",
+      "name": "get_settings",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        130,
+        156
+      ],
+      "summary": "读取并返回脱敏后的应用设置。",
+      "tags": [
+        "api-handler",
+        "tauri-command",
+        "编排"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:save_settings",
+      "type": "function",
+      "name": "save_settings",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        159,
+        195
+      ],
+      "summary": "保存设置并加密持久化 API Key。",
+      "tags": [
+        "api-handler",
+        "tauri-command",
+        "编排"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:refresh_model_catalog",
+      "type": "function",
+      "name": "refresh_model_catalog",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        198,
+        202
+      ],
+      "summary": "刷新可用模型目录缓存。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:collect_known_genres",
+      "type": "function",
+      "name": "collect_known_genres",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        204,
+        220
+      ],
+      "summary": "汇总知识库中已知题材标签。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:list_genres",
+      "type": "function",
+      "name": "list_genres",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        223,
+        225
+      ],
+      "summary": "列出题材标签供前端选择。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:list_knowledge_bases",
+      "type": "function",
+      "name": "list_knowledge_bases",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        228,
+        230
+      ],
+      "summary": "列出知识库条目。",
+      "tags": [
+        "api-handler",
+        "tauri-command",
+        "编排"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:rename_knowledge",
+      "type": "function",
+      "name": "rename_knowledge",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        233,
+        242
+      ],
+      "summary": "重命名知识库。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:update_knowledge",
+      "type": "function",
+      "name": "update_knowledge",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        245,
+        264
+      ],
+      "summary": "更新知识库元数据与抽取提示。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:list_knowledge_chunks",
+      "type": "function",
+      "name": "list_knowledge_chunks",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        267,
+        275
+      ],
+      "summary": "列出知识库分块内容。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:archive_knowledge",
+      "type": "function",
+      "name": "archive_knowledge",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        278,
+        292
+      ],
+      "summary": "归档或恢复知识库。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:delete_knowledge",
+      "type": "function",
+      "name": "delete_knowledge",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        295,
+        308
+      ],
+      "summary": "删除知识库及其向量分块。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:import_knowledge_text",
+      "type": "function",
+      "name": "import_knowledge_text",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        311,
+        319
+      ],
+      "summary": "从本地文本文件导入知识库。",
+      "tags": [
+        "api-handler",
+        "tauri-command",
+        "编排"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:import_knowledge_url",
+      "type": "function",
+      "name": "import_knowledge_url",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        322,
+        330
+      ],
+      "summary": "从 URL 导入知识库。",
+      "tags": [
+        "api-handler",
+        "tauri-command",
+        "编排"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:analyze_knowledge_source",
+      "type": "function",
+      "name": "analyze_knowledge_source",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        333,
+        402
+      ],
+      "summary": "分析知识源并调用 LLM 抽取元信息与题材。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:ingest_knowledge_source",
+      "type": "function",
+      "name": "ingest_knowledge_source",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        404,
+        431
+      ],
+      "summary": "将分析后的知识源入库并建立分块索引。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:reextract_knowledge",
+      "type": "function",
+      "name": "reextract_knowledge",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        440,
+        495
+      ],
+      "summary": "重新抽取已有知识库内容。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:list_novels",
+      "type": "function",
+      "name": "list_novels",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        498,
+        500
+      ],
+      "summary": "列出小说项目。",
+      "tags": [
+        "api-handler",
+        "tauri-command",
+        "编排"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:get_novel",
+      "type": "function",
+      "name": "get_novel",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        503,
+        505
+      ],
+      "summary": "获取单个小说项目详情。",
+      "tags": [
+        "api-handler",
+        "tauri-command",
+        "编排"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:archive_novel",
+      "type": "function",
+      "name": "archive_novel",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        508,
+        526
+      ],
+      "summary": "归档或恢复小说。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:delete_novel",
+      "type": "function",
+      "name": "delete_novel",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        529,
+        548
+      ],
+      "summary": "删除小说及其本地文件与记忆。",
+      "tags": [
+        "api-handler",
+        "tauri-command",
+        "编排"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:create_novel",
+      "type": "function",
+      "name": "create_novel",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        551,
+        567
+      ],
+      "summary": "创建空小说项目。",
+      "tags": [
+        "api-handler",
+        "tauri-command",
+        "编排"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:root_chapter_word_target",
+      "type": "function",
+      "name": "root_chapter_word_target",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        588,
+        601
+      ],
+      "summary": "计算根节点章节字数目标区间。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:repair_chapter_word_count",
+      "type": "function",
+      "name": "repair_chapter_word_count",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        616,
+        655
+      ],
+      "summary": "用 LLM 修复章节字数偏离目标的问题。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:parse_word_target_from_text",
+      "type": "function",
+      "name": "parse_word_target_from_text",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        658,
+        713
+      ],
+      "summary": "从自然语言中解析字数目标。",
+      "tags": [
+        "parsing",
+        "utility",
+        "解析"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:word_target_from_json",
+      "type": "function",
+      "name": "word_target_from_json",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        715,
+        753
+      ],
+      "summary": "从 JSON 结构解析字数目标。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:apply_novel_word_target",
+      "type": "function",
+      "name": "apply_novel_word_target",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        755,
+        775
+      ],
+      "summary": "将字数目标写回小说与树节点。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:chapter_count_from_json",
+      "type": "function",
+      "name": "chapter_count_from_json",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        781,
+        798
+      ],
+      "summary": "从 JSON 解析章节数。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:parse_chapter_count_from_text",
+      "type": "function",
+      "name": "parse_chapter_count_from_text",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        801,
+        844
+      ],
+      "summary": "从文本解析章节数。",
+      "tags": [
+        "parsing",
+        "utility",
+        "解析"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:apply_novel_chapter_count",
+      "type": "function",
+      "name": "apply_novel_chapter_count",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        846,
+        863
+      ],
+      "summary": "将章节数规划写回小说。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:update_novel_plan",
+      "type": "function",
+      "name": "update_novel_plan",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        867,
+        890
+      ],
+      "summary": "更新小说字数与章节规划。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:create_novel_with_tree",
+      "type": "function",
+      "name": "create_novel_with_tree",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        898,
+        950
+      ],
+      "summary": "创建带初始故事树的小说项目。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:build_initial_tree",
+      "type": "function",
+      "name": "build_initial_tree",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        952,
+        1052
+      ],
+      "summary": "根据设定构建初始节点树与角色卡。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:cn_digit",
+      "type": "function",
+      "name": "cn_digit",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        1072,
+        1086
+      ],
+      "summary": "将中文数字字符映射为数值。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:parse_chinese_numeral",
+      "type": "function",
+      "name": "parse_chinese_numeral",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        1093,
+        1143
+      ],
+      "summary": "解析中文数字串为整数。",
+      "tags": [
+        "parsing",
+        "utility",
+        "解析"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:parse_chapter_num_token",
+      "type": "function",
+      "name": "parse_chapter_num_token",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        1145,
+        1154
+      ],
+      "summary": "解析章节编号 token。",
+      "tags": [
+        "parsing",
+        "utility",
+        "解析"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:chapter_number_from_label",
+      "type": "function",
+      "name": "chapter_number_from_label",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        1156,
+        1213
+      ],
+      "summary": "从章节标签提取章号。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:parse_chapter_ref",
+      "type": "function",
+      "name": "parse_chapter_ref",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        1216,
+        1238
+      ],
+      "summary": "解析斜杠命令中的章节引用。",
+      "tags": [
+        "parsing",
+        "utility",
+        "解析"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:existing_chapter_nums",
+      "type": "function",
+      "name": "existing_chapter_nums",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        1241,
+        1260
+      ],
+      "summary": "收集树中已有章节编号。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:last_chapter_anchor",
+      "type": "function",
+      "name": "last_chapter_anchor",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        1262,
+        1282
+      ],
+      "summary": "定位最近章节锚点节点。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:clear_all_chapter_nodes",
+      "type": "function",
+      "name": "clear_all_chapter_nodes",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        1285,
+        1306
+      ],
+      "summary": "清除树上全部章节节点。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:clear_all_side_plot_nodes",
+      "type": "function",
+      "name": "clear_all_side_plot_nodes",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        1308,
+        1329
+      ],
+      "summary": "清除全部支线剧情节点。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:push_chapter_node",
+      "type": "function",
+      "name": "push_chapter_node",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        1331,
+        1367
+      ],
+      "summary": "向树中追加章节节点。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:apply_chapter_outlines",
+      "type": "function",
+      "name": "apply_chapter_outlines",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        1370,
+        1420
+      ],
+      "summary": "将生成的章节大纲应用到故事树。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:add_plot_to_chapter",
+      "type": "function",
+      "name": "add_plot_to_chapter",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        1422,
+        1488
+      ],
+      "summary": "为章节添加剧情卡节点。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:parse_resolve_mode",
+      "type": "function",
+      "name": "parse_resolve_mode",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        1490,
+        1501
+      ],
+      "summary": "解析章节冲突解决模式。",
+      "tags": [
+        "parsing",
+        "utility",
+        "解析"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:extract_small_chapter_nums",
+      "type": "function",
+      "name": "extract_small_chapter_nums",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        1503,
+        1528
+      ],
+      "summary": "从文本提取较小范围的章号列表。",
+      "tags": [
+        "parsing",
+        "utility",
+        "解析"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:slash_args",
+      "type": "function",
+      "name": "slash_args",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        1531,
+        1544
+      ],
+      "summary": "解析斜杠命令参数。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:root_slash_help",
+      "type": "function",
+      "name": "root_slash_help",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        1546,
+        1568
+      ],
+      "summary": "生成根节点斜杠命令帮助文本。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:parse_clear_all_chapters",
+      "type": "function",
+      "name": "parse_clear_all_chapters",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        1570,
+        1582
+      ],
+      "summary": "解析清空全部章节命令。",
+      "tags": [
+        "parsing",
+        "utility",
+        "解析"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:parse_clear_all_plots",
+      "type": "function",
+      "name": "parse_clear_all_plots",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        1584,
+        1597
+      ],
+      "summary": "解析清空全部剧情命令。",
+      "tags": [
+        "parsing",
+        "utility",
+        "解析"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:enrich_plots_for_chapter_node",
+      "type": "function",
+      "name": "enrich_plots_for_chapter_node",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        1615,
+        1715
+      ],
+      "summary": "为章节节点充实/生成剧情卡。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:find_character_id_by_label",
+      "type": "function",
+      "name": "find_character_id_by_label",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        1717,
+        1730
+      ],
+      "summary": "按标签查找角色节点 ID。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:ensure_character_linked",
+      "type": "function",
+      "name": "ensure_character_linked",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        1732,
+        1754
+      ],
+      "summary": "确保角色与章节建立链接。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:apply_plots_and_characters_for_chapter",
+      "type": "function",
+      "name": "apply_plots_and_characters_for_chapter",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        1757,
+        1907
+      ],
+      "summary": "将剧情与角色写入指定章节上下文。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:strip_resolve_prefix",
+      "type": "function",
+      "name": "strip_resolve_prefix",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        1909,
+        1933
+      ],
+      "summary": "去掉命令中的解决模式前缀。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:parse_chapter_range",
+      "type": "function",
+      "name": "parse_chapter_range",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        1936,
+        1992
+      ],
+      "summary": "解析章节号范围表达式。",
+      "tags": [
+        "parsing",
+        "utility",
+        "解析"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:parse_gen_chapter_cards",
+      "type": "function",
+      "name": "parse_gen_chapter_cards",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        1995,
+        2007
+      ],
+      "summary": "解析生成章节卡命令。",
+      "tags": [
+        "parsing",
+        "utility",
+        "解析"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:parse_add_plot_command",
+      "type": "function",
+      "name": "parse_add_plot_command",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        2010,
+        2042
+      ],
+      "summary": "解析添加剧情命令。",
+      "tags": [
+        "parsing",
+        "utility",
+        "解析"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:finish_chat_reply",
+      "type": "function",
+      "name": "finish_chat_reply",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        2044,
+        2061
+      ],
+      "summary": "完成聊天回复并写入消息记录。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:create_novel_chat",
+      "type": "function",
+      "name": "create_novel_chat",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        2064,
+        2197
+      ],
+      "summary": "开书对话：多轮引导并创建小说与初始树。",
+      "tags": [
+        "api-handler",
+        "tauri-command",
+        "编排"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:normalize_llm_json_text",
+      "type": "function",
+      "name": "normalize_llm_json_text",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        2200,
+        2214
+      ],
+      "summary": "规范化 LLM 输出以便 JSON 解析。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:strip_trailing_commas",
+      "type": "function",
+      "name": "strip_trailing_commas",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        2217,
+        2257
+      ],
+      "summary": "去除 JSON 尾随逗号以提升解析成功率。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:find_matching_brace",
+      "type": "function",
+      "name": "find_matching_brace",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        2259,
+        2291
+      ],
+      "summary": "查找匹配的花括号范围。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:try_parse_json_object",
+      "type": "function",
+      "name": "try_parse_json_object",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        2293,
+        2312
+      ],
+      "summary": "尝试解析单个 JSON 对象。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:extract_json_objects",
+      "type": "function",
+      "name": "extract_json_objects",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        2315,
+        2341
+      ],
+      "summary": "从混合文本中提取多个 JSON 对象。",
+      "tags": [
+        "parsing",
+        "utility",
+        "解析"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:extract_create_json",
+      "type": "function",
+      "name": "extract_create_json",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        2358,
+        2369
+      ],
+      "summary": "从开书回复中提取创建用 JSON。",
+      "tags": [
+        "parsing",
+        "utility",
+        "解析"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:get_tree",
+      "type": "function",
+      "name": "get_tree",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        2372,
+        2375
+      ],
+      "summary": "读取小说故事树。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:save_tree",
+      "type": "function",
+      "name": "save_tree",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        2378,
+        2384
+      ],
+      "summary": "保存小说故事树到磁盘与数据库。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:delete_tree_card",
+      "type": "function",
+      "name": "delete_tree_card",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        2388,
+        2463
+      ],
+      "summary": "删除树上的卡片节点并处理关联数据。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:get_chapter",
+      "type": "function",
+      "name": "get_chapter",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        2466,
+        2473
+      ],
+      "summary": "读取章节正文内容。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:get_chapter_memory",
+      "type": "function",
+      "name": "get_chapter_memory",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        2477,
+        2487
+      ],
+      "summary": "读取章节记忆摘要。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:chapter_context",
+      "type": "function",
+      "name": "chapter_context",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        2490,
+        2861
+      ],
+      "summary": "组装章节生成所需的角色/剧情/知识/前后文上下文。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:root_generate_reference",
+      "type": "function",
+      "name": "root_generate_reference",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        2864,
+        2958
+      ],
+      "summary": "构建根大纲生成参考材料。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:upsert_chapter_memory",
+      "type": "function",
+      "name": "upsert_chapter_memory",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        2961,
+        2995
+      ],
+      "summary": "抽取并更新章节记忆到 DB 与 LanceDB。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:collect_land_beats",
+      "type": "function",
+      "name": "collect_land_beats",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        2998,
+        3109
+      ],
+      "summary": "收集章节需落地的大纲节拍。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:sorted_chapter_nodes",
+      "type": "function",
+      "name": "sorted_chapter_nodes",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        3112,
+        3132
+      ],
+      "summary": "按章号排序章节节点。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:chapters_outline_index",
+      "type": "function",
+      "name": "chapters_outline_index",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        3135,
+        3145
+      ],
+      "summary": "构建章节大纲索引文本。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:outline_mode_from_json",
+      "type": "function",
+      "name": "outline_mode_from_json",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        3147,
+        3164
+      ],
+      "summary": "从 JSON 解析大纲模式。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:build_refine_memory_context",
+      "type": "function",
+      "name": "build_refine_memory_context",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        3166,
+        3235
+      ],
+      "summary": "为润色构建相关章节记忆上下文。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:generate_chapter",
+      "type": "function",
+      "name": "generate_chapter",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        3238,
+        3387
+      ],
+      "summary": "生成章节正文并校验字数与落地节拍。",
+      "tags": [
+        "api-handler",
+        "tauri-command",
+        "编排"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:refine_chapter",
+      "type": "function",
+      "name": "refine_chapter",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        3391,
+        3538
+      ],
+      "summary": "基于知识与记忆润色已有章节正文。",
+      "tags": [
+        "api-handler",
+        "tauri-command",
+        "编排"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:plan_next_chapters",
+      "type": "function",
+      "name": "plan_next_chapters",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        3542,
+        3662
+      ],
+      "summary": "规划后续章节大纲并写回故事树。",
+      "tags": [
+        "api-handler",
+        "tauri-command",
+        "编排"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:list_chat_messages",
+      "type": "function",
+      "name": "list_chat_messages",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        3665,
+        3670
+      ],
+      "summary": "列出小说工作区聊天记录。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:chat_send",
+      "type": "function",
+      "name": "chat_send",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        3673,
+        4093
+      ],
+      "summary": "处理工作区聊天与斜杠命令，驱动树编辑与生成流程。",
+      "tags": [
+        "api-handler",
+        "tauri-command",
+        "编排"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:extract_knowledge_card",
+      "type": "function",
+      "name": "extract_knowledge_card",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        4097,
+        4154
+      ],
+      "summary": "从知识库抽取并填充知识卡片。",
+      "tags": [
+        "parsing",
+        "utility",
+        "解析"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:gather_knowledge_corpus",
+      "type": "function",
+      "name": "gather_knowledge_corpus",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        4156,
+        4197
+      ],
+      "summary": "汇总知识库语料供卡片抽取。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:card_chat_send",
+      "type": "function",
+      "name": "card_chat_send",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        4200,
+        4342
+      ],
+      "summary": "卡片级对话编辑角色/剧情等内容。",
+      "tags": [
+        "api-handler",
+        "tauri-command",
+        "编排"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:pick_cover",
+      "type": "function",
+      "name": "pick_cover",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        4345,
+        4352
+      ],
+      "summary": "打开文件选择器挑选封面图。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:set_cover",
+      "type": "function",
+      "name": "set_cover",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        4355,
+        4380
+      ],
+      "summary": "设置并保存小说封面。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:pick_text_file",
+      "type": "function",
+      "name": "pick_text_file",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        4383,
+        4391
+      ],
+      "summary": "打开文件选择器挑选文本文件。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:app_data_root",
+      "type": "function",
+      "name": "app_data_root",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        4394,
+        4396
+      ],
+      "summary": "返回应用数据根路径字符串。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:get_token_usage",
+      "type": "function",
+      "name": "get_token_usage",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        4399,
+        4423
+      ],
+      "summary": "按日/模型汇总 token 用量。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:get_token_usage_month",
+      "type": "function",
+      "name": "get_token_usage_month",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        4426,
+        4446
+      ],
+      "summary": "按月汇总 token 用量。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:init_state",
+      "type": "function",
+      "name": "init_state",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        4448,
+        4455
+      ],
+      "summary": "初始化共享 AppState（打开数据库等）。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/commands.rs:chat_cancel",
+      "type": "function",
+      "name": "chat_cancel",
+      "filePath": "src-tauri/src/commands.rs",
+      "lineRange": [
+        4458,
+        4466
+      ],
+      "summary": "取消进行中的聊天/生成任务。",
+      "tags": [
+        "service",
+        "helper",
+        "后端"
+      ],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:src-tauri/src/chunk.rs",
+      "target": "function:src-tauri/src/chunk.rs:chunk_text",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/chunk.rs",
+      "target": "function:src-tauri/src/chunk.rs:chunk_text",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:llm_complete",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:enrich_user_with_urls_progress",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:mask_key",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:get_settings",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:get_settings",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:save_settings",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:save_settings",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:refresh_model_catalog",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:refresh_model_catalog",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:collect_known_genres",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:list_genres",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:list_genres",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:list_knowledge_bases",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:list_knowledge_bases",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:rename_knowledge",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:rename_knowledge",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:update_knowledge",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:update_knowledge",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:list_knowledge_chunks",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:list_knowledge_chunks",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:archive_knowledge",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:archive_knowledge",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:delete_knowledge",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:delete_knowledge",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:import_knowledge_text",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:import_knowledge_text",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:import_knowledge_url",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:import_knowledge_url",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:analyze_knowledge_source",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:ingest_knowledge_source",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:reextract_knowledge",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:reextract_knowledge",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:list_novels",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:list_novels",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:get_novel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:get_novel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:archive_novel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:archive_novel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:delete_novel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:delete_novel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:create_novel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:create_novel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:root_chapter_word_target",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:repair_chapter_word_count",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:parse_word_target_from_text",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:word_target_from_json",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:apply_novel_word_target",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:chapter_count_from_json",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:parse_chapter_count_from_text",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:apply_novel_chapter_count",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:update_novel_plan",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:update_novel_plan",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:create_novel_with_tree",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:build_initial_tree",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:cn_digit",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:parse_chinese_numeral",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:parse_chapter_num_token",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:chapter_number_from_label",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:parse_chapter_ref",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:existing_chapter_nums",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:last_chapter_anchor",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:clear_all_chapter_nodes",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:clear_all_side_plot_nodes",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:push_chapter_node",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:apply_chapter_outlines",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:add_plot_to_chapter",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:parse_resolve_mode",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:extract_small_chapter_nums",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:slash_args",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:root_slash_help",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:parse_clear_all_chapters",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:parse_clear_all_plots",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:enrich_plots_for_chapter_node",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:find_character_id_by_label",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:ensure_character_linked",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:apply_plots_and_characters_for_chapter",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:strip_resolve_prefix",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:parse_chapter_range",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:parse_gen_chapter_cards",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:parse_add_plot_command",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:finish_chat_reply",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:create_novel_chat",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:create_novel_chat",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:normalize_llm_json_text",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:strip_trailing_commas",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:find_matching_brace",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:try_parse_json_object",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:extract_json_objects",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:extract_create_json",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:get_tree",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:get_tree",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:save_tree",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:save_tree",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:delete_tree_card",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:delete_tree_card",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:get_chapter",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:get_chapter",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:get_chapter_memory",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:get_chapter_memory",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:chapter_context",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:root_generate_reference",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:upsert_chapter_memory",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:collect_land_beats",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:sorted_chapter_nodes",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:chapters_outline_index",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:outline_mode_from_json",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:build_refine_memory_context",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:generate_chapter",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:generate_chapter",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:refine_chapter",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:refine_chapter",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:plan_next_chapters",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:plan_next_chapters",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:list_chat_messages",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:list_chat_messages",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:chat_send",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:chat_send",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:extract_knowledge_card",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:extract_knowledge_card",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:gather_knowledge_corpus",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:card_chat_send",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:card_chat_send",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:pick_cover",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:pick_cover",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:set_cover",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:set_cover",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:pick_text_file",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:pick_text_file",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:app_data_root",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:app_data_root",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:get_token_usage",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:get_token_usage",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:get_token_usage_month",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:get_token_usage_month",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:init_state",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:init_state",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:chat_cancel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "function:src-tauri/src/commands.rs:chat_cancel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "file:src-tauri/src/chapter_constraints.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "file:src-tauri/src/db.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "file:src-tauri/src/knowledge.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "file:src-tauri/src/models.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "file:src-tauri/src/paths.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src-tauri/src/commands.rs",
+      "target": "file:src-tauri/src/prompts.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:analyze_knowledge_source",
+      "target": "function:src-tauri/src/db.rs:get_settings",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:analyze_knowledge_source",
+      "target": "function:src-tauri/src/knowledge.rs:build_knowledge_chunks",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:analyze_knowledge_source",
+      "target": "function:src-tauri/src/knowledge.rs:style_samples",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:analyze_knowledge_source",
+      "target": "function:src-tauri/src/knowledge.rs:toc_lines",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:analyze_knowledge_source",
+      "target": "function:src-tauri/src/prompts.rs:apply_analysis_meta",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:analyze_knowledge_source",
+      "target": "function:src-tauri/src/prompts.rs:default_knowledge_book_prompt",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:analyze_knowledge_source",
+      "target": "function:src-tauri/src/prompts.rs:default_knowledge_url_prompt",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:analyze_knowledge_source",
+      "target": "function:src-tauri/src/prompts.rs:extract_genres_from_analysis",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:analyze_knowledge_source",
+      "target": "function:src-tauri/src/prompts.rs:for_interaction",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:analyze_knowledge_source",
+      "target": "function:src-tauri/src/prompts.rs:knowledge_extract_system",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:analyze_knowledge_source",
+      "target": "function:src-tauri/src/prompts.rs:knowledge_extract_user",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:analyze_knowledge_source",
+      "target": "function:src-tauri/src/prompts.rs:knowledge_url_extract_system",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:analyze_knowledge_source",
+      "target": "function:src-tauri/src/prompts.rs:merge_genre_tags",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:app_data_root",
+      "target": "function:src-tauri/src/paths.rs:app_root",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:apply_novel_chapter_count",
+      "target": "function:src-tauri/src/db.rs:upsert_novel",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:apply_novel_word_target",
+      "target": "function:src-tauri/src/db.rs:upsert_novel",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:archive_knowledge",
+      "target": "function:src-tauri/src/db.rs:get_knowledge",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:archive_knowledge",
+      "target": "function:src-tauri/src/db.rs:set_knowledge_archived",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:archive_novel",
+      "target": "function:src-tauri/src/db.rs:get_novel",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:archive_novel",
+      "target": "function:src-tauri/src/db.rs:upsert_novel",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:archive_novel",
+      "target": "function:src-tauri/src/paths.rs:novel_meta_path",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:build_refine_memory_context",
+      "target": "function:src-tauri/src/chapter_memory.rs:rank_memory",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:build_refine_memory_context",
+      "target": "function:src-tauri/src/db.rs:list_chapter_memory",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:build_refine_memory_context",
+      "target": "function:src-tauri/src/db.rs:list_chapter_memory_for_nodes",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:build_refine_memory_context",
+      "target": "function:src-tauri/src/prompts.rs:is_zh",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:build_refine_memory_context",
+      "target": "function:src-tauri/src/prompts.rs:prev_chapter_memory_block",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:card_chat_send",
+      "target": "function:src-tauri/src/db.rs:get_novel",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:card_chat_send",
+      "target": "function:src-tauri/src/db.rs:get_settings",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:card_chat_send",
+      "target": "function:src-tauri/src/lib.rs:arm_chat_cancel",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:card_chat_send",
+      "target": "function:src-tauri/src/prompts.rs:card_chat_system",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:card_chat_send",
+      "target": "function:src-tauri/src/prompts.rs:for_interaction",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:chapter_context",
+      "target": "function:src-tauri/src/prompts.rs:chapter_context_labels",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:chapter_context",
+      "target": "function:src-tauri/src/prompts.rs:is_zh",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:chat_cancel",
+      "target": "function:src-tauri/src/lib.rs:request_chat_cancel",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:chat_send",
+      "target": "function:src-tauri/src/db.rs:get_novel",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:chat_send",
+      "target": "function:src-tauri/src/db.rs:get_settings",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:chat_send",
+      "target": "function:src-tauri/src/db.rs:insert_chat",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:chat_send",
+      "target": "function:src-tauri/src/lib.rs:arm_chat_cancel",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:chat_send",
+      "target": "function:src-tauri/src/prompts.rs:default_new_character",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:chat_send",
+      "target": "function:src-tauri/src/prompts.rs:for_interaction",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:chat_send",
+      "target": "function:src-tauri/src/prompts.rs:gen_chapter_cards_system",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:chat_send",
+      "target": "function:src-tauri/src/prompts.rs:gen_chapter_cards_user",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:chat_send",
+      "target": "function:src-tauri/src/prompts.rs:is_zh",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:chat_send",
+      "target": "function:src-tauri/src/prompts.rs:workspace_chat_system",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:collect_known_genres",
+      "target": "function:src-tauri/src/db.rs:list_knowledge",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:collect_land_beats",
+      "target": "function:src-tauri/src/chapter_constraints.rs:outline_beats",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:create_novel_chat",
+      "target": "function:src-tauri/src/db.rs:get_settings",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:create_novel_chat",
+      "target": "function:src-tauri/src/lib.rs:arm_chat_cancel",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:create_novel_chat",
+      "target": "function:src-tauri/src/prompts.rs:chat_created_novel",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:create_novel_chat",
+      "target": "function:src-tauri/src/prompts.rs:create_novel_empty_user",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:create_novel_chat",
+      "target": "function:src-tauri/src/prompts.rs:create_novel_system",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:create_novel_chat",
+      "target": "function:src-tauri/src/prompts.rs:for_interaction",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:create_novel_chat",
+      "target": "function:src-tauri/src/prompts.rs:untitled_novel",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:create_novel_with_tree",
+      "target": "function:src-tauri/src/db.rs:upsert_novel",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:create_novel_with_tree",
+      "target": "function:src-tauri/src/paths.rs:novel_meta_path",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:create_novel_with_tree",
+      "target": "function:src-tauri/src/paths.rs:novel_tree_path",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:delete_knowledge",
+      "target": "function:src-tauri/src/db.rs:get_knowledge",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:delete_knowledge",
+      "target": "function:src-tauri/src/db.rs:unlink_knowledge_from_novels",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:delete_knowledge",
+      "target": "function:src-tauri/src/knowledge.rs:delete_chunks",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:delete_novel",
+      "target": "function:src-tauri/src/chapter_memory.rs:delete_lance_novel",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:delete_novel",
+      "target": "function:src-tauri/src/db.rs:get_novel",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:delete_novel",
+      "target": "function:src-tauri/src/paths.rs:novel_dir",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:delete_tree_card",
+      "target": "function:src-tauri/src/chapter_memory.rs:delete_lance",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:delete_tree_card",
+      "target": "function:src-tauri/src/db.rs:delete_chapter_memory",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:delete_tree_card",
+      "target": "function:src-tauri/src/paths.rs:chapter_path",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:enrich_plots_for_chapter_node",
+      "target": "function:src-tauri/src/prompts.rs:default_new_character",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:enrich_plots_for_chapter_node",
+      "target": "function:src-tauri/src/prompts.rs:gen_chapter_plots_system",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:enrich_plots_for_chapter_node",
+      "target": "function:src-tauri/src/prompts.rs:gen_chapter_plots_user",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:enrich_plots_for_chapter_node",
+      "target": "function:src-tauri/src/prompts.rs:is_zh",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:enrich_user_with_urls_progress",
+      "target": "function:src-tauri/src/knowledge.rs:extract_http_urls",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:extract_knowledge_card",
+      "target": "function:src-tauri/src/db.rs:get_settings",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:extract_knowledge_card",
+      "target": "function:src-tauri/src/prompts.rs:for_interaction",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:extract_knowledge_card",
+      "target": "function:src-tauri/src/prompts.rs:knowledge_card_extract_system",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:extract_knowledge_card",
+      "target": "function:src-tauri/src/prompts.rs:knowledge_card_extract_user",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:finish_chat_reply",
+      "target": "function:src-tauri/src/db.rs:insert_chat",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:finish_chat_reply",
+      "target": "function:src-tauri/src/db.rs:list_chat",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:gather_knowledge_corpus",
+      "target": "function:src-tauri/src/db.rs:get_knowledge",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:gather_knowledge_corpus",
+      "target": "function:src-tauri/src/db.rs:list_knowledge_chunks",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:generate_chapter",
+      "target": "function:src-tauri/src/chapter_constraints.rs:format_contract",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:generate_chapter",
+      "target": "function:src-tauri/src/chapter_constraints.rs:format_missing",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:generate_chapter",
+      "target": "function:src-tauri/src/chapter_constraints.rs:missing_beats",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:generate_chapter",
+      "target": "function:src-tauri/src/db.rs:get_novel",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:generate_chapter",
+      "target": "function:src-tauri/src/db.rs:get_settings",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:generate_chapter",
+      "target": "function:src-tauri/src/lib.rs:arm_chat_cancel",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:generate_chapter",
+      "target": "function:src-tauri/src/paths.rs:chapter_path",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:generate_chapter",
+      "target": "function:src-tauri/src/prompts.rs:for_interaction",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:generate_chapter",
+      "target": "function:src-tauri/src/prompts.rs:generate_chapter_system",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:generate_chapter",
+      "target": "function:src-tauri/src/prompts.rs:generate_chapter_user",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:generate_chapter",
+      "target": "function:src-tauri/src/prompts.rs:generate_done_msg",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:generate_chapter",
+      "target": "function:src-tauri/src/prompts.rs:generate_footer",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:generate_chapter",
+      "target": "function:src-tauri/src/prompts.rs:is_zh",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:generate_chapter",
+      "target": "function:src-tauri/src/prompts.rs:repair_chapter_system",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:generate_chapter",
+      "target": "function:src-tauri/src/prompts.rs:repair_chapter_user",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:generate_chapter",
+      "target": "function:src-tauri/src/prompts.rs:word_count_off_note",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:get_chapter",
+      "target": "function:src-tauri/src/paths.rs:chapter_path",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:get_chapter_memory",
+      "target": "function:src-tauri/src/db.rs:list_chapter_memory_for_nodes",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:get_settings",
+      "target": "function:src-tauri/src/db.rs:get_model_catalog",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:get_settings",
+      "target": "function:src-tauri/src/models.rs:seed",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:get_token_usage",
+      "target": "function:src-tauri/src/db.rs:list_token_usage_by_novel",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:get_token_usage",
+      "target": "function:src-tauri/src/db.rs:list_token_usage_day",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:get_token_usage_month",
+      "target": "function:src-tauri/src/db.rs:list_token_usage_month",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:get_tree",
+      "target": "function:src-tauri/src/paths.rs:novel_tree_path",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:import_knowledge_text",
+      "target": "function:src-tauri/src/knowledge.rs:load_source",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:import_knowledge_url",
+      "target": "function:src-tauri/src/knowledge.rs:load_source_from_url",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:ingest_knowledge_source",
+      "target": "function:src-tauri/src/db.rs:insert_knowledge",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:ingest_knowledge_source",
+      "target": "function:src-tauri/src/knowledge.rs:upsert_chunks",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:init_state",
+      "target": "function:src-tauri/src/db.rs:open",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:init_state",
+      "target": "function:src-tauri/src/sample.rs:ensure_sample",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:list_chat_messages",
+      "target": "function:src-tauri/src/db.rs:list_chat",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:list_knowledge_bases",
+      "target": "function:src-tauri/src/db.rs:list_knowledge",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:llm_complete",
+      "target": "function:src-tauri/src/db.rs:add_token_usage",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:llm_complete",
+      "target": "function:src-tauri/src/llm.rs:complete",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:plan_next_chapters",
+      "target": "function:src-tauri/src/db.rs:get_novel",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:plan_next_chapters",
+      "target": "function:src-tauri/src/db.rs:get_settings",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:plan_next_chapters",
+      "target": "function:src-tauri/src/lib.rs:arm_chat_cancel",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:plan_next_chapters",
+      "target": "function:src-tauri/src/prompts.rs:for_interaction",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:plan_next_chapters",
+      "target": "function:src-tauri/src/prompts.rs:from_preference",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:plan_next_chapters",
+      "target": "function:src-tauri/src/prompts.rs:is_zh",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:plan_next_chapters",
+      "target": "function:src-tauri/src/prompts.rs:plan_next_chapters_system",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:plan_next_chapters",
+      "target": "function:src-tauri/src/prompts.rs:plan_next_chapters_user",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:plan_next_chapters",
+      "target": "function:src-tauri/src/prompts.rs:plan_next_done_msg",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:reextract_knowledge",
+      "target": "function:src-tauri/src/db.rs:get_knowledge",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:reextract_knowledge",
+      "target": "function:src-tauri/src/db.rs:replace_knowledge_content",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:reextract_knowledge",
+      "target": "function:src-tauri/src/knowledge.rs:delete_chunks",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:reextract_knowledge",
+      "target": "function:src-tauri/src/knowledge.rs:load_source",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:reextract_knowledge",
+      "target": "function:src-tauri/src/knowledge.rs:load_source_from_url",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:reextract_knowledge",
+      "target": "function:src-tauri/src/knowledge.rs:upsert_chunks",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:refine_chapter",
+      "target": "function:src-tauri/src/db.rs:get_novel",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:refine_chapter",
+      "target": "function:src-tauri/src/db.rs:get_settings",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:refine_chapter",
+      "target": "function:src-tauri/src/lib.rs:arm_chat_cancel",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:refine_chapter",
+      "target": "function:src-tauri/src/paths.rs:chapter_path",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:refine_chapter",
+      "target": "function:src-tauri/src/prompts.rs:for_interaction",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:refine_chapter",
+      "target": "function:src-tauri/src/prompts.rs:prev_chapter_block",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:refine_chapter",
+      "target": "function:src-tauri/src/prompts.rs:refine_chapter_system",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:refine_chapter",
+      "target": "function:src-tauri/src/prompts.rs:refine_chapter_user",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:refine_chapter",
+      "target": "function:src-tauri/src/prompts.rs:refine_done_msg",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:refine_chapter",
+      "target": "function:src-tauri/src/prompts.rs:word_count_off_note",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:refresh_model_catalog",
+      "target": "function:src-tauri/src/catalog.rs:refresh",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:repair_chapter_word_count",
+      "target": "function:src-tauri/src/prompts.rs:length_repair_chapter_system",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:repair_chapter_word_count",
+      "target": "function:src-tauri/src/prompts.rs:length_repair_chapter_user",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:root_generate_reference",
+      "target": "function:src-tauri/src/prompts.rs:chapter_context_labels",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:root_generate_reference",
+      "target": "function:src-tauri/src/prompts.rs:is_zh",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:save_settings",
+      "target": "function:src-tauri/src/db.rs:get_settings",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:save_tree",
+      "target": "function:src-tauri/src/paths.rs:novel_tree_path",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:set_cover",
+      "target": "function:src-tauri/src/db.rs:get_novel",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:set_cover",
+      "target": "function:src-tauri/src/db.rs:upsert_novel",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:set_cover",
+      "target": "function:src-tauri/src/paths.rs:novel_dir",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:set_cover",
+      "target": "function:src-tauri/src/paths.rs:novel_meta_path",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:update_knowledge",
+      "target": "function:src-tauri/src/db.rs:get_knowledge",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:update_knowledge",
+      "target": "function:src-tauri/src/prompts.rs:merge_genre_tags",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:update_novel_plan",
+      "target": "function:src-tauri/src/db.rs:get_novel",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:upsert_chapter_memory",
+      "target": "function:src-tauri/src/chapter_memory.rs:split_memory_text",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:upsert_chapter_memory",
+      "target": "function:src-tauri/src/chapter_memory.rs:upsert_lance",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:upsert_chapter_memory",
+      "target": "function:src-tauri/src/db.rs:replace_chapter_memory",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:upsert_chapter_memory",
+      "target": "function:src-tauri/src/prompts.rs:extract_chapter_memory_system",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/commands.rs:upsert_chapter_memory",
+      "target": "function:src-tauri/src/prompts.rs:extract_chapter_memory_user",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    }
+  ]
+}

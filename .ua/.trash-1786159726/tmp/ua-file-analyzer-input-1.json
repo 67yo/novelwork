@@ -1,0 +1,25 @@
+{
+  "projectRoot": "/Users/ablegao/code/novework",
+  "batchFiles": [
+    {"path": "src-tauri/src/chapter_constraints.rs", "language": "rust", "sizeLines": 196, "fileCategory": "code"},
+    {"path": "src-tauri/src/chapter_memory.rs", "language": "rust", "sizeLines": 323, "fileCategory": "code"},
+    {"path": "src-tauri/src/chunk.rs", "language": "rust", "sizeLines": 38, "fileCategory": "code"},
+    {"path": "src-tauri/src/commands.rs", "language": "rust", "sizeLines": 4645, "fileCategory": "code"},
+    {"path": "src-tauri/src/knowledge.rs", "language": "rust", "sizeLines": 958, "fileCategory": "code"},
+    {"path": "src-tauri/src/lib.rs", "language": "rust", "sizeLines": 106, "fileCategory": "code"},
+    {"path": "src-tauri/src/paths.rs", "language": "rust", "sizeLines": 47, "fileCategory": "code"},
+    {"path": "src-tauri/src/prompts.rs", "language": "rust", "sizeLines": 1430, "fileCategory": "code"},
+    {"path": "src-tauri/src/secret.rs", "language": "rust", "sizeLines": 84, "fileCategory": "code"}
+  ],
+  "batchImportData": {
+    "src-tauri/src/chapter_constraints.rs": ["src-tauri/src/chapter_memory.rs"],
+    "src-tauri/src/chapter_memory.rs": ["src-tauri/src/chunk.rs", "src-tauri/src/paths.rs"],
+    "src-tauri/src/chunk.rs": [],
+    "src-tauri/src/commands.rs": ["src-tauri/src/chapter_constraints.rs", "src-tauri/src/db.rs", "src-tauri/src/knowledge.rs", "src-tauri/src/models.rs", "src-tauri/src/paths.rs", "src-tauri/src/prompts.rs"],
+    "src-tauri/src/knowledge.rs": ["src-tauri/src/chunk.rs", "src-tauri/src/paths.rs"],
+    "src-tauri/src/lib.rs": ["src-tauri/src/catalog.rs", "src-tauri/src/chapter_constraints.rs", "src-tauri/src/chapter_memory.rs", "src-tauri/src/chunk.rs", "src-tauri/src/commands.rs", "src-tauri/src/db.rs", "src-tauri/src/knowledge.rs", "src-tauri/src/llm.rs", "src-tauri/src/models.rs", "src-tauri/src/paths.rs", "src-tauri/src/prompts.rs", "src-tauri/src/sample.rs", "src-tauri/src/secret.rs"],
+    "src-tauri/src/paths.rs": [],
+    "src-tauri/src/prompts.rs": [],
+    "src-tauri/src/secret.rs": []
+  }
+}

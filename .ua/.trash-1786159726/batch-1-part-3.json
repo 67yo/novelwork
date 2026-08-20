@@ -1,0 +1,1201 @@
+{
+  "nodes": [
+    {
+      "id": "file:src-tauri/src/knowledge.rs",
+      "type": "file",
+      "name": "knowledge.rs",
+      "filePath": "src-tauri/src/knowledge.rs",
+      "summary": "解析 TXT/EPUB/URL 知识源，抽取正文与目录样本，并写入 LanceDB 分块索引。",
+      "tags": [
+        "service",
+        "ingestion",
+        "parsing",
+        "知识库"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:src-tauri/src/knowledge.rs:SourceChapter",
+      "type": "class",
+      "name": "SourceChapter",
+      "filePath": "src-tauri/src/knowledge.rs",
+      "lineRange": [
+        13,
+        16
+      ],
+      "summary": "知识源中的单章结构，含标题与正文片段。",
+      "tags": [
+        "data-model",
+        "chapter",
+        "知识源"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:src-tauri/src/knowledge.rs:ParsedSource",
+      "type": "class",
+      "name": "ParsedSource",
+      "filePath": "src-tauri/src/knowledge.rs",
+      "lineRange": [
+        19,
+        25
+      ],
+      "summary": "解析后的知识源，含标题、作者、章节列表与元数据访问方法。",
+      "tags": [
+        "data-model",
+        "parsing",
+        "知识源"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/knowledge.rs:full_text",
+      "type": "function",
+      "name": "full_text",
+      "filePath": "src-tauri/src/knowledge.rs",
+      "lineRange": [
+        28,
+        40
+      ],
+      "summary": "拼接解析源全部章节为完整正文。",
+      "tags": [
+        "service",
+        "knowledge",
+        "知识库"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/knowledge.rs:toc_lines",
+      "type": "function",
+      "name": "toc_lines",
+      "filePath": "src-tauri/src/knowledge.rs",
+      "lineRange": [
+        42,
+        56
+      ],
+      "summary": "生成知识源目录行列表。",
+      "tags": [
+        "service",
+        "knowledge",
+        "知识库"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/knowledge.rs:style_samples",
+      "type": "function",
+      "name": "style_samples",
+      "filePath": "src-tauri/src/knowledge.rs",
+      "lineRange": [
+        59,
+        95
+      ],
+      "summary": "抽取风格样本文段供 LLM 分析。",
+      "tags": [
+        "service",
+        "knowledge",
+        "知识库"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/knowledge.rs:upsert_chunks",
+      "type": "function",
+      "name": "upsert_chunks",
+      "filePath": "src-tauri/src/knowledge.rs",
+      "lineRange": [
+        99,
+        134
+      ],
+      "summary": "将知识分块写入 LanceDB。",
+      "tags": [
+        "service",
+        "knowledge",
+        "知识库"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/knowledge.rs:delete_chunks",
+      "type": "function",
+      "name": "delete_chunks",
+      "filePath": "src-tauri/src/knowledge.rs",
+      "lineRange": [
+        137,
+        149
+      ],
+      "summary": "删除指定知识书的 LanceDB 分块。",
+      "tags": [
+        "service",
+        "knowledge",
+        "知识库"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/knowledge.rs:split_book",
+      "type": "function",
+      "name": "split_book",
+      "filePath": "src-tauri/src/knowledge.rs",
+      "lineRange": [
+        151,
+        153
+      ],
+      "summary": "调用文本分块切分整书内容。",
+      "tags": [
+        "service",
+        "knowledge",
+        "知识库"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/knowledge.rs:build_knowledge_chunks",
+      "type": "function",
+      "name": "build_knowledge_chunks",
+      "filePath": "src-tauri/src/knowledge.rs",
+      "lineRange": [
+        156,
+        182
+      ],
+      "summary": "构建带元数据的知识分块列表。",
+      "tags": [
+        "service",
+        "knowledge",
+        "知识库"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/knowledge.rs:guess_meta",
+      "type": "function",
+      "name": "guess_meta",
+      "filePath": "src-tauri/src/knowledge.rs",
+      "lineRange": [
+        185,
+        207
+      ],
+      "summary": "从文件名/内容猜测书名作者等元数据。",
+      "tags": [
+        "service",
+        "knowledge",
+        "知识库"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/knowledge.rs:load_source",
+      "type": "function",
+      "name": "load_source",
+      "filePath": "src-tauri/src/knowledge.rs",
+      "lineRange": [
+        209,
+        222
+      ],
+      "summary": "从本地路径加载并解析知识源。",
+      "tags": [
+        "service",
+        "knowledge",
+        "知识库"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/knowledge.rs:load_source_from_url",
+      "type": "function",
+      "name": "load_source_from_url",
+      "filePath": "src-tauri/src/knowledge.rs",
+      "lineRange": [
+        225,
+        240
+      ],
+      "summary": "从 URL 抓取并解析知识源。",
+      "tags": [
+        "service",
+        "knowledge",
+        "知识库"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/knowledge.rs:fetch_url_main",
+      "type": "function",
+      "name": "fetch_url_main",
+      "filePath": "src-tauri/src/knowledge.rs",
+      "lineRange": [
+        243,
+        294
+      ],
+      "summary": "抓取 URL 并抽取主内容 HTML/文本。",
+      "tags": [
+        "service",
+        "knowledge",
+        "知识库"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/knowledge.rs:extract_http_urls",
+      "type": "function",
+      "name": "extract_http_urls",
+      "filePath": "src-tauri/src/knowledge.rs",
+      "lineRange": [
+        297,
+        331
+      ],
+      "summary": "从文本中提取 HTTP(S) URL 列表。",
+      "tags": [
+        "ingestion",
+        "parsing",
+        "知识库"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/knowledge.rs:fetch_urls_context",
+      "type": "function",
+      "name": "fetch_urls_context",
+      "filePath": "src-tauri/src/knowledge.rs",
+      "lineRange": [
+        334,
+        354
+      ],
+      "summary": "批量抓取 URL 并拼成上下文。",
+      "tags": [
+        "service",
+        "knowledge",
+        "知识库"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/knowledge.rs:with_fetched_url_context",
+      "type": "function",
+      "name": "with_fetched_url_context",
+      "filePath": "src-tauri/src/knowledge.rs",
+      "lineRange": [
+        356,
+        366
+      ],
+      "summary": "为用户文本附加抓取到的 URL 上下文。",
+      "tags": [
+        "service",
+        "knowledge",
+        "知识库"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/knowledge.rs:extract_main_html",
+      "type": "function",
+      "name": "extract_main_html",
+      "filePath": "src-tauri/src/knowledge.rs",
+      "lineRange": [
+        369,
+        405
+      ],
+      "summary": "从整页 HTML 中抽取主内容区域。",
+      "tags": [
+        "ingestion",
+        "parsing",
+        "知识库"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/knowledge.rs:extract_element_inner",
+      "type": "function",
+      "name": "extract_element_inner",
+      "filePath": "src-tauri/src/knowledge.rs",
+      "lineRange": [
+        407,
+        458
+      ],
+      "summary": "按标签提取元素内部 HTML。",
+      "tags": [
+        "ingestion",
+        "parsing",
+        "知识库"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/knowledge.rs:extract_role_main",
+      "type": "function",
+      "name": "extract_role_main",
+      "filePath": "src-tauri/src/knowledge.rs",
+      "lineRange": [
+        460,
+        471
+      ],
+      "summary": "按 role=main 抽取主区域。",
+      "tags": [
+        "ingestion",
+        "parsing",
+        "知识库"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/knowledge.rs:extract_by_id",
+      "type": "function",
+      "name": "extract_by_id",
+      "filePath": "src-tauri/src/knowledge.rs",
+      "lineRange": [
+        473,
+        485
+      ],
+      "summary": "按元素 id 抽取 HTML 片段。",
+      "tags": [
+        "ingestion",
+        "parsing",
+        "知识库"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/knowledge.rs:extract_by_class_contains",
+      "type": "function",
+      "name": "extract_by_class_contains",
+      "filePath": "src-tauri/src/knowledge.rs",
+      "lineRange": [
+        487,
+        509
+      ],
+      "summary": "按 class 包含关系抽取片段。",
+      "tags": [
+        "ingestion",
+        "parsing",
+        "知识库"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/knowledge.rs:tag_name_from",
+      "type": "function",
+      "name": "tag_name_from",
+      "filePath": "src-tauri/src/knowledge.rs",
+      "lineRange": [
+        511,
+        522
+      ],
+      "summary": "从 HTML 起始标签解析标签名。",
+      "tags": [
+        "service",
+        "knowledge",
+        "知识库"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/knowledge.rs:extract_element_from",
+      "type": "function",
+      "name": "extract_element_from",
+      "filePath": "src-tauri/src/knowledge.rs",
+      "lineRange": [
+        524,
+        558
+      ],
+      "summary": "从指定位置提取完整元素。",
+      "tags": [
+        "ingestion",
+        "parsing",
+        "知识库"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/knowledge.rs:title_from_html",
+      "type": "function",
+      "name": "title_from_html",
+      "filePath": "src-tauri/src/knowledge.rs",
+      "lineRange": [
+        560,
+        573
+      ],
+      "summary": "从 HTML 提取页面标题。",
+      "tags": [
+        "ingestion",
+        "parsing",
+        "知识库"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/knowledge.rs:host_from_url",
+      "type": "function",
+      "name": "host_from_url",
+      "filePath": "src-tauri/src/knowledge.rs",
+      "lineRange": [
+        575,
+        588
+      ],
+      "summary": "解析 URL 主机名。",
+      "tags": [
+        "service",
+        "knowledge",
+        "知识库"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/knowledge.rs:parse_txt",
+      "type": "function",
+      "name": "parse_txt",
+      "filePath": "src-tauri/src/knowledge.rs",
+      "lineRange": [
+        590,
+        606
+      ],
+      "summary": "解析纯文本知识源为章节结构。",
+      "tags": [
+        "ingestion",
+        "parsing",
+        "知识库"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/knowledge.rs:parse_epub",
+      "type": "function",
+      "name": "parse_epub",
+      "filePath": "src-tauri/src/knowledge.rs",
+      "lineRange": [
+        608,
+        702
+      ],
+      "summary": "解析 EPUB 为章节与元数据。",
+      "tags": [
+        "ingestion",
+        "parsing",
+        "知识库"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:src-tauri/src/knowledge.rs:meta_first",
+      "type": "function",
+      "name": "meta_first",
+      "filePath": "src-tauri/src/knowledge.rs",
+      "lineRange": [
+        704,
+        717
+      ],
+      "summary": "读取 EPUB 元数据的首个匹配值。",
+      "tags": [
+        "service",
+        "knowledge",
+        "知识库"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/knowledge.rs:meta_all",
+      "type": "function",
+      "name": "meta_all",
+      "filePath": "src-tauri/src/knowledge.rs",
+      "lineRange": [
+        719,
+        742
+      ],
+      "summary": "读取 EPUB 元数据的全部匹配值。",
+      "tags": [
+        "service",
+        "knowledge",
+        "知识库"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/knowledge.rs:html_to_text",
+      "type": "function",
+      "name": "html_to_text",
+      "filePath": "src-tauri/src/knowledge.rs",
+      "lineRange": [
+        760,
+        874
+      ],
+      "summary": "将 HTML 转为可读纯文本。",
+      "tags": [
+        "ingestion",
+        "parsing",
+        "知识库"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:src-tauri/src/knowledge.rs:decode_entity",
+      "type": "function",
+      "name": "decode_entity",
+      "filePath": "src-tauri/src/knowledge.rs",
+      "lineRange": [
+        876,
+        889
+      ],
+      "summary": "解码常见 HTML 实体。",
+      "tags": [
+        "service",
+        "knowledge",
+        "知识库"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src-tauri/src/lib.rs",
+      "type": "file",
+      "name": "lib.rs",
+      "filePath": "src-tauri/src/lib.rs",
+      "summary": "Rust 后端 crate 入口：挂载模块、定义 AppState，并注册全部 Tauri 命令与启动逻辑。",
+      "tags": [
+        "entry-point",
+        "barrel",
+        "app-state",
+        "启动"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Tauri 2 的 #[cfg_attr] 移动端入口与 generate_handler! 批量注册命令。"
+    },
+    {
+      "id": "class:src-tauri/src/lib.rs:AppState",
+      "type": "class",
+      "name": "AppState",
+      "filePath": "src-tauri/src/lib.rs",
+      "lineRange": [
+        20,
+        24
+      ],
+      "summary": "全局应用状态，持有数据库句柄与按会话挂起的聊天取消标志。",
+      "tags": [
+        "singleton",
+        "app-state",
+        "entry-point",
+        "状态"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/lib.rs:arm_chat_cancel",
+      "type": "function",
+      "name": "arm_chat_cancel",
+      "filePath": "src-tauri/src/lib.rs",
+      "lineRange": [
+        27,
+        34
+      ],
+      "summary": "为指定会话注册可取消的原子标志。",
+      "tags": [
+        "entry-point",
+        "app-state",
+        "启动"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/lib.rs:request_chat_cancel",
+      "type": "function",
+      "name": "request_chat_cancel",
+      "filePath": "src-tauri/src/lib.rs",
+      "lineRange": [
+        36,
+        40
+      ],
+      "summary": "请求取消指定会话的进行中 LLM 调用。",
+      "tags": [
+        "entry-point",
+        "app-state",
+        "启动"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/lib.rs:clear_chat_cancel",
+      "type": "function",
+      "name": "clear_chat_cancel",
+      "filePath": "src-tauri/src/lib.rs",
+      "lineRange": [
+        42,
+        44
+      ],
+      "summary": "清理会话对应的取消标志。",
+      "tags": [
+        "entry-point",
+        "app-state",
+        "启动"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/lib.rs:run",
+      "type": "function",
+      "name": "run",
+      "filePath": "src-tauri/src/lib.rs",
+      "lineRange": [
+        48,
+        106
+      ],
+      "summary": "初始化数据库与状态，注册命令并启动 Tauri 应用。",
+      "tags": [
+        "entry-point",
+        "app-state",
+        "启动"
+      ],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "class:src-tauri/src/knowledge.rs:SourceChapter",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "class:src-tauri/src/knowledge.rs:SourceChapter",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "class:src-tauri/src/knowledge.rs:ParsedSource",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "class:src-tauri/src/knowledge.rs:ParsedSource",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:full_text",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:full_text",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:toc_lines",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:toc_lines",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:style_samples",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:style_samples",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:upsert_chunks",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:upsert_chunks",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:delete_chunks",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:delete_chunks",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:split_book",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:split_book",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:build_knowledge_chunks",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:build_knowledge_chunks",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:guess_meta",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:guess_meta",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:load_source",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:load_source",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:load_source_from_url",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:load_source_from_url",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:fetch_url_main",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:fetch_url_main",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:extract_http_urls",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:extract_http_urls",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:fetch_urls_context",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:fetch_urls_context",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:with_fetched_url_context",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:with_fetched_url_context",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:extract_main_html",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:extract_main_html",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:extract_element_inner",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:extract_role_main",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:extract_by_id",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:extract_by_class_contains",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:tag_name_from",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:extract_element_from",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:title_from_html",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:host_from_url",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:parse_txt",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:parse_epub",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:meta_first",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:meta_all",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:html_to_text",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:html_to_text",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "function:src-tauri/src/knowledge.rs:decode_entity",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/lib.rs",
+      "target": "class:src-tauri/src/lib.rs:AppState",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/lib.rs",
+      "target": "class:src-tauri/src/lib.rs:AppState",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/lib.rs",
+      "target": "function:src-tauri/src/lib.rs:arm_chat_cancel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/lib.rs",
+      "target": "function:src-tauri/src/lib.rs:arm_chat_cancel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/lib.rs",
+      "target": "function:src-tauri/src/lib.rs:request_chat_cancel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/lib.rs",
+      "target": "function:src-tauri/src/lib.rs:request_chat_cancel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/lib.rs",
+      "target": "function:src-tauri/src/lib.rs:clear_chat_cancel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/lib.rs",
+      "target": "function:src-tauri/src/lib.rs:clear_chat_cancel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/lib.rs",
+      "target": "function:src-tauri/src/lib.rs:run",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/lib.rs",
+      "target": "function:src-tauri/src/lib.rs:run",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "file:src-tauri/src/chunk.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src-tauri/src/knowledge.rs",
+      "target": "file:src-tauri/src/paths.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src-tauri/src/lib.rs",
+      "target": "file:src-tauri/src/catalog.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src-tauri/src/lib.rs",
+      "target": "file:src-tauri/src/chapter_constraints.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src-tauri/src/lib.rs",
+      "target": "file:src-tauri/src/chapter_memory.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src-tauri/src/lib.rs",
+      "target": "file:src-tauri/src/chunk.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src-tauri/src/lib.rs",
+      "target": "file:src-tauri/src/commands.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src-tauri/src/lib.rs",
+      "target": "file:src-tauri/src/db.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src-tauri/src/lib.rs",
+      "target": "file:src-tauri/src/knowledge.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src-tauri/src/lib.rs",
+      "target": "file:src-tauri/src/llm.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src-tauri/src/lib.rs",
+      "target": "file:src-tauri/src/models.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src-tauri/src/lib.rs",
+      "target": "file:src-tauri/src/paths.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src-tauri/src/lib.rs",
+      "target": "file:src-tauri/src/prompts.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src-tauri/src/lib.rs",
+      "target": "file:src-tauri/src/sample.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src-tauri/src/lib.rs",
+      "target": "file:src-tauri/src/secret.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "function:src-tauri/src/knowledge.rs:delete_chunks",
+      "target": "function:src-tauri/src/paths.rs:lancedb_dir",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/knowledge.rs:split_book",
+      "target": "function:src-tauri/src/chunk.rs:chunk_text",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/knowledge.rs:upsert_chunks",
+      "target": "function:src-tauri/src/paths.rs:lancedb_dir",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/lib.rs:run",
+      "target": "function:src-tauri/src/catalog.rs:refresh",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:src-tauri/src/lib.rs:run",
+      "target": "function:src-tauri/src/commands.rs:init_state",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    }
+  ]
+}

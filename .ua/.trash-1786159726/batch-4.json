@@ -1,0 +1,145 @@
+{
+  "nodes": [
+    {
+      "id": "document:.ua/tmp/commit.txt",
+      "type": "document",
+      "name": "commit.txt",
+      "filePath": ".ua/tmp/commit.txt",
+      "summary": "Understand-Anything 扫描用的临时提交哈希快照，记录分析时对应的 git HEAD（27e24d9）。",
+      "tags": ["文档", "扫描上下文", "git", "临时文件"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:.ua/tmp/dir-tree.txt",
+      "type": "document",
+      "name": "dir-tree.txt",
+      "filePath": ".ua/tmp/dir-tree.txt",
+      "summary": "项目根目录关键路径的扁平文件列表快照，供知识图谱扫描建立仓库结构上下文。",
+      "tags": ["文档", "目录树", "扫描上下文", "临时文件"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:.ua/tmp/manifest-cargo.txt",
+      "type": "document",
+      "name": "manifest-cargo.txt",
+      "filePath": ".ua/tmp/manifest-cargo.txt",
+      "summary": "src-tauri/Cargo.toml 的摘录副本，列出 nove-work Rust 包元数据与 Tauri、SQLite、LanceDB、rig-core 等依赖。",
+      "tags": ["文档", "cargo清单", "依赖", "扫描上下文"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:.ua/tmp/manifest-pkg.txt",
+      "type": "document",
+      "name": "manifest-pkg.txt",
+      "filePath": ".ua/tmp/manifest-pkg.txt",
+      "summary": "package.json 的摘录副本，记录前端脚本与 Vue、Vite、Tauri、Vue Flow、Tailwind 等依赖清单。",
+      "tags": ["文档", "npm清单", "依赖", "扫描上下文"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:.ua/tmp/readme.txt",
+      "type": "document",
+      "name": "readme.txt",
+      "filePath": ".ua/tmp/readme.txt",
+      "summary": "README.md 的纯文本副本，概述 Nove Work 技术栈、开发命令、DeepSeek Key 加密存储与 Demo 功能。",
+      "tags": ["文档", "项目概述", "入门", "扫描上下文"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:.ua/tmp/ua-scan-files.json",
+      "type": "config",
+      "name": "ua-scan-files.json",
+      "filePath": ".ua/tmp/ua-scan-files.json",
+      "summary": "Understand-Anything 项目扫描清单：含 contentDigest、全部待分析文件列表、过滤统计与复杂度估计。",
+      "tags": ["配置", "扫描清单", "文件清单", "知识图谱"],
+      "complexity": "complex",
+      "languageNotes": "JSON 顶层含 scriptCompleted、files 数组与 stats，供后续 batch 分发使用。"
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:.ua/tmp/readme.txt",
+      "target": "document:README.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:.ua/tmp/manifest-cargo.txt",
+      "target": "config:src-tauri/Cargo.toml",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:.ua/tmp/manifest-pkg.txt",
+      "target": "config:package.json",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:.ua/tmp/dir-tree.txt",
+      "target": "document:README.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:.ua/tmp/dir-tree.txt",
+      "target": "config:package.json",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:.ua/tmp/dir-tree.txt",
+      "target": "config:src-tauri/Cargo.toml",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "config:.ua/tmp/ua-scan-files.json",
+      "target": "document:.ua/tmp/commit.txt",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "config:.ua/tmp/ua-scan-files.json",
+      "target": "document:.ua/tmp/dir-tree.txt",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "config:.ua/tmp/ua-scan-files.json",
+      "target": "document:.ua/tmp/manifest-cargo.txt",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "config:.ua/tmp/ua-scan-files.json",
+      "target": "document:.ua/tmp/manifest-pkg.txt",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "config:.ua/tmp/ua-scan-files.json",
+      "target": "document:.ua/tmp/readme.txt",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:.ua/tmp/commit.txt",
+      "target": "document:.ua/tmp/readme.txt",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

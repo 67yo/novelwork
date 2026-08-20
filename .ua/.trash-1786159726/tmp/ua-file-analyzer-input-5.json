@@ -1,0 +1,21 @@
+{
+  "projectRoot": "/Users/ablegao/code/novework",
+  "batchFiles": [
+    {"path": "Project.md", "language": "markdown", "sizeLines": 150, "fileCategory": "docs"},
+    {"path": "README.md", "language": "markdown", "sizeLines": 44, "fileCategory": "docs"},
+    {"path": "components.json", "language": "json", "sizeLines": 20, "fileCategory": "config"},
+    {"path": "index.html", "language": "html", "sizeLines": 14, "fileCategory": "markup"},
+    {"path": "package.json", "language": "json", "sizeLines": 42, "fileCategory": "config"},
+    {"path": "tsconfig.json", "language": "json", "sizeLines": 25, "fileCategory": "config"},
+    {"path": "tsconfig.node.json", "language": "json", "sizeLines": 10, "fileCategory": "config"}
+  ],
+  "batchImportData": {
+    "Project.md": [],
+    "README.md": [],
+    "components.json": [],
+    "index.html": [],
+    "package.json": [],
+    "tsconfig.json": [],
+    "tsconfig.node.json": []
+  }
+}

@@ -1,26 +1,32 @@
 import { invoke } from "@tauri-apps/api/core";
 
+export type CompatProviderView = {
+  id: string;
+  label: string;
+  protocol: string;
+  base_url: string;
+  api_key_masked: string;
+  api_key_configured: boolean;
+  models: string[];
+};
+
 export type ModelCatalog = {
   deepseek: string[];
   gemini: string[];
   claude: string[];
   grok: string[];
+  kimi: string[];
+  compat: string[];
   updated_at: string;
   errors: Record<string, string>;
 };
 
 export type SettingsView = {
-  deepseek_api_key_masked: string;
-  deepseek_api_key_configured: boolean;
-  chatgpt_api_key_masked: string;
-  chatgpt_api_key_configured: boolean;
+  compat_providers: CompatProviderView[];
   gemini_api_key_masked: string;
   gemini_api_key_configured: boolean;
   claude_api_key_masked: string;
   claude_api_key_configured: boolean;
-  grok_api_key_masked: string;
-  grok_api_key_configured: boolean;
-  deepseek_base_url: string;
   default_model: string;
   create_model: string;
   generate_model: string;
@@ -29,6 +35,50 @@ export type SettingsView = {
   knowledge_model: string;
   model_catalog: ModelCatalog;
   ui_locale: string;
+  mcp_port: number;
+  mcp_enabled: boolean;
+  mcp_lan: boolean;
+};
+
+export type McpStatus = {
+  running: boolean;
+  port: number;
+  endpoint: string;
+  lan_enabled: boolean;
+  lan_endpoint: string | null;
+  error: string | null;
+};
+
+export type SkillSlashHint = {
+  cmd: string;
+  hint: string;
+};
+
+export type SkillPreviewItem = {
+  name: string;
+  description: string;
+  path: string;
+  trigger: boolean;
+  tags: string[];
+  hint: string | null;
+  body_preview: string;
+  builtin?: boolean;
+  slash_hints?: SkillSlashHint[];
+};
+
+export type SkillsPreview = {
+  root: string;
+  bundled?: string;
+  user?: string;
+  exists: boolean;
+  skills: SkillPreviewItem[];
+};
+
+export type SkillMatchPreview = {
+  matched: boolean;
+  name: string | null;
+  score: number | null;
+  via: string;
 };
 
 export type KnowledgeBook = {
@@ -55,6 +105,8 @@ export type NovelProject = {
   cover_path: string | null;
   knowledge_ids: string[];
   knowledge_strategy: string;
+  /** reference | strict */
+  canon_mode: string;
   archived: boolean;
   word_count_min: number;
   word_count_max: number;
@@ -76,15 +128,34 @@ export type KnowledgeCardPayload = {
   book_ids: string[];
   extract_prompt: string;
   extracted: string;
+  from_canon?: boolean;
+};
+
+export type PublicKnowledgeCard = {
+  id: string;
+  title: string;
+  book_ids: string[];
+  extract_prompt: string;
+  extracted: string;
+  created_at: string;
+  updated_at: string;
+  archived: boolean;
+};
+
+export type SidePlotMeta = {
+  /** active | resolved | deferred */
+  status: string;
+  absorbed: boolean;
 };
 
 export type TreeNode = {
   id: string;
-  kind: "novel" | "chapter" | "character" | "side_plot" | "knowledge";
+  kind: "novel" | "volume" | "chapter" | "character" | "side_plot" | "knowledge";
   label: string;
   outline: string;
   character: CharacterCard | null;
   knowledge: KnowledgeCardPayload | null;
+  side_plot?: SidePlotMeta | null;
   linked_character_ids: string[];
   linked_side_plot_ids: string[];
   linked_knowledge_ids: string[];
@@ -112,9 +183,8 @@ export type NovelTree = {
   edges: TreeEdge[];
 };
 
-export type ChatMessage = {
+export type GlobalChatMessage = {
   id: string;
-  novel_id: string;
   role: string;
   content: string;
   created_at: string;
@@ -130,11 +200,6 @@ export type ChapterMemoryGroup = {
   node_id: string;
   label: string;
   items: string[];
-};
-
-export type CardChatResult = {
-  reply: string;
-  tree: NovelTree;
 };
 
 export type TokenUsageHourRow = {
@@ -192,21 +257,29 @@ export type NovelCreateChatResult = {
   novel: NovelProject | null;
 };
 
-/** 知识卡：按所选知识库与提取需求提炼特征并写回树节点 */
-export function extractKnowledgeCard(novelId: string, nodeId: string) {
-  return invoke<NovelTree>("extract_knowledge_card", { novelId, nodeId });
+/** 知识卡：把所选公共库正文完整导入到 extracted */
+export function fillKnowledgeCard(novelId: string, nodeId: string) {
+  return invoke<NovelTree>("fill_knowledge_card", { novelId, nodeId });
 }
 
 export const api = {
   getSettings: () => invoke<SettingsView>("get_settings"),
   refreshModelCatalog: () => invoke<ModelCatalog>("refresh_model_catalog"),
+  fetchCompatModels: (baseUrl: string, apiKey: string) =>
+    invoke<string[]>("fetch_compat_models", { baseUrl, apiKey }),
+  refreshCompatProviderModels: (providerId: string) =>
+    invoke<string[]>("refresh_compat_provider_models", { providerId }),
   saveSettings: (input: {
-    deepseek_api_key?: string | null;
-    chatgpt_api_key?: string | null;
+    compat_providers?: {
+      id: string;
+      label: string;
+      protocol: string;
+      base_url: string;
+      api_key?: string | null;
+      models: string[];
+    }[];
     gemini_api_key?: string | null;
     claude_api_key?: string | null;
-    grok_api_key?: string | null;
-    deepseek_base_url?: string | null;
     default_model?: string | null;
     create_model?: string | null;
     generate_model?: string | null;
@@ -214,15 +287,24 @@ export const api = {
     refine_model?: string | null;
     knowledge_model?: string | null;
     ui_locale?: string | null;
+    mcp_port?: number | null;
+    mcp_enabled?: boolean | null;
+    mcp_lan?: boolean | null;
   }) =>
     invoke<SettingsView>("save_settings", {
       input: {
-        deepseekApiKey: input.deepseek_api_key ?? null,
-        chatgptApiKey: input.chatgpt_api_key ?? null,
+        compatProviders: input.compat_providers
+          ? input.compat_providers.map((p) => ({
+              id: p.id,
+              label: p.label,
+              protocol: p.protocol,
+              baseUrl: p.base_url,
+              apiKey: p.api_key ?? null,
+              models: p.models,
+            }))
+          : null,
         geminiApiKey: input.gemini_api_key ?? null,
         claudeApiKey: input.claude_api_key ?? null,
-        grokApiKey: input.grok_api_key ?? null,
-        deepseekBaseUrl: input.deepseek_base_url ?? null,
         defaultModel: input.default_model ?? null,
         createModel: input.create_model ?? null,
         generateModel: input.generate_model ?? null,
@@ -230,8 +312,15 @@ export const api = {
         refineModel: input.refine_model ?? null,
         knowledgeModel: input.knowledge_model ?? null,
         uiLocale: input.ui_locale ?? null,
+        mcpPort: input.mcp_port ?? null,
+        mcpEnabled: input.mcp_enabled ?? null,
+        mcpLan: input.mcp_lan ?? null,
       },
     }),
+  getMcpStatus: () => invoke<McpStatus>("get_mcp_status"),
+  restartMcpServer: () => invoke<McpStatus>("restart_mcp_server"),
+  setWorkspaceSelection: (novelId: string | null, nodeId: string | null) =>
+    invoke<void>("set_workspace_selection", { novelId, nodeId }),
   listGenres: () => invoke<string[]>("list_genres"),
   listKnowledge: () => invoke<KnowledgeBook[]>("list_knowledge_bases"),
   renameKnowledge: (id: string, title: string) =>
@@ -255,12 +344,25 @@ export const api = {
   archiveKnowledge: (id: string, archived: boolean) =>
     invoke<KnowledgeBook>("archive_knowledge", { id, archived }),
   deleteKnowledge: (id: string) => invoke<void>("delete_knowledge", { id }),
-  importKnowledge: (path: string, extract_prompt: string, genres: string[]) =>
-    invoke<KnowledgeBook>("import_knowledge_text", { path, extractPrompt: extract_prompt, genres }),
-  importKnowledgeUrl: (url: string, extract_prompt: string, genres: string[]) =>
-    invoke<KnowledgeBook>("import_knowledge_url", { url, extractPrompt: extract_prompt, genres }),
+  importKnowledge: (path: string, genres: string[]) =>
+    invoke<KnowledgeBook>("import_knowledge_text", { path, genres }),
+  importKnowledgeUrl: (url: string, genres: string[]) =>
+    invoke<KnowledgeBook>("import_knowledge_url", { url, genres }),
   reextractKnowledge: (id: string, path?: string | null) =>
-    invoke<KnowledgeBook>("reextract_knowledge", { id, path: path ?? null }),
+    invoke<KnowledgeBook>("reextract_knowledge", {
+      id,
+      path: path ?? null,
+    }),
+  knowledgeIndexStatus: (bookId: string) =>
+    invoke<{ bookId: string; chunkCount: number; embeddingCount: number }>(
+      "knowledge_index_status",
+      { bookId },
+    ),
+  rebuildKnowledgeIndex: (bookId: string) =>
+    invoke<{ bookId: string; chunkCount: number; embeddingCount: number }>(
+      "rebuild_knowledge_index",
+      { bookId },
+    ),
   listNovels: () => invoke<NovelProject[]>("list_novels"),
   getNovel: (id: string) => invoke<NovelProject | null>("get_novel", { id }),
   updateNovelPlan: (
@@ -292,9 +394,9 @@ export const api = {
         knowledgeStrategy: input.knowledge_strategy,
       },
     }),
-  createNovelChat: (messages: ChatTurn[], forceCreate = false) =>
+  createNovelChat: (messages: ChatTurn[], forceCreate = false, model?: string | null) =>
     invoke<NovelCreateChatResult>("create_novel_chat", {
-      input: { messages, forceCreate },
+      input: { messages, forceCreate, model: model?.trim() || null },
     }),
   getTree: (novelId: string) => invoke<NovelTree>("get_tree", { novelId }),
   saveTree: (tree: NovelTree) => invoke<void>("save_tree", { tree }),
@@ -305,6 +407,19 @@ export const api = {
   /** 手动保存章节正文；返回字数。空内容清空文件 */
   saveChapter: (novelId: string, nodeId: string, content: string) =>
     invoke<number>("save_chapter", { novelId, nodeId, content }),
+  /** 按修改意见改写单段正文；模型同全局 Chat（chat_model） */
+  rewriteChapterParagraph: (
+    novelId: string,
+    paragraph: string,
+    instruction: string,
+    model?: string | null,
+  ) =>
+    invoke<string>("rewrite_chapter_paragraph", {
+      novelId,
+      paragraph,
+      instruction,
+      model: model?.trim() || null,
+    }),
   getChapterMemory: (novelId: string, nodeId: string) =>
     invoke<string[]>("get_chapter_memory", { novelId, nodeId }),
   listAllChapterMemory: (novelId: string) =>
@@ -335,12 +450,14 @@ export const api = {
     nodeId: string,
     memoryNodeIds: string[],
     userBrief: string,
+    model?: string | null,
   ) =>
     invoke<GenerateResult>("generate_chapter", {
       novelId,
       nodeId,
       memoryNodeIds,
       userBrief,
+      model: model?.trim() || null,
     }),
   refineChapter: (
     novelId: string,
@@ -348,6 +465,7 @@ export const api = {
     prevN: number,
     mode?: "memory" | "full",
     userBrief?: string,
+    model?: string | null,
   ) =>
     invoke<GenerateResult>("refine_chapter", {
       novelId,
@@ -355,11 +473,12 @@ export const api = {
       prevN,
       mode: mode ?? "memory",
       userBrief: userBrief ?? "",
+      model: model?.trim() || null,
     }),
   /** 左侧生成确认框：根大纲→前序大纲+记忆 + 期望占位 */
   previewChapterOutlineBrief: (
     novelId: string,
-    mode: "root" | "plan_next",
+    mode: "root" | "plan_next" | "regen_outline",
     count: number,
     nodeId?: string,
   ) =>
@@ -376,6 +495,19 @@ export const api = {
       count,
       userBrief,
     }),
+  /** 覆盖重写本章标题与大纲（Chat `/刷新本章大纲`；同 generate_chapter_cards） */
+  regenerateChapterOutline: (
+    novelId: string,
+    nodeId: string,
+    userBrief: string,
+    model?: string | null,
+  ) =>
+    invoke<GenerateResult>("regenerate_chapter_outline", {
+      novelId,
+      nodeId,
+      userBrief,
+      model: model?.trim() || null,
+    }),
   /** 章节卡：按大纲+用户补充生成剧情卡 */
   generateChapterPlots: (
     novelId: string,
@@ -389,23 +521,74 @@ export const api = {
       outline,
       userNotes,
     }),
+  /** 根节点：近 N 章大纲+记忆 → 整理跨章剧情卡 */
+  consolidatePlotCards: (novelId: string, chapterWindow: number, userNotes: string) =>
+    invoke<GenerateResult>("consolidate_plot_cards", {
+      novelId,
+      chapterWindow,
+      userNotes,
+    }),
   /** 根节点：生成第 1–count 章章节卡（同号覆盖） */
   generateChapterCards: (novelId: string, count: number, userBrief: string) =>
     invoke<GenerateResult>("generate_chapter_cards", { novelId, count, userBrief }),
-  listChat: (novelId: string) => invoke<ChatMessage[]>("list_chat_messages", { novelId }),
-  chatSend: (novelId: string, content: string) =>
-    invoke<ChatMessage[]>("chat_send", { novelId, content }),
-  /** 终止进行中的 chat / 开书聊（开书传 `__create__`） */
+  /** 终止进行中的 chat（开书 `__create__` 等） */
   chatCancel: (novelId: string) => invoke<void>("chat_cancel", { novelId }),
-  cardChatSend: (novelId: string, nodeId: string, content: string) =>
-    invoke<CardChatResult>("card_chat_send", { novelId, nodeId, content }),
-  extractKnowledgeCard,
+  fillKnowledgeCard,
+  listPublicKnowledgeCards: () => invoke<PublicKnowledgeCard[]>("list_public_knowledge_cards"),
+  upsertPublicKnowledgeCard: (input: {
+    id?: string | null;
+    title: string;
+    book_ids: string[];
+    extract_prompt: string;
+    extracted: string;
+  }) =>
+    invoke<PublicKnowledgeCard>("upsert_public_knowledge_card", {
+      id: input.id ?? null,
+      title: input.title,
+      bookIds: input.book_ids,
+      extractPrompt: input.extract_prompt,
+      extracted: input.extracted,
+    }),
+  archivePublicKnowledgeCard: (id: string, archived: boolean) =>
+    invoke<PublicKnowledgeCard>("archive_public_knowledge_card", { id, archived }),
+  deletePublicKnowledgeCard: (id: string) =>
+    invoke<void>("delete_public_knowledge_card", { id }),
+  addPublicKnowledgeCard: (novelId: string, publicId: string, hostNodeId?: string | null) =>
+    invoke<NovelTree>("add_public_knowledge_card", {
+      novelId,
+      publicId,
+      hostNodeId: hostNodeId ?? null,
+    }),
+  generateCoverPrompt: (novelId: string) =>
+    invoke<string>("generate_cover_prompt", { novelId }),
   pickCover: () => invoke<string | null>("pick_cover"),
   setCover: (novelId: string, sourcePath: string) =>
     invoke<NovelProject>("set_cover", { novelId, sourcePath }),
   pickTextFile: () => invoke<string | null>("pick_text_file"),
   appDataRoot: () => invoke<string>("app_data_root"),
+  listChatSkills: () => invoke<SkillsPreview>("list_chat_skills"),
+  previewChatSkillMatch: (query: string) =>
+    invoke<SkillMatchPreview>("preview_chat_skill_match", { query }),
   getTokenUsage: (date: string) => invoke<TokenUsageDay>("get_token_usage", { date }),
   getTokenUsageMonth: (month: string) =>
     invoke<TokenUsageMonth>("get_token_usage_month", { month }),
+  globalChatList: (novelId?: string | null) =>
+    invoke<GlobalChatMessage[]>("global_chat_list", { novelId: novelId ?? null }),
+  globalChatSend: (args: {
+    content: string;
+    routeName?: string | null;
+    path?: string | null;
+    novelId?: string | null;
+    model?: string | null;
+  }) =>
+    invoke<GlobalChatMessage[]>("global_chat_send", {
+      content: args.content,
+      routeName: args.routeName ?? null,
+      path: args.path ?? null,
+      novelId: args.novelId ?? null,
+      model: args.model?.trim() || null,
+    }),
+  globalChatClear: (novelId?: string | null) =>
+    invoke<void>("global_chat_clear", { novelId: novelId ?? null }),
+  globalChatCancel: () => invoke<void>("global_chat_cancel"),
 };

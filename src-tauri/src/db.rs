@@ -1,4 +1,4 @@
-use crate::models::{AppSettings, ChatMessage, KnowledgeBook, ModelCatalog, NovelProject};
+use crate::models::{AppSettings, KnowledgeBook, ModelCatalog, NovelProject, PublicKnowledgeCard};
 use crate::paths::db_path;
 use anyhow::{Context, Result};
 use rusqlite::{params, Connection, OptionalExtension};
@@ -35,6 +35,13 @@ impl Db {
               content TEXT NOT NULL,
               FOREIGN KEY(book_id) REFERENCES knowledge_books(id) ON DELETE CASCADE
             );
+            CREATE TABLE IF NOT EXISTS knowledge_embeddings (
+              book_id TEXT NOT NULL,
+              idx INTEGER NOT NULL,
+              dim INTEGER NOT NULL,
+              vector BLOB NOT NULL,
+              PRIMARY KEY(book_id, idx)
+            );
             CREATE TABLE IF NOT EXISTS novels (
               id TEXT PRIMARY KEY,
               title TEXT NOT NULL,
@@ -50,7 +57,8 @@ impl Db {
               novel_id TEXT NOT NULL,
               role TEXT NOT NULL,
               content TEXT NOT NULL,
-              created_at TEXT NOT NULL
+              created_at TEXT NOT NULL,
+              node_id TEXT NOT NULL DEFAULT ''
             );
             CREATE TABLE IF NOT EXISTS token_usage (
               day TEXT NOT NULL,
@@ -95,7 +103,37 @@ impl Db {
             [],
         );
         let _ = conn.execute(
+            "ALTER TABLE novels ADD COLUMN canon_mode TEXT NOT NULL DEFAULT 'reference'",
+            [],
+        );
+        let _ = conn.execute(
             "ALTER TABLE knowledge_books ADD COLUMN archived INTEGER NOT NULL DEFAULT 0",
+            [],
+        );
+        let _ = conn.execute(
+            "ALTER TABLE chat_messages ADD COLUMN node_id TEXT NOT NULL DEFAULT ''",
+            [],
+        );
+        let _ = conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_chat_messages_node ON chat_messages(novel_id, node_id)",
+            [],
+        );
+        let _ = conn.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS public_knowledge_cards (
+              id TEXT PRIMARY KEY,
+              title TEXT NOT NULL,
+              book_ids TEXT NOT NULL,
+              extract_prompt TEXT NOT NULL,
+              extracted TEXT NOT NULL,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              archived INTEGER NOT NULL DEFAULT 0
+            );
+            "#,
+        );
+        let _ = conn.execute(
+            "ALTER TABLE public_knowledge_cards ADD COLUMN archived INTEGER NOT NULL DEFAULT 0",
             [],
         );
         migrate_token_usage_novel_id(&conn)?;
@@ -117,7 +155,7 @@ impl Db {
                 let (k, v) = row?;
                 match k.as_str() {
                     "deepseek_api_key" | "chatgpt_api_key" | "gemini_api_key"
-                    | "claude_api_key" | "grok_api_key" => {
+                    | "claude_api_key" | "grok_api_key" | "kimi_api_key" => {
                         raws.insert(k, v);
                     }
                     _ => {
@@ -140,13 +178,76 @@ impl Db {
                 .unwrap_or(fallback)
                 .to_string()
         };
+
+        let mut compat_providers = Self::load_compat_providers(plain.get("compat_providers"))?;
+
+        let deepseek_api_key = decrypt("deepseek_api_key")?;
+        let chatgpt_api_key = decrypt("chatgpt_api_key")?;
+        let gemini_api_key = decrypt("gemini_api_key")?;
+        let claude_api_key = decrypt("claude_api_key")?;
+        let grok_api_key = decrypt("grok_api_key")?;
+        let kimi_api_key = decrypt("kimi_api_key")?;
+        let deepseek_base_url = get("deepseek_base_url", &d.deepseek_base_url);
+        let kimi_base_url = get("kimi_base_url", &d.kimi_base_url);
+
+        let mut migrated = false;
+        if compat_providers.is_empty() {
+            if !deepseek_api_key.trim().is_empty() {
+                compat_providers.push(crate::models::CompatProvider {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    label: "DeepSeek".into(),
+                    protocol: "openai".into(),
+                    base_url: deepseek_base_url.clone(),
+                    api_key: deepseek_api_key.clone(),
+                    models: vec![],
+                });
+                migrated = true;
+            }
+            if !kimi_api_key.trim().is_empty() {
+                compat_providers.push(crate::models::CompatProvider {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    label: "Kimi".into(),
+                    protocol: "openai".into(),
+                    base_url: kimi_base_url.clone(),
+                    api_key: kimi_api_key.clone(),
+                    models: vec![],
+                });
+                migrated = true;
+            }
+            if !chatgpt_api_key.trim().is_empty() {
+                compat_providers.push(crate::models::CompatProvider {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    label: "ChatGPT".into(),
+                    protocol: "openai".into(),
+                    base_url: "https://api.openai.com".into(),
+                    api_key: chatgpt_api_key.clone(),
+                    models: vec![],
+                });
+                migrated = true;
+            }
+            if !grok_api_key.trim().is_empty() {
+                compat_providers.push(crate::models::CompatProvider {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    label: "Grok".into(),
+                    protocol: "openai".into(),
+                    base_url: "https://api.x.ai".into(),
+                    api_key: grok_api_key.clone(),
+                    models: vec![],
+                });
+                migrated = true;
+            }
+        }
+
         let s = AppSettings {
-            deepseek_api_key: decrypt("deepseek_api_key")?,
-            chatgpt_api_key: decrypt("chatgpt_api_key")?,
-            gemini_api_key: decrypt("gemini_api_key")?,
-            claude_api_key: decrypt("claude_api_key")?,
-            grok_api_key: decrypt("grok_api_key")?,
-            deepseek_base_url: get("deepseek_base_url", &d.deepseek_base_url),
+            compat_providers,
+            deepseek_api_key,
+            chatgpt_api_key,
+            gemini_api_key,
+            claude_api_key,
+            grok_api_key,
+            kimi_api_key,
+            deepseek_base_url,
+            kimi_base_url,
             default_model: get("default_model", &d.default_model),
             create_model: get("create_model", &d.create_model),
             generate_model: get("generate_model", &d.generate_model),
@@ -154,26 +255,88 @@ impl Db {
             refine_model: get("refine_model", &d.refine_model),
             knowledge_model: get("knowledge_model", &d.knowledge_model),
             ui_locale: get("ui_locale", &d.ui_locale),
+            mcp_port: get("mcp_port", &d.mcp_port.to_string())
+                .parse()
+                .unwrap_or(d.mcp_port),
+            mcp_enabled: match get("mcp_enabled", if d.mcp_enabled { "1" } else { "0" }).as_str()
+            {
+                "0" | "false" | "False" | "no" => false,
+                _ => true,
+            },
+            mcp_lan: matches!(
+                get("mcp_lan", if d.mcp_lan { "1" } else { "0" }).as_str(),
+                "1" | "true" | "True" | "yes"
+            ),
         };
         // migrate legacy plaintext → encrypted on read
-        let needs_migrate = raws
-            .values()
-            .any(|v| !v.is_empty() && !v.starts_with("nw1:"));
+        let needs_migrate = migrated
+            || raws
+                .values()
+                .any(|v| !v.is_empty() && !v.starts_with("nw1:"));
         if needs_migrate {
             let _ = self.save_settings(&s);
         }
         Ok(s)
     }
 
+    fn load_compat_providers(raw: Option<&String>) -> Result<Vec<crate::models::CompatProvider>> {
+        let Some(raw) = raw.filter(|s| !s.trim().is_empty()) else {
+            return Ok(vec![]);
+        };
+        #[derive(serde::Deserialize)]
+        struct Stored {
+            id: String,
+            label: String,
+            protocol: String,
+            base_url: String,
+            api_key: String,
+            #[serde(default)]
+            models: Vec<String>,
+        }
+        let stored: Vec<Stored> = serde_json::from_str(raw).unwrap_or_default();
+        let mut out = Vec::with_capacity(stored.len());
+        for p in stored {
+            out.push(crate::models::CompatProvider {
+                id: p.id,
+                label: p.label,
+                protocol: p.protocol,
+                base_url: p.base_url,
+                api_key: crate::secret::decrypt_secret(&p.api_key)?,
+                models: p.models,
+            });
+        }
+        Ok(out)
+    }
+
     pub fn save_settings(&self, s: &AppSettings) -> Result<()> {
         let enc = |plain: &str| crate::secret::encrypt_secret(plain);
+        let compat_json = {
+            let stored: Vec<serde_json::Value> = s
+                .compat_providers
+                .iter()
+                .map(|p| {
+                    Ok(serde_json::json!({
+                        "id": p.id,
+                        "label": p.label,
+                        "protocol": p.protocol,
+                        "base_url": p.base_url,
+                        "api_key": enc(&p.api_key)?,
+                        "models": p.models,
+                    }))
+                })
+                .collect::<Result<Vec<_>>>()?;
+            serde_json::to_string(&stored)?
+        };
         let pairs = [
+            ("compat_providers", compat_json),
             ("deepseek_api_key", enc(&s.deepseek_api_key)?),
             ("chatgpt_api_key", enc(&s.chatgpt_api_key)?),
             ("gemini_api_key", enc(&s.gemini_api_key)?),
             ("claude_api_key", enc(&s.claude_api_key)?),
             ("grok_api_key", enc(&s.grok_api_key)?),
+            ("kimi_api_key", enc(&s.kimi_api_key)?),
             ("deepseek_base_url", s.deepseek_base_url.clone()),
+            ("kimi_base_url", s.kimi_base_url.clone()),
             ("default_model", s.default_model.clone()),
             ("create_model", s.create_model.clone()),
             ("generate_model", s.generate_model.clone()),
@@ -181,6 +344,12 @@ impl Db {
             ("refine_model", s.refine_model.clone()),
             ("knowledge_model", s.knowledge_model.clone()),
             ("ui_locale", s.ui_locale.clone()),
+            ("mcp_port", s.mcp_port.to_string()),
+            (
+                "mcp_enabled",
+                if s.mcp_enabled { "1" } else { "0" }.to_string(),
+            ),
+            ("mcp_lan", if s.mcp_lan { "1" } else { "0" }.to_string()),
         ];
         let conn = self.conn.lock().unwrap();
         for (k, v) in pairs {
@@ -253,6 +422,84 @@ impl Db {
             .find(|b| b.id == id))
     }
 
+    pub fn list_public_knowledge_cards(&self) -> Result<Vec<PublicKnowledgeCard>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, title, book_ids, extract_prompt, extracted, created_at, updated_at,
+                    COALESCE(archived, 0)
+             FROM public_knowledge_cards ORDER BY updated_at DESC",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            let book_ids: String = row.get(2)?;
+            let archived_i: i64 = row.get(7).unwrap_or(0);
+            Ok(PublicKnowledgeCard {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                book_ids: serde_json::from_str(&book_ids).unwrap_or_default(),
+                extract_prompt: row.get(3)?,
+                extracted: row.get(4)?,
+                created_at: row.get(5)?,
+                updated_at: row.get(6)?,
+                archived: archived_i != 0,
+            })
+        })?;
+        Ok(rows.filter_map(|r| r.ok()).collect())
+    }
+
+    pub fn get_public_knowledge_card(&self, id: &str) -> Result<Option<PublicKnowledgeCard>> {
+        Ok(self
+            .list_public_knowledge_cards()?
+            .into_iter()
+            .find(|c| c.id == id))
+    }
+
+    pub fn upsert_public_knowledge_card(&self, card: &PublicKnowledgeCard) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let books = serde_json::to_string(&card.book_ids)?;
+        conn.execute(
+            "INSERT INTO public_knowledge_cards(id, title, book_ids, extract_prompt, extracted, created_at, updated_at, archived)
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8)
+             ON CONFLICT(id) DO UPDATE SET
+               title=excluded.title,
+               book_ids=excluded.book_ids,
+               extract_prompt=excluded.extract_prompt,
+               extracted=excluded.extracted,
+               updated_at=excluded.updated_at",
+            params![
+                card.id,
+                card.title,
+                books,
+                card.extract_prompt,
+                card.extracted,
+                card.created_at,
+                card.updated_at,
+                card.archived as i64
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn set_public_knowledge_card_archived(&self, id: &str, archived: bool) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let n = conn.execute(
+            "UPDATE public_knowledge_cards SET archived=?1 WHERE id=?2",
+            params![archived as i64, id],
+        )?;
+        if n == 0 {
+            anyhow::bail!("public knowledge card not found");
+        }
+        Ok(())
+    }
+
+    pub fn delete_public_knowledge_card(&self, id: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let n = conn.execute("DELETE FROM public_knowledge_cards WHERE id=?1", params![id])?;
+        if n == 0 {
+            anyhow::bail!("public knowledge card not found");
+        }
+        Ok(())
+    }
+
     pub fn set_knowledge_archived(&self, id: &str, archived: bool) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         let n = conn.execute(
@@ -267,6 +514,10 @@ impl Db {
 
     pub fn delete_knowledge(&self, id: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
+        let _ = conn.execute(
+            "DELETE FROM knowledge_embeddings WHERE book_id=?1",
+            params![id],
+        );
         // chunks CASCADE via FK
         let n = conn.execute("DELETE FROM knowledge_books WHERE id=?1", params![id])?;
         if n == 0 {
@@ -350,6 +601,61 @@ impl Db {
         Ok(rows.filter_map(|r| r.ok()).collect())
     }
 
+    pub fn upsert_knowledge_embedding(&self, book_id: &str, idx: i64, vector: &[f32]) -> Result<()> {
+        let mut bytes = Vec::with_capacity(vector.len() * 4);
+        for v in vector {
+            bytes.extend_from_slice(&v.to_le_bytes());
+        }
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO knowledge_embeddings(book_id, idx, dim, vector) VALUES(?1,?2,?3,?4)
+             ON CONFLICT(book_id, idx) DO UPDATE SET dim=excluded.dim, vector=excluded.vector",
+            params![book_id, idx, vector.len() as i64, bytes],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_knowledge_embedding(&self, book_id: &str, idx: i64) -> Result<Option<Vec<f32>>> {
+        let conn = self.conn.lock().unwrap();
+        let row: Option<(i64, Vec<u8>)> = conn
+            .query_row(
+                "SELECT dim, vector FROM knowledge_embeddings WHERE book_id=?1 AND idx=?2",
+                params![book_id, idx],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()?;
+        let Some((dim, bytes)) = row else {
+            return Ok(None);
+        };
+        if dim <= 0 || bytes.len() != (dim as usize) * 4 {
+            return Ok(None);
+        }
+        let mut out = Vec::with_capacity(dim as usize);
+        for chunk in bytes.chunks_exact(4) {
+            out.push(f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]));
+        }
+        Ok(Some(out))
+    }
+
+    pub fn count_knowledge_embeddings(&self, book_id: &str) -> Result<i64> {
+        let conn = self.conn.lock().unwrap();
+        let n: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM knowledge_embeddings WHERE book_id=?1",
+            params![book_id],
+            |r| r.get(0),
+        )?;
+        Ok(n)
+    }
+
+    pub fn delete_knowledge_embeddings(&self, book_id: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "DELETE FROM knowledge_embeddings WHERE book_id=?1",
+            params![book_id],
+        )?;
+        Ok(())
+    }
+
     pub fn insert_knowledge(&self, book: &KnowledgeBook, chunks: &[String]) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         let tx = conn.unchecked_transaction()?;
@@ -422,7 +728,7 @@ impl Db {
         let mut stmt = conn.prepare(
             "SELECT id, title, synopsis, cover_path, knowledge_ids, knowledge_strategy, created_at, updated_at,
                     COALESCE(archived, 0), COALESCE(word_count_min, 2000), COALESCE(word_count_max, 3000),
-                    COALESCE(chapter_count, 20)
+                    COALESCE(chapter_count, 20), COALESCE(canon_mode, 'reference')
              FROM novels ORDER BY updated_at DESC",
         )?;
         let rows = stmt.query_map([], map_novel)?;
@@ -434,7 +740,7 @@ impl Db {
         let mut stmt = conn.prepare(
             "SELECT id, title, synopsis, cover_path, knowledge_ids, knowledge_strategy, created_at, updated_at,
                     COALESCE(archived, 0), COALESCE(word_count_min, 2000), COALESCE(word_count_max, 3000),
-                    COALESCE(chapter_count, 20)
+                    COALESCE(chapter_count, 20), COALESCE(canon_mode, 'reference')
              FROM novels WHERE id=?1",
         )?;
         let mut rows = stmt.query_map(params![id], map_novel)?;
@@ -443,9 +749,10 @@ impl Db {
 
     pub fn upsert_novel(&self, n: &NovelProject) -> Result<()> {
         let conn = self.conn.lock().unwrap();
+        let mode = normalize_canon_mode(&n.canon_mode);
         conn.execute(
-            "INSERT INTO novels(id, title, synopsis, cover_path, knowledge_ids, knowledge_strategy, created_at, updated_at, archived, word_count_min, word_count_max, chapter_count)
-             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)
+            "INSERT INTO novels(id, title, synopsis, cover_path, knowledge_ids, knowledge_strategy, created_at, updated_at, archived, word_count_min, word_count_max, chapter_count, canon_mode)
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)
              ON CONFLICT(id) DO UPDATE SET
                title=excluded.title,
                synopsis=excluded.synopsis,
@@ -456,7 +763,8 @@ impl Db {
                archived=excluded.archived,
                word_count_min=excluded.word_count_min,
                word_count_max=excluded.word_count_max,
-               chapter_count=excluded.chapter_count",
+               chapter_count=excluded.chapter_count,
+               canon_mode=excluded.canon_mode",
             params![
                 n.id,
                 n.title,
@@ -470,6 +778,7 @@ impl Db {
                 n.word_count_min as i64,
                 n.word_count_max as i64,
                 n.chapter_count as i64,
+                mode,
             ],
         )?;
         Ok(())
@@ -557,29 +866,11 @@ impl Db {
         Ok(rows.filter_map(|r| r.ok()).collect())
     }
 
-    pub fn list_chat(&self, novel_id: &str) -> Result<Vec<ChatMessage>> {
-        let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT id, novel_id, role, content, created_at FROM chat_messages
-             WHERE novel_id=?1 ORDER BY created_at ASC",
-        )?;
-        let rows = stmt.query_map(params![novel_id], |row| {
-            Ok(ChatMessage {
-                id: row.get(0)?,
-                novel_id: row.get(1)?,
-                role: row.get(2)?,
-                content: row.get(3)?,
-                created_at: row.get(4)?,
-            })
-        })?;
-        Ok(rows.filter_map(|r| r.ok()).collect())
-    }
-
-    pub fn insert_chat(&self, m: &ChatMessage) -> Result<()> {
+    pub fn delete_chat_for_node(&self, novel_id: &str, node_id: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "INSERT INTO chat_messages(id, novel_id, role, content, created_at) VALUES(?1,?2,?3,?4,?5)",
-            params![m.id, m.novel_id, m.role, m.content, m.created_at],
+            "DELETE FROM chat_messages WHERE novel_id=?1 AND COALESCE(node_id, '')=?2",
+            params![novel_id, node_id],
         )?;
         Ok(())
     }
@@ -795,6 +1086,7 @@ fn migrate_token_usage_novel_id(conn: &Connection) -> Result<()> {
 fn map_novel(row: &rusqlite::Row<'_>) -> rusqlite::Result<NovelProject> {
     let kids: String = row.get(4)?;
     let archived_i: i64 = row.get(8).unwrap_or(0);
+    let mode: String = row.get(12).unwrap_or_else(|_| "reference".into());
     Ok(NovelProject {
         id: row.get(0)?,
         title: row.get(1)?,
@@ -808,7 +1100,15 @@ fn map_novel(row: &rusqlite::Row<'_>) -> rusqlite::Result<NovelProject> {
         word_count_min: row.get::<_, i64>(9).unwrap_or(2000) as u32,
         word_count_max: row.get::<_, i64>(10).unwrap_or(3000) as u32,
         chapter_count: row.get::<_, i64>(11).unwrap_or(20) as u32,
+        canon_mode: normalize_canon_mode(&mode),
     })
+}
+
+fn normalize_canon_mode(mode: &str) -> String {
+    match mode.trim().to_ascii_lowercase().as_str() {
+        "strict" | "locked" => "strict".into(),
+        _ => "reference".into(),
+    }
 }
 
 #[cfg(test)]

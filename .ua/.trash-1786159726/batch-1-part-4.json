@@ -1,0 +1,1882 @@
+{
+  "nodes": [
+    {
+      "id": "file:src-tauri/src/paths.rs",
+      "type": "file",
+      "name": "paths.rs",
+      "filePath": "src-tauri/src/paths.rs",
+      "summary": "集中生成应用数据目录、SQLite、LanceDB 与小说文件路径，保证本地存储布局一致。",
+      "tags": [
+        "utility",
+        "filesystem",
+        "paths",
+        "路径"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/paths.rs:app_root",
+      "type": "function",
+      "name": "app_root",
+      "filePath": "src-tauri/src/paths.rs",
+      "lineRange": [
+        4,
+        10
+      ],
+      "summary": "返回并确保应用数据根目录存在。",
+      "tags": [
+        "filesystem",
+        "paths",
+        "路径"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/paths.rs:db_path",
+      "type": "function",
+      "name": "db_path",
+      "filePath": "src-tauri/src/paths.rs",
+      "lineRange": [
+        12,
+        14
+      ],
+      "summary": "返回 SQLite 数据库文件路径。",
+      "tags": [
+        "filesystem",
+        "paths",
+        "路径"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/paths.rs:lancedb_dir",
+      "type": "function",
+      "name": "lancedb_dir",
+      "filePath": "src-tauri/src/paths.rs",
+      "lineRange": [
+        16,
+        20
+      ],
+      "summary": "返回并创建 LanceDB 数据目录。",
+      "tags": [
+        "filesystem",
+        "paths",
+        "路径"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/paths.rs:novels_dir",
+      "type": "function",
+      "name": "novels_dir",
+      "filePath": "src-tauri/src/paths.rs",
+      "lineRange": [
+        22,
+        26
+      ],
+      "summary": "返回并创建小说项目根目录。",
+      "tags": [
+        "filesystem",
+        "paths",
+        "路径"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/paths.rs:novel_dir",
+      "type": "function",
+      "name": "novel_dir",
+      "filePath": "src-tauri/src/paths.rs",
+      "lineRange": [
+        28,
+        33
+      ],
+      "summary": "返回指定小说的目录并确保 chapters 子目录存在。",
+      "tags": [
+        "filesystem",
+        "paths",
+        "路径"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/paths.rs:novel_meta_path",
+      "type": "function",
+      "name": "novel_meta_path",
+      "filePath": "src-tauri/src/paths.rs",
+      "lineRange": [
+        35,
+        37
+      ],
+      "summary": "返回小说 meta.json 路径。",
+      "tags": [
+        "filesystem",
+        "paths",
+        "路径"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/paths.rs:novel_tree_path",
+      "type": "function",
+      "name": "novel_tree_path",
+      "filePath": "src-tauri/src/paths.rs",
+      "lineRange": [
+        39,
+        41
+      ],
+      "summary": "返回小说 tree.json 路径。",
+      "tags": [
+        "filesystem",
+        "paths",
+        "路径"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/paths.rs:chapter_path",
+      "type": "function",
+      "name": "chapter_path",
+      "filePath": "src-tauri/src/paths.rs",
+      "lineRange": [
+        43,
+        47
+      ],
+      "summary": "返回指定章节正文文件路径。",
+      "tags": [
+        "filesystem",
+        "paths",
+        "路径"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src-tauri/src/prompts.rs",
+      "type": "file",
+      "name": "prompts.rs",
+      "filePath": "src-tauri/src/prompts.rs",
+      "summary": "多语言 PromptLocale 与各业务场景的系统/用户提示词模板，驱动 LLM 创作与分析。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "llm",
+        "模板"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:src-tauri/src/prompts.rs:PromptLocale",
+      "type": "class",
+      "name": "PromptLocale",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        4,
+        11
+      ],
+      "summary": "提示词语言枚举，支持从偏好/交互文本/系统环境解析并输出语言规则。",
+      "tags": [
+        "i18n",
+        "type-definition",
+        "prompt",
+        "枚举"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:src-tauri/src/prompts.rs:ChapterContextLabels",
+      "type": "class",
+      "name": "ChapterContextLabels",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        462,
+        484
+      ],
+      "summary": "章节上下文各字段的本地化标签集合，供拼装提示词使用。",
+      "tags": [
+        "i18n",
+        "data-model",
+        "prompt",
+        "标签"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:from_preference",
+      "type": "function",
+      "name": "from_preference",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        14,
+        20
+      ],
+      "summary": "根据用户语言偏好解析 PromptLocale。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:for_interaction",
+      "type": "function",
+      "name": "for_interaction",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        24,
+        34
+      ],
+      "summary": "结合用户输入与偏好推断交互语言。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:detect_from_text",
+      "type": "function",
+      "name": "detect_from_text",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        37,
+        69
+      ],
+      "summary": "从文本内容检测应使用的提示语言。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:parse",
+      "type": "function",
+      "name": "parse",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        71,
+        93
+      ],
+      "summary": "解析语言代码字符串为 PromptLocale。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:is_zh",
+      "type": "function",
+      "name": "is_zh",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        104,
+        106
+      ],
+      "summary": "判断当前语言是否为中文变体。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:output_language",
+      "type": "function",
+      "name": "output_language",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        109,
+        118
+      ],
+      "summary": "返回输出语言的可读名称。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:language_rule",
+      "type": "function",
+      "name": "language_rule",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        121,
+        142
+      ],
+      "summary": "生成要求模型按目标语言写作的规则文本。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:knowledge_extract_system",
+      "type": "function",
+      "name": "knowledge_extract_system",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        145,
+        159
+      ],
+      "summary": "构建「knowledge_extract」场景的系统提示词。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:knowledge_url_extract_system",
+      "type": "function",
+      "name": "knowledge_url_extract_system",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        162,
+        180
+      ],
+      "summary": "构建「knowledge_url_extract」场景的系统提示词。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:knowledge_extract_user",
+      "type": "function",
+      "name": "knowledge_extract_user",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        182,
+        200
+      ],
+      "summary": "构建「knowledge_extract」场景的用户提示词。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:default_knowledge_book_prompt",
+      "type": "function",
+      "name": "default_knowledge_book_prompt",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        202,
+        208
+      ],
+      "summary": "返回书本知识抽取的默认用户提示。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:default_knowledge_url_prompt",
+      "type": "function",
+      "name": "default_knowledge_url_prompt",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        210,
+        216
+      ],
+      "summary": "返回 URL 知识抽取的默认用户提示。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:parse_title_author",
+      "type": "function",
+      "name": "parse_title_author",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        218,
+        259
+      ],
+      "summary": "从分析首行解析书名与作者。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:apply_analysis_meta",
+      "type": "function",
+      "name": "apply_analysis_meta",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        262,
+        289
+      ],
+      "summary": "将解析出的书名作者写回分析结果。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:is_genre_heading",
+      "type": "function",
+      "name": "is_genre_heading",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        291,
+        302
+      ],
+      "summary": "判断文本行是否为题材标题行。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:extract_genres_from_analysis",
+      "type": "function",
+      "name": "extract_genres_from_analysis",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        305,
+        340
+      ],
+      "summary": "从分析结果中抽取题材标签。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:merge_genre_tags",
+      "type": "function",
+      "name": "merge_genre_tags",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        351,
+        367
+      ],
+      "summary": "合并并规范化题材标签列表。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:create_novel_system",
+      "type": "function",
+      "name": "create_novel_system",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        396,
+        428
+      ],
+      "summary": "构建「create_novel」场景的系统提示词。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:create_novel_empty_user",
+      "type": "function",
+      "name": "create_novel_empty_user",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        430,
+        436
+      ],
+      "summary": "构建「create_novel_empty」场景的用户提示词。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:untitled_novel",
+      "type": "function",
+      "name": "untitled_novel",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        438,
+        444
+      ],
+      "summary": "返回未命名小说的默认标题。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:chat_created_novel",
+      "type": "function",
+      "name": "chat_created_novel",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        446,
+        460
+      ],
+      "summary": "生成小说创建完成的聊天确认文案。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:chapter_context_labels",
+      "type": "function",
+      "name": "chapter_context_labels",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        486,
+        538
+      ],
+      "summary": "按语言返回章节上下文标签结构体。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:generate_chapter_system",
+      "type": "function",
+      "name": "generate_chapter_system",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        540,
+        585
+      ],
+      "summary": "构建「generate_chapter」场景的系统提示词。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:generate_chapter_user",
+      "type": "function",
+      "name": "generate_chapter_user",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        587,
+        625
+      ],
+      "summary": "构建「generate_chapter」场景的用户提示词。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:repair_chapter_system",
+      "type": "function",
+      "name": "repair_chapter_system",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        627,
+        644
+      ],
+      "summary": "构建「repair_chapter」场景的系统提示词。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:length_repair_chapter_system",
+      "type": "function",
+      "name": "length_repair_chapter_system",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        646,
+        669
+      ],
+      "summary": "构建「length_repair_chapter」场景的系统提示词。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:length_repair_chapter_user",
+      "type": "function",
+      "name": "length_repair_chapter_user",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        671,
+        693
+      ],
+      "summary": "构建「length_repair_chapter」场景的用户提示词。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:repair_chapter_user",
+      "type": "function",
+      "name": "repair_chapter_user",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        695,
+        707
+      ],
+      "summary": "构建「repair_chapter」场景的用户提示词。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:generate_footer",
+      "type": "function",
+      "name": "generate_footer",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        709,
+        719
+      ],
+      "summary": "生成章节正文末尾页脚元信息。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:word_count_off_note",
+      "type": "function",
+      "name": "word_count_off_note",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        721,
+        729
+      ],
+      "summary": "生成本地化文案片段：word_count_off_note。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:generate_done_msg",
+      "type": "function",
+      "name": "generate_done_msg",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        731,
+        753
+      ],
+      "summary": "生成本地化文案片段：generate_done_msg。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:refine_chapter_system",
+      "type": "function",
+      "name": "refine_chapter_system",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        755,
+        813
+      ],
+      "summary": "构建「refine_chapter」场景的系统提示词。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:refine_chapter_user",
+      "type": "function",
+      "name": "refine_chapter_user",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        815,
+        883
+      ],
+      "summary": "构建「refine_chapter」场景的用户提示词。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:refine_done_msg",
+      "type": "function",
+      "name": "refine_done_msg",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        885,
+        908
+      ],
+      "summary": "生成本地化文案片段：refine_done_msg。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:extract_chapter_memory_system",
+      "type": "function",
+      "name": "extract_chapter_memory_system",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        910,
+        937
+      ],
+      "summary": "构建「extract_chapter_memory」场景的系统提示词。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:extract_chapter_memory_user",
+      "type": "function",
+      "name": "extract_chapter_memory_user",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        939,
+        950
+      ],
+      "summary": "构建「extract_chapter_memory」场景的用户提示词。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:workspace_chat_system",
+      "type": "function",
+      "name": "workspace_chat_system",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        952,
+        1016
+      ],
+      "summary": "构建「workspace_chat」场景的系统提示词。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:gen_chapter_cards_system",
+      "type": "function",
+      "name": "gen_chapter_cards_system",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        1018,
+        1066
+      ],
+      "summary": "构建「gen_chapter_cards」场景的系统提示词。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:gen_chapter_cards_user",
+      "type": "function",
+      "name": "gen_chapter_cards_user",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        1068,
+        1100
+      ],
+      "summary": "构建「gen_chapter_cards」场景的用户提示词。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:plan_next_chapters_system",
+      "type": "function",
+      "name": "plan_next_chapters_system",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        1103,
+        1145
+      ],
+      "summary": "构建「plan_next_chapters」场景的系统提示词。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:plan_next_chapters_user",
+      "type": "function",
+      "name": "plan_next_chapters_user",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        1147,
+        1210
+      ],
+      "summary": "构建「plan_next_chapters」场景的用户提示词。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:plan_next_done_msg",
+      "type": "function",
+      "name": "plan_next_done_msg",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        1212,
+        1233
+      ],
+      "summary": "生成本地化文案片段：plan_next_done_msg。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:gen_chapter_plots_system",
+      "type": "function",
+      "name": "gen_chapter_plots_system",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        1235,
+        1265
+      ],
+      "summary": "构建「gen_chapter_plots」场景的系统提示词。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:gen_chapter_plots_user",
+      "type": "function",
+      "name": "gen_chapter_plots_user",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        1267,
+        1298
+      ],
+      "summary": "构建「gen_chapter_plots」场景的用户提示词。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:knowledge_card_extract_system",
+      "type": "function",
+      "name": "knowledge_card_extract_system",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        1300,
+        1310
+      ],
+      "summary": "构建「knowledge_card_extract」场景的系统提示词。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:knowledge_card_extract_user",
+      "type": "function",
+      "name": "knowledge_card_extract_user",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        1312,
+        1322
+      ],
+      "summary": "构建「knowledge_card_extract」场景的用户提示词。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:card_chat_system",
+      "type": "function",
+      "name": "card_chat_system",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        1324,
+        1380
+      ],
+      "summary": "构建「card_chat」场景的系统提示词。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:default_new_character",
+      "type": "function",
+      "name": "default_new_character",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        1382,
+        1388
+      ],
+      "summary": "返回新建角色卡的默认字段文案。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:prev_chapter_memory_block",
+      "type": "function",
+      "name": "prev_chapter_memory_block",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        1391,
+        1412
+      ],
+      "summary": "生成本地化文案片段：prev_chapter_memory_block。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src-tauri/src/prompts.rs:prev_chapter_block",
+      "type": "function",
+      "name": "prev_chapter_block",
+      "filePath": "src-tauri/src/prompts.rs",
+      "lineRange": [
+        1414,
+        1430
+      ],
+      "summary": "生成本地化文案片段：prev_chapter_block。",
+      "tags": [
+        "prompt",
+        "i18n",
+        "模板"
+      ],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:src-tauri/src/paths.rs",
+      "target": "function:src-tauri/src/paths.rs:app_root",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/paths.rs",
+      "target": "function:src-tauri/src/paths.rs:app_root",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/paths.rs",
+      "target": "function:src-tauri/src/paths.rs:db_path",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/paths.rs",
+      "target": "function:src-tauri/src/paths.rs:db_path",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/paths.rs",
+      "target": "function:src-tauri/src/paths.rs:lancedb_dir",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/paths.rs",
+      "target": "function:src-tauri/src/paths.rs:lancedb_dir",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/paths.rs",
+      "target": "function:src-tauri/src/paths.rs:novels_dir",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/paths.rs",
+      "target": "function:src-tauri/src/paths.rs:novels_dir",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/paths.rs",
+      "target": "function:src-tauri/src/paths.rs:novel_dir",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/paths.rs",
+      "target": "function:src-tauri/src/paths.rs:novel_dir",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/paths.rs",
+      "target": "function:src-tauri/src/paths.rs:novel_meta_path",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/paths.rs",
+      "target": "function:src-tauri/src/paths.rs:novel_meta_path",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/paths.rs",
+      "target": "function:src-tauri/src/paths.rs:novel_tree_path",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/paths.rs",
+      "target": "function:src-tauri/src/paths.rs:novel_tree_path",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/paths.rs",
+      "target": "function:src-tauri/src/paths.rs:chapter_path",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/paths.rs",
+      "target": "function:src-tauri/src/paths.rs:chapter_path",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "class:src-tauri/src/prompts.rs:PromptLocale",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "class:src-tauri/src/prompts.rs:PromptLocale",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "class:src-tauri/src/prompts.rs:ChapterContextLabels",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "class:src-tauri/src/prompts.rs:ChapterContextLabels",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:from_preference",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:from_preference",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:for_interaction",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:for_interaction",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:detect_from_text",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:detect_from_text",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:parse",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:is_zh",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:is_zh",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:output_language",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:output_language",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:language_rule",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:language_rule",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:knowledge_extract_system",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:knowledge_extract_system",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:knowledge_url_extract_system",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:knowledge_url_extract_system",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:knowledge_extract_user",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:knowledge_extract_user",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:default_knowledge_book_prompt",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:default_knowledge_book_prompt",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:default_knowledge_url_prompt",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:default_knowledge_url_prompt",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:parse_title_author",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:parse_title_author",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:apply_analysis_meta",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:apply_analysis_meta",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:is_genre_heading",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:extract_genres_from_analysis",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:extract_genres_from_analysis",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:merge_genre_tags",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:merge_genre_tags",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:create_novel_system",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:create_novel_system",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:create_novel_empty_user",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:create_novel_empty_user",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:untitled_novel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:untitled_novel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:chat_created_novel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:chat_created_novel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:chapter_context_labels",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:chapter_context_labels",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:generate_chapter_system",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:generate_chapter_system",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:generate_chapter_user",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:generate_chapter_user",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:repair_chapter_system",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:repair_chapter_system",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:length_repair_chapter_system",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:length_repair_chapter_system",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:length_repair_chapter_user",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:length_repair_chapter_user",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:repair_chapter_user",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:repair_chapter_user",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:generate_footer",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:generate_footer",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:word_count_off_note",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:word_count_off_note",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:generate_done_msg",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:generate_done_msg",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:refine_chapter_system",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:refine_chapter_system",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:refine_chapter_user",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:refine_chapter_user",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:refine_done_msg",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:refine_done_msg",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:extract_chapter_memory_system",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:extract_chapter_memory_system",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:extract_chapter_memory_user",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:extract_chapter_memory_user",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:workspace_chat_system",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:workspace_chat_system",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:gen_chapter_cards_system",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:gen_chapter_cards_system",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:gen_chapter_cards_user",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:gen_chapter_cards_user",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:plan_next_chapters_system",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:plan_next_chapters_system",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:plan_next_chapters_user",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:plan_next_chapters_user",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:plan_next_done_msg",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:plan_next_done_msg",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:gen_chapter_plots_system",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:gen_chapter_plots_system",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:gen_chapter_plots_user",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:gen_chapter_plots_user",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:knowledge_card_extract_system",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:knowledge_card_extract_system",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:knowledge_card_extract_user",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:knowledge_card_extract_user",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:card_chat_system",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:card_chat_system",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:default_new_character",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:default_new_character",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:prev_chapter_memory_block",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:prev_chapter_memory_block",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:prev_chapter_block",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src-tauri/src/prompts.rs",
+      "target": "function:src-tauri/src/prompts.rs:prev_chapter_block",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    }
+  ]
+}

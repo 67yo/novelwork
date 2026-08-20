@@ -1,0 +1,23 @@
+{
+  "projectRoot": "/Users/ablegao/code/novework",
+  "batchFiles": [
+    {"path": "src/App.vue", "language": "vue", "sizeLines": 84, "fileCategory": "code"},
+    {"path": "src/main.ts", "language": "typescript", "sizeLines": 10, "fileCategory": "code"},
+    {"path": "src/router/index.ts", "language": "typescript", "sizeLines": 20, "fileCategory": "code"},
+    {"path": "src/views/LibraryView.vue", "language": "vue", "sizeLines": 549, "fileCategory": "code"},
+    {"path": "src/views/NovelsView.vue", "language": "vue", "sizeLines": 305, "fileCategory": "code"},
+    {"path": "src/views/SettingsView.vue", "language": "vue", "sizeLines": 404, "fileCategory": "code"},
+    {"path": "src/views/StatsView.vue", "language": "vue", "sizeLines": 404, "fileCategory": "code"},
+    {"path": "src/views/WorkspaceView.vue", "language": "vue", "sizeLines": 2233, "fileCategory": "code"}
+  ],
+  "batchImportData": {
+    "src/App.vue": [],
+    "src/main.ts": ["src/App.vue", "src/router/index.ts", "src/style.css"],
+    "src/router/index.ts": ["src/views/LibraryView.vue", "src/views/NovelsView.vue", "src/views/SettingsView.vue", "src/views/StatsView.vue", "src/views/WorkspaceView.vue"],
+    "src/views/LibraryView.vue": [],
+    "src/views/NovelsView.vue": [],
+    "src/views/SettingsView.vue": [],
+    "src/views/StatsView.vue": [],
+    "src/views/WorkspaceView.vue": []
+  }
+}

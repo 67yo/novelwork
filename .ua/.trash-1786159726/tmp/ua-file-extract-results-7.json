@@ -1,0 +1,978 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 12,
+  "filesSkipped": [
+    "src/style.css"
+  ],
+  "analysisOutcomes": {
+    "structure": {
+      "succeeded": 12,
+      "failed": 0
+    },
+    "callGraph": {
+      "succeeded": 12,
+      "failed": 0,
+      "skipped": 0
+    }
+  },
+  "results": [
+    {
+      "path": "src/i18n/index.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 64,
+      "nonEmptyLines": 56,
+      "functions": [
+        {
+          "name": "detectSystemLocale",
+          "startLine": 14,
+          "endLine": 28,
+          "params": []
+        },
+        {
+          "name": "getLocalePreference",
+          "startLine": 34,
+          "endLine": 36,
+          "params": []
+        },
+        {
+          "name": "setLocalePreference",
+          "startLine": 38,
+          "endLine": 40,
+          "params": [
+            "next"
+          ]
+        },
+        {
+          "name": "t",
+          "startLine": 42,
+          "endLine": 51,
+          "params": [
+            "key",
+            "params"
+          ]
+        },
+        {
+          "name": "useI18n",
+          "startLine": 54,
+          "endLine": 64,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "LOCALE_OPTIONS",
+          "line": 10,
+          "isDefault": false
+        },
+        {
+          "name": "LocaleCode",
+          "line": 10,
+          "isDefault": false
+        },
+        {
+          "name": "LocalePreference",
+          "line": 10,
+          "isDefault": false
+        },
+        {
+          "name": "MessageKey",
+          "line": 10,
+          "isDefault": false
+        },
+        {
+          "name": "detectSystemLocale",
+          "line": 14,
+          "isDefault": false
+        },
+        {
+          "name": "resolvedLocale",
+          "line": 30,
+          "isDefault": false
+        },
+        {
+          "name": "getLocalePreference",
+          "line": 34,
+          "isDefault": false
+        },
+        {
+          "name": "setLocalePreference",
+          "line": 38,
+          "isDefault": false
+        },
+        {
+          "name": "t",
+          "line": 42,
+          "isDefault": false
+        },
+        {
+          "name": "useI18n",
+          "line": 54,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "detectSystemLocale",
+          "callee": "lang.toLowerCase",
+          "lineNumber": 16
+        },
+        {
+          "caller": "detectSystemLocale",
+          "callee": "lower.startsWith",
+          "lineNumber": 17
+        },
+        {
+          "caller": "detectSystemLocale",
+          "callee": "lower.includes",
+          "lineNumber": 18
+        },
+        {
+          "caller": "detectSystemLocale",
+          "callee": "lower.includes",
+          "lineNumber": 18
+        },
+        {
+          "caller": "detectSystemLocale",
+          "callee": "lower.includes",
+          "lineNumber": 18
+        },
+        {
+          "caller": "detectSystemLocale",
+          "callee": "lower.includes",
+          "lineNumber": 18
+        },
+        {
+          "caller": "detectSystemLocale",
+          "callee": "lower.startsWith",
+          "lineNumber": 23
+        },
+        {
+          "caller": "detectSystemLocale",
+          "callee": "lower.startsWith",
+          "lineNumber": 24
+        },
+        {
+          "caller": "detectSystemLocale",
+          "callee": "lower.startsWith",
+          "lineNumber": 25
+        },
+        {
+          "caller": "detectSystemLocale",
+          "callee": "lower.startsWith",
+          "lineNumber": 26
+        },
+        {
+          "caller": "t",
+          "callee": "String",
+          "lineNumber": 44
+        },
+        {
+          "caller": "t",
+          "callee": "Object.entries",
+          "lineNumber": 46
+        },
+        {
+          "caller": "t",
+          "callee": "s.split(`{${k}}`).join",
+          "lineNumber": 47
+        },
+        {
+          "caller": "t",
+          "callee": "s.split",
+          "lineNumber": 47
+        },
+        {
+          "caller": "t",
+          "callee": "String",
+          "lineNumber": 47
+        },
+        {
+          "caller": "useI18n",
+          "callee": "t",
+          "lineNumber": 61
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 10,
+        "functionCount": 5,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/i18n/messages.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 1749,
+      "nonEmptyLines": 1731,
+      "exports": [
+        {
+          "name": "LOCALE_OPTIONS",
+          "line": 4,
+          "isDefault": false
+        },
+        {
+          "name": "zhCN",
+          "line": 15,
+          "isDefault": false
+        },
+        {
+          "name": "en",
+          "line": 310,
+          "isDefault": false
+        },
+        {
+          "name": "zhTW",
+          "line": 597,
+          "isDefault": false
+        },
+        {
+          "name": "ja",
+          "line": 882,
+          "isDefault": false
+        },
+        {
+          "name": "de",
+          "line": 1168,
+          "isDefault": false
+        },
+        {
+          "name": "fr",
+          "line": 1455,
+          "isDefault": false
+        },
+        {
+          "name": "dictionaries",
+          "line": 1742,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 8,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/lib/api.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 321,
+      "nonEmptyLines": 299,
+      "functions": [
+        {
+          "name": "extractKnowledgeCard",
+          "startLine": 179,
+          "endLine": 181,
+          "params": [
+            "novelId",
+            "nodeId"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "extractKnowledgeCard",
+          "line": 179,
+          "isDefault": false
+        },
+        {
+          "name": "api",
+          "line": 183,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "extractKnowledgeCard",
+          "callee": "invoke",
+          "lineNumber": 180
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 2,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/lib/chatFormat.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 16,
+      "nonEmptyLines": 16,
+      "functions": [
+        {
+          "name": "formatChatContent",
+          "startLine": 2,
+          "endLine": 16,
+          "params": [
+            "text"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "formatChatContent",
+          "line": 2,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "formatChatContent",
+          "callee": "text\n    .split(\"\\n\")\n    .map((line) => {\n      const t = line.trim();\n      if (!(t.startsWith(\"{\") || t.startsWith(\"[\"))) return line;\n      try {\n        return JSON.stringify(JSON.parse(t), null, 2);\n      } catch {\n        return line;\n      }\n    })\n    .join",
+          "lineNumber": 4
+        },
+        {
+          "caller": "formatChatContent",
+          "callee": "text\n    .split(\"\\n\")\n    .map",
+          "lineNumber": 4
+        },
+        {
+          "caller": "formatChatContent",
+          "callee": "text\n    .split",
+          "lineNumber": 4
+        },
+        {
+          "caller": "formatChatContent",
+          "callee": "line.trim",
+          "lineNumber": 7
+        },
+        {
+          "caller": "formatChatContent",
+          "callee": "t.startsWith",
+          "lineNumber": 8
+        },
+        {
+          "caller": "formatChatContent",
+          "callee": "t.startsWith",
+          "lineNumber": 8
+        },
+        {
+          "caller": "formatChatContent",
+          "callee": "JSON.stringify",
+          "lineNumber": 10
+        },
+        {
+          "caller": "formatChatContent",
+          "callee": "JSON.parse",
+          "lineNumber": 10
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/lib/linediff.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 33,
+      "nonEmptyLines": 32,
+      "functions": [
+        {
+          "name": "diffLines",
+          "startLine": 4,
+          "endLine": 33,
+          "params": [
+            "oldText",
+            "newText"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "diffLines",
+          "line": 4,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "diffLines",
+          "callee": "oldText.split",
+          "lineNumber": 5
+        },
+        {
+          "caller": "diffLines",
+          "callee": "newText.split",
+          "lineNumber": 6
+        },
+        {
+          "caller": "diffLines",
+          "callee": "Array.from",
+          "lineNumber": 10
+        },
+        {
+          "caller": "diffLines",
+          "callee": "Math.max",
+          "lineNumber": 13
+        },
+        {
+          "caller": "diffLines",
+          "callee": "out.push",
+          "lineNumber": 21
+        },
+        {
+          "caller": "diffLines",
+          "callee": "out.push",
+          "lineNumber": 25
+        },
+        {
+          "caller": "diffLines",
+          "callee": "out.push",
+          "lineNumber": 27
+        },
+        {
+          "caller": "diffLines",
+          "callee": "out.push",
+          "lineNumber": 30
+        },
+        {
+          "caller": "diffLines",
+          "callee": "out.push",
+          "lineNumber": 31
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/lib/md.selfcheck.mjs",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 29,
+      "nonEmptyLines": 27,
+      "functions": [
+        {
+          "name": "stripChapterMeta",
+          "startLine": 2,
+          "endLine": 9,
+          "params": [
+            "src"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "stripChapterMeta",
+          "callee": "src.replace(/\\r\\n/g, \"\\n\").trim",
+          "lineNumber": 3
+        },
+        {
+          "caller": "stripChapterMeta",
+          "callee": "src.replace",
+          "lineNumber": 3
+        },
+        {
+          "caller": "stripChapterMeta",
+          "callee": "s.replace(/\\n*---\\s*\\n>\\s*(?:节点约束校验摘要|Constraint check)[\\s\\S]*$/i, \"\").trim",
+          "lineNumber": 5
+        },
+        {
+          "caller": "stripChapterMeta",
+          "callee": "s.replace",
+          "lineNumber": 5
+        },
+        {
+          "caller": "stripChapterMeta",
+          "callee": "s.replace(/\\n*（请在设置页填写[\\s\\S]*?）\\s*$/u, \"\").trim",
+          "lineNumber": 6
+        },
+        {
+          "caller": "stripChapterMeta",
+          "callee": "s.replace",
+          "lineNumber": 6
+        },
+        {
+          "caller": "stripChapterMeta",
+          "callee": "s.replace(/\\n*\\(Please (?:set|configure)[\\s\\S]*?\\)\\s*$/i, \"\").trim",
+          "lineNumber": 7
+        },
+        {
+          "caller": "stripChapterMeta",
+          "callee": "s.replace",
+          "lineNumber": 7
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/lib/md.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 33,
+      "nonEmptyLines": 28,
+      "functions": [
+        {
+          "name": "stripChapterMeta",
+          "startLine": 9,
+          "endLine": 18,
+          "params": [
+            "src"
+          ]
+        },
+        {
+          "name": "renderChapterMd",
+          "startLine": 21,
+          "endLine": 28,
+          "params": [
+            "src"
+          ]
+        },
+        {
+          "name": "withCopyableParaIndent",
+          "startLine": 31,
+          "endLine": 33,
+          "params": [
+            "html"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "stripChapterMeta",
+          "line": 9,
+          "isDefault": false
+        },
+        {
+          "name": "renderChapterMd",
+          "line": 21,
+          "isDefault": false
+        },
+        {
+          "name": "withCopyableParaIndent",
+          "line": 31,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "stripChapterMeta",
+          "callee": "src.replace(/\\r\\n/g, \"\\n\").trim",
+          "lineNumber": 10
+        },
+        {
+          "caller": "stripChapterMeta",
+          "callee": "src.replace",
+          "lineNumber": 10
+        },
+        {
+          "caller": "stripChapterMeta",
+          "callee": "s.replace(/\\n*---\\s*\\n>\\s*(?:节点约束校验摘要|Constraint check)[\\s\\S]*$/i, \"\").trim",
+          "lineNumber": 13
+        },
+        {
+          "caller": "stripChapterMeta",
+          "callee": "s.replace",
+          "lineNumber": 13
+        },
+        {
+          "caller": "stripChapterMeta",
+          "callee": "s.replace(/\\n*（请在设置页填写[\\s\\S]*?）\\s*$/u, \"\").trim",
+          "lineNumber": 15
+        },
+        {
+          "caller": "stripChapterMeta",
+          "callee": "s.replace",
+          "lineNumber": 15
+        },
+        {
+          "caller": "stripChapterMeta",
+          "callee": "s.replace(/\\n*\\(Please (?:set|configure)[\\s\\S]*?\\)\\s*$/i, \"\").trim",
+          "lineNumber": 16
+        },
+        {
+          "caller": "stripChapterMeta",
+          "callee": "s.replace",
+          "lineNumber": 16
+        },
+        {
+          "caller": "renderChapterMd",
+          "callee": "src.replace(/\\r\\n/g, \"\\n\").trim",
+          "lineNumber": 22
+        },
+        {
+          "caller": "renderChapterMd",
+          "callee": "src.replace",
+          "lineNumber": 22
+        },
+        {
+          "caller": "renderChapterMd",
+          "callee": "text.replace(/\\n{3,}/g, \"\\n\\n\").replace",
+          "lineNumber": 25
+        },
+        {
+          "caller": "renderChapterMd",
+          "callee": "text.replace",
+          "lineNumber": 25
+        },
+        {
+          "caller": "renderChapterMd",
+          "callee": "marked.parse",
+          "lineNumber": 26
+        },
+        {
+          "caller": "renderChapterMd",
+          "callee": "withCopyableParaIndent",
+          "lineNumber": 27
+        },
+        {
+          "caller": "withCopyableParaIndent",
+          "callee": "html.replace",
+          "lineNumber": 32
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 3,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/lib/treeLayout.selfcheck.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 34,
+      "nonEmptyLines": 32,
+      "functions": [
+        {
+          "name": "get",
+          "startLine": 21,
+          "endLine": 21,
+          "params": [
+            "id"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "get",
+          "callee": "nodes.find",
+          "lineNumber": 21
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/lib/treeLayout.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 129,
+      "nonEmptyLines": 115,
+      "functions": [
+        {
+          "name": "byY",
+          "startLine": 31,
+          "endLine": 37,
+          "params": [
+            "a",
+            "b"
+          ]
+        },
+        {
+          "name": "placePlotGrid",
+          "startLine": 40,
+          "endLine": 49,
+          "params": [
+            "list",
+            "originX",
+            "originY"
+          ]
+        },
+        {
+          "name": "plotBlockSpan",
+          "startLine": 51,
+          "endLine": 55,
+          "params": [
+            "count"
+          ]
+        },
+        {
+          "name": "applyAutoLayout",
+          "startLine": 58,
+          "endLine": 116,
+          "params": [
+            "nodes",
+            "edges"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "applyAutoLayout",
+          "line": 58,
+          "isDefault": false
+        },
+        {
+          "name": "__layoutConsts",
+          "line": 118,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "byY",
+          "callee": "a.id.localeCompare",
+          "lineNumber": 35
+        },
+        {
+          "caller": "placePlotGrid",
+          "callee": "list.forEach",
+          "lineNumber": 41
+        },
+        {
+          "caller": "placePlotGrid",
+          "callee": "Math.floor",
+          "lineNumber": 42
+        },
+        {
+          "caller": "plotBlockSpan",
+          "callee": "Math.min",
+          "lineNumber": 53
+        },
+        {
+          "caller": "applyAutoLayout",
+          "callee": "nodes.find",
+          "lineNumber": 59
+        },
+        {
+          "caller": "applyAutoLayout",
+          "callee": "nodes.filter((n) => n.kind === \"chapter\").sort",
+          "lineNumber": 62
+        },
+        {
+          "caller": "applyAutoLayout",
+          "callee": "nodes.filter",
+          "lineNumber": 62
+        },
+        {
+          "caller": "applyAutoLayout",
+          "callee": "nodes\n    .filter((n) => n.kind === \"character\")\n    .sort(byY)\n    .forEach",
+          "lineNumber": 64
+        },
+        {
+          "caller": "applyAutoLayout",
+          "callee": "nodes\n    .filter((n) => n.kind === \"character\")\n    .sort",
+          "lineNumber": 64
+        },
+        {
+          "caller": "applyAutoLayout",
+          "callee": "nodes\n    .filter",
+          "lineNumber": 64
+        },
+        {
+          "caller": "applyAutoLayout",
+          "callee": "nodes.filter",
+          "lineNumber": 71
+        },
+        {
+          "caller": "applyAutoLayout",
+          "callee": "nodes\n    .filter((n) => n.kind === \"knowledge\")\n    .sort(byY)\n    .forEach",
+          "lineNumber": 72
+        },
+        {
+          "caller": "applyAutoLayout",
+          "callee": "nodes\n    .filter((n) => n.kind === \"knowledge\")\n    .sort",
+          "lineNumber": 72
+        },
+        {
+          "caller": "applyAutoLayout",
+          "callee": "nodes\n    .filter",
+          "lineNumber": 72
+        },
+        {
+          "caller": "applyAutoLayout",
+          "callee": "plotHost.set",
+          "lineNumber": 81
+        },
+        {
+          "caller": "applyAutoLayout",
+          "callee": "nodes.find",
+          "lineNumber": 85
+        },
+        {
+          "caller": "applyAutoLayout",
+          "callee": "nodes.find",
+          "lineNumber": 86
+        },
+        {
+          "caller": "applyAutoLayout",
+          "callee": "plotHost.set",
+          "lineNumber": 88
+        },
+        {
+          "caller": "applyAutoLayout",
+          "callee": "plotHost.set",
+          "lineNumber": 89
+        },
+        {
+          "caller": "applyAutoLayout",
+          "callee": "nodes.filter",
+          "lineNumber": 94
+        },
+        {
+          "caller": "applyAutoLayout",
+          "callee": "plotHost.get",
+          "lineNumber": 95
+        },
+        {
+          "caller": "applyAutoLayout",
+          "callee": "chapters.some",
+          "lineNumber": 96
+        },
+        {
+          "caller": "applyAutoLayout",
+          "callee": "byChapter.get",
+          "lineNumber": 97
+        },
+        {
+          "caller": "applyAutoLayout",
+          "callee": "list.push",
+          "lineNumber": 98
+        },
+        {
+          "caller": "applyAutoLayout",
+          "callee": "byChapter.set",
+          "lineNumber": 99
+        },
+        {
+          "caller": "applyAutoLayout",
+          "callee": "orphan.push",
+          "lineNumber": 100
+        },
+        {
+          "caller": "applyAutoLayout",
+          "callee": "(byChapter.get(ch.id) ?? []).sort",
+          "lineNumber": 107
+        },
+        {
+          "caller": "applyAutoLayout",
+          "callee": "byChapter.get",
+          "lineNumber": 107
+        },
+        {
+          "caller": "applyAutoLayout",
+          "callee": "placePlotGrid",
+          "lineNumber": 108
+        },
+        {
+          "caller": "applyAutoLayout",
+          "callee": "plotBlockSpan",
+          "lineNumber": 109
+        },
+        {
+          "caller": "applyAutoLayout",
+          "callee": "Math.max",
+          "lineNumber": 110
+        },
+        {
+          "caller": "applyAutoLayout",
+          "callee": "placePlotGrid",
+          "lineNumber": 114
+        },
+        {
+          "caller": "applyAutoLayout",
+          "callee": "orphan.sort",
+          "lineNumber": 114
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 2,
+        "functionCount": 4,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/lib/utils.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 7,
+      "nonEmptyLines": 6,
+      "functions": [
+        {
+          "name": "cn",
+          "startLine": 5,
+          "endLine": 7,
+          "params": [
+            "...inputs"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "cn",
+          "line": 5,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "cn",
+          "callee": "twMerge",
+          "lineNumber": 6
+        },
+        {
+          "caller": "cn",
+          "callee": "clsx",
+          "lineNumber": 6
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src/vite-env.d.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 7,
+      "nonEmptyLines": 6,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "vite.config.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 31,
+      "nonEmptyLines": 29,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    }
+  ]
+}

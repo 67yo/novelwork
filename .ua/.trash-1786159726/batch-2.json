@@ -1,0 +1,1372 @@
+{
+  "nodes": [
+    {
+      "id": "file:src/App.vue",
+      "type": "file",
+      "name": "App.vue",
+      "filePath": "src/App.vue",
+      "summary": "应用壳层：左侧导航栏、API Key 状态指示，以及 RouterView 主内容区。",
+      "tags": [
+        "component",
+        "entry-point",
+        "navigation",
+        "shell"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Vue 3 <script setup> 单文件组件，挂载时通过 api.getSettings 同步 locale 与 Key 状态。"
+    },
+    {
+      "id": "file:src/main.ts",
+      "type": "file",
+      "name": "main.ts",
+      "filePath": "src/main.ts",
+      "summary": "前端入口：创建 Vue 应用、挂载路由，并引入全局样式与 Vue Flow 主题 CSS。",
+      "tags": [
+        "entry-point",
+        "bootstrap"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/router/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "src/router/index.ts",
+      "summary": "Vue Router 配置：定义小说、资料库、工作区、统计与设置等页面路由。",
+      "tags": [
+        "routing",
+        "entry-point",
+        "navigation"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:src/views/LibraryView.vue",
+      "type": "file",
+      "name": "LibraryView.vue",
+      "filePath": "src/views/LibraryView.vue",
+      "summary": "知识库管理页：导入本地/URL 文本、编辑元数据与题材、归档删除，以及查看提取分块。",
+      "tags": [
+        "component",
+        "view",
+        "knowledge-base",
+        "crud"
+      ],
+      "complexity": "complex",
+      "languageNotes": "含二次确认删除的 in-app modal，避免 window.confirm。"
+    },
+    {
+      "id": "file:src/views/NovelsView.vue",
+      "type": "file",
+      "name": "NovelsView.vue",
+      "filePath": "src/views/NovelsView.vue",
+      "summary": "小说列表与对话式创建：展示封面卡片、归档/删除，并通过 createNovelChat 引导新建项目。",
+      "tags": [
+        "component",
+        "view",
+        "novel-list",
+        "chat"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:src/views/SettingsView.vue",
+      "type": "file",
+      "name": "SettingsView.vue",
+      "filePath": "src/views/SettingsView.vue",
+      "summary": "设置页：多厂商 API Key、各任务模型选择、DeepSeek base URL、界面语言与模型目录刷新。",
+      "tags": [
+        "component",
+        "view",
+        "settings",
+        "configuration"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:src/views/StatsView.vue",
+      "type": "file",
+      "name": "StatsView.vue",
+      "filePath": "src/views/StatsView.vue",
+      "summary": "Token 用量统计页：按日堆叠柱状图与按月汇总，展示模型与小说维度的消耗。",
+      "tags": [
+        "component",
+        "view",
+        "analytics",
+        "charts"
+      ],
+      "complexity": "complex",
+      "languageNotes": "自绘 SVG 堆叠柱图，模型颜色由名称哈希稳定映射。"
+    },
+    {
+      "id": "file:src/views/WorkspaceView.vue",
+      "type": "file",
+      "name": "WorkspaceView.vue",
+      "filePath": "src/views/WorkspaceView.vue",
+      "summary": "核心创作工作区：Vue Flow 故事树、章节生成/精修、卡片聊天、知识关联与封面等完整流水线。",
+      "tags": [
+        "component",
+        "view",
+        "workspace",
+        "vue-flow",
+        "editor"
+      ],
+      "complexity": "complex",
+      "languageNotes": "大型 <script setup> SFC，与 Tauri 后端事件/API 深度集成。"
+    },
+    {
+      "id": "function:src/App.vue:refreshKey",
+      "type": "function",
+      "name": "refreshKey",
+      "filePath": "src/App.vue",
+      "lineRange": [
+        12,
+        25
+      ],
+      "summary": "从后端拉取设置，判断任一厂商 API Key 是否已配置，并同步 UI locale 偏好。",
+      "tags": [
+        "settings",
+        "i18n",
+        "api-handler"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/views/LibraryView.vue:doImport",
+      "type": "function",
+      "name": "doImport",
+      "filePath": "src/views/LibraryView.vue",
+      "lineRange": [
+        87,
+        127
+      ],
+      "summary": "校验文件或 URL 后调用导入 API，写入知识库并刷新列表。",
+      "tags": [
+        "import",
+        "api-handler",
+        "validation"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/views/LibraryView.vue:saveEdit",
+      "type": "function",
+      "name": "saveEdit",
+      "filePath": "src/views/LibraryView.vue",
+      "lineRange": [
+        161,
+        189
+      ],
+      "summary": "保存知识书标题、作者、提取 prompt 与题材标签的编辑结果。",
+      "tags": [
+        "crud",
+        "api-handler",
+        "form"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/views/LibraryView.vue:reextract",
+      "type": "function",
+      "name": "reextract",
+      "filePath": "src/views/LibraryView.vue",
+      "lineRange": [
+        253,
+        278
+      ],
+      "summary": "对已有知识书重新触发 LLM 提取分块流程。",
+      "tags": [
+        "api-handler",
+        "knowledge-base",
+        "async"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/views/LibraryView.vue:confirmDelete",
+      "type": "function",
+      "name": "confirmDelete",
+      "filePath": "src/views/LibraryView.vue",
+      "lineRange": [
+        232,
+        246
+      ],
+      "summary": "确认后删除知识书并关闭删除 modal。",
+      "tags": [
+        "crud",
+        "modal",
+        "destructive"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/views/LibraryView.vue:openChunks",
+      "type": "function",
+      "name": "openChunks",
+      "filePath": "src/views/LibraryView.vue",
+      "lineRange": [
+        191,
+        203
+      ],
+      "summary": "打开知识书分块查看面板并加载 chunks。",
+      "tags": [
+        "ui",
+        "api-handler",
+        "knowledge-base"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/views/LibraryView.vue:archive",
+      "type": "function",
+      "name": "archive",
+      "filePath": "src/views/LibraryView.vue",
+      "lineRange": [
+        211,
+        220
+      ],
+      "summary": "切换知识书归档状态并刷新列表。",
+      "tags": [
+        "crud",
+        "api-handler"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/views/NovelsView.vue:send",
+      "type": "function",
+      "name": "send",
+      "filePath": "src/views/NovelsView.vue",
+      "lineRange": [
+        65,
+        105
+      ],
+      "summary": "发送创建对话消息到 createNovelChat；若返回 novel 则跳转工作区。",
+      "tags": [
+        "chat",
+        "api-handler",
+        "navigation"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/views/NovelsView.vue:confirmDelete",
+      "type": "function",
+      "name": "confirmDelete",
+      "filePath": "src/views/NovelsView.vue",
+      "lineRange": [
+        136,
+        149
+      ],
+      "summary": "确认删除小说项目并刷新列表。",
+      "tags": [
+        "crud",
+        "modal",
+        "destructive"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/views/SettingsView.vue:save",
+      "type": "function",
+      "name": "save",
+      "filePath": "src/views/SettingsView.vue",
+      "lineRange": [
+        93,
+        129
+      ],
+      "summary": "持久化 API Key、模型与 locale 设置，保存后刷新模型目录。",
+      "tags": [
+        "settings",
+        "api-handler",
+        "form"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/views/SettingsView.vue:load",
+      "type": "function",
+      "name": "load",
+      "filePath": "src/views/SettingsView.vue",
+      "lineRange": [
+        48,
+        65
+      ],
+      "summary": "加载当前设置与模型目录到表单状态。",
+      "tags": [
+        "settings",
+        "api-handler"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/views/SettingsView.vue:refreshCatalog",
+      "type": "function",
+      "name": "refreshCatalog",
+      "filePath": "src/views/SettingsView.vue",
+      "lineRange": [
+        67,
+        76
+      ],
+      "summary": "向后端请求刷新可用模型目录。",
+      "tags": [
+        "settings",
+        "api-handler",
+        "async"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/views/StatsView.vue:buildMonthOptions",
+      "type": "function",
+      "name": "buildMonthOptions",
+      "filePath": "src/views/StatsView.vue",
+      "lineRange": [
+        21,
+        32
+      ],
+      "summary": "生成近 36 个月份下拉选项，规避 WebView month input 兼容问题。",
+      "tags": [
+        "utility",
+        "date",
+        "ui"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/views/StatsView.vue:load",
+      "type": "function",
+      "name": "load",
+      "filePath": "src/views/StatsView.vue",
+      "lineRange": [
+        67,
+        78
+      ],
+      "summary": "按所选日期加载日维度 Token 用量数据。",
+      "tags": [
+        "api-handler",
+        "analytics"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/views/StatsView.vue:onSegEnter",
+      "type": "function",
+      "name": "onSegEnter",
+      "filePath": "src/views/StatsView.vue",
+      "lineRange": [
+        183,
+        194
+      ],
+      "summary": "柱状图分段悬停时更新 tooltip 展示模型与 token 数。",
+      "tags": [
+        "ui",
+        "charts",
+        "event-handler"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/views/StatsView.vue:loadMonth",
+      "type": "function",
+      "name": "loadMonth",
+      "filePath": "src/views/StatsView.vue",
+      "lineRange": [
+        80,
+        90
+      ],
+      "summary": "按所选月份加载月维度 Token 用量汇总。",
+      "tags": [
+        "api-handler",
+        "analytics"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/views/WorkspaceView.vue:addCard",
+      "type": "function",
+      "name": "addCard",
+      "filePath": "src/views/WorkspaceView.vue",
+      "lineRange": [
+        763,
+        891
+      ],
+      "summary": "在故事树中新增章节/角色/支线/知识等卡片，处理位置、连线与后端持久化。",
+      "tags": [
+        "crud",
+        "vue-flow",
+        "api-handler"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:src/views/WorkspaceView.vue:sendCardChat",
+      "type": "function",
+      "name": "sendCardChat",
+      "filePath": "src/views/WorkspaceView.vue",
+      "lineRange": [
+        901,
+        965
+      ],
+      "summary": "针对选中卡片发起会话聊天，流式更新卡片相关回复。",
+      "tags": [
+        "chat",
+        "api-handler",
+        "async"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:src/views/WorkspaceView.vue:sendChat",
+      "type": "function",
+      "name": "sendChat",
+      "filePath": "src/views/WorkspaceView.vue",
+      "lineRange": [
+        654,
+        717
+      ],
+      "summary": "工作区全局聊天：携带小说上下文与后端对话并更新消息列表。",
+      "tags": [
+        "chat",
+        "api-handler",
+        "async"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:src/views/WorkspaceView.vue:syncFlowFromTree",
+      "type": "function",
+      "name": "syncFlowFromTree",
+      "filePath": "src/views/WorkspaceView.vue",
+      "lineRange": [
+        135,
+        185
+      ],
+      "summary": "将 NovelTree 同步为 Vue Flow 节点与边，全量替换画布状态。",
+      "tags": [
+        "vue-flow",
+        "sync",
+        "data-model"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/views/WorkspaceView.vue:runAutoAll",
+      "type": "function",
+      "name": "runAutoAll",
+      "filePath": "src/views/WorkspaceView.vue",
+      "lineRange": [
+        569,
+        607
+      ],
+      "summary": "全章自动流水线：依次预生成与精修，支持中止。",
+      "tags": [
+        "automation",
+        "generation",
+        "async"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/views/WorkspaceView.vue:confirmPendingCardDelete",
+      "type": "function",
+      "name": "confirmPendingCardDelete",
+      "filePath": "src/views/WorkspaceView.vue",
+      "lineRange": [
+        1028,
+        1066
+      ],
+      "summary": "二次确认后删除树节点卡片及其关联，并同步画布。",
+      "tags": [
+        "destructive",
+        "modal",
+        "crud"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/views/WorkspaceView.vue:linkEdgeRefs",
+      "type": "function",
+      "name": "linkEdgeRefs",
+      "filePath": "src/views/WorkspaceView.vue",
+      "lineRange": [
+        303,
+        331
+      ],
+      "summary": "根据边类型把目标 id 写入节点的 linked_* 引用字段。",
+      "tags": [
+        "data-model",
+        "graph",
+        "linking"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/views/WorkspaceView.vue:generate",
+      "type": "function",
+      "name": "generate",
+      "filePath": "src/views/WorkspaceView.vue",
+      "lineRange": [
+        451,
+        477
+      ],
+      "summary": "对选中章节触发预生成正文/大纲。",
+      "tags": [
+        "generation",
+        "api-handler",
+        "chapter"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/views/WorkspaceView.vue:refine",
+      "type": "function",
+      "name": "refine",
+      "filePath": "src/views/WorkspaceView.vue",
+      "lineRange": [
+        498,
+        524
+      ],
+      "summary": "对选中章节执行精修（记忆模式或全文模式）。",
+      "tags": [
+        "generation",
+        "api-handler",
+        "chapter"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/views/WorkspaceView.vue:onChatKeydown",
+      "type": "function",
+      "name": "onChatKeydown",
+      "filePath": "src/views/WorkspaceView.vue",
+      "lineRange": [
+        1342,
+        1367
+      ],
+      "summary": "处理聊天输入键盘事件（Enter 发送等）。",
+      "tags": [
+        "event-handler",
+        "chat",
+        "ui"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/views/WorkspaceView.vue:unlinkEdgeRefs",
+      "type": "function",
+      "name": "unlinkEdgeRefs",
+      "filePath": "src/views/WorkspaceView.vue",
+      "lineRange": [
+        280,
+        301
+      ],
+      "summary": "断开边时清理节点上的 linked_* 引用。",
+      "tags": [
+        "data-model",
+        "graph",
+        "linking"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/views/WorkspaceView.vue:onConnect",
+      "type": "function",
+      "name": "onConnect",
+      "filePath": "src/views/WorkspaceView.vue",
+      "lineRange": [
+        383,
+        404
+      ],
+      "summary": "处理 Vue Flow 连线：校验、落盘边并更新 linked 引用。",
+      "tags": [
+        "vue-flow",
+        "event-handler",
+        "graph"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/views/WorkspaceView.vue:planNext",
+      "type": "function",
+      "name": "planNext",
+      "filePath": "src/views/WorkspaceView.vue",
+      "lineRange": [
+        526,
+        547
+      ],
+      "summary": "规划后续若干章大纲并写入故事树。",
+      "tags": [
+        "generation",
+        "planning",
+        "api-handler"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:src/views/WorkspaceView.vue:copyChapterBody",
+      "type": "function",
+      "name": "copyChapterBody",
+      "filePath": "src/views/WorkspaceView.vue",
+      "lineRange": [
+        609,
+        629
+      ],
+      "summary": "复制当前章节正文到剪贴板并提示结果。",
+      "tags": [
+        "clipboard",
+        "chapter",
+        "ui"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/views/WorkspaceView.vue:startResize",
+      "type": "function",
+      "name": "startResize",
+      "filePath": "src/views/WorkspaceView.vue",
+      "lineRange": [
+        1382,
+        1402
+      ],
+      "summary": "开始拖拽调整侧栏/面板宽度。",
+      "tags": [
+        "ui",
+        "event-handler",
+        "layout"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/views/WorkspaceView.vue:persistNovelPlan",
+      "type": "function",
+      "name": "persistNovelPlan",
+      "filePath": "src/views/WorkspaceView.vue",
+      "lineRange": [
+        1155,
+        1173
+      ],
+      "summary": "将小说级规划字段写回后端。",
+      "tags": [
+        "persistence",
+        "api-handler",
+        "novel"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/views/WorkspaceView.vue:onCanvasKeydown",
+      "type": "function",
+      "name": "onCanvasKeydown",
+      "filePath": "src/views/WorkspaceView.vue",
+      "lineRange": [
+        1069,
+        1086
+      ],
+      "summary": "画布键盘删除等快捷键，统一走后端删除路径。",
+      "tags": [
+        "event-handler",
+        "vue-flow",
+        "destructive"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/views/WorkspaceView.vue:onEdgeUpdate",
+      "type": "function",
+      "name": "onEdgeUpdate",
+      "filePath": "src/views/WorkspaceView.vue",
+      "lineRange": [
+        406,
+        422
+      ],
+      "summary": "边端点拖拽更新后持久化并同步引用。",
+      "tags": [
+        "vue-flow",
+        "event-handler",
+        "graph"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/views/WorkspaceView.vue:runExtractKnowledge",
+      "type": "function",
+      "name": "runExtractKnowledge",
+      "filePath": "src/views/WorkspaceView.vue",
+      "lineRange": [
+        1175,
+        1191
+      ],
+      "summary": "从章节或上下文提取知识卡并挂到树上。",
+      "tags": [
+        "knowledge-base",
+        "api-handler",
+        "async"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/views/WorkspaceView.vue:cloneTreeNodeData",
+      "type": "function",
+      "name": "cloneTreeNodeData",
+      "filePath": "src/views/WorkspaceView.vue",
+      "lineRange": [
+        107,
+        122
+      ],
+      "summary": "深拷贝 TreeNode 数据（含 character/knowledge/linked ids）。",
+      "tags": [
+        "utility",
+        "data-model",
+        "clone"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/views/WorkspaceView.vue:persistSelectedCardText",
+      "type": "function",
+      "name": "persistSelectedCardText",
+      "filePath": "src/views/WorkspaceView.vue",
+      "lineRange": [
+        1138,
+        1153
+      ],
+      "summary": "持久化当前选中卡片的文本字段。",
+      "tags": [
+        "persistence",
+        "api-handler",
+        "editor"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/views/WorkspaceView.vue:kindFromNodes",
+      "type": "function",
+      "name": "kindFromNodes",
+      "filePath": "src/views/WorkspaceView.vue",
+      "lineRange": [
+        224,
+        238
+      ],
+      "summary": "根据两端节点类型推断边 kind。",
+      "tags": [
+        "graph",
+        "validation",
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/views/WorkspaceView.vue:selectNode",
+      "type": "function",
+      "name": "selectNode",
+      "filePath": "src/views/WorkspaceView.vue",
+      "lineRange": [
+        260,
+        273
+      ],
+      "summary": "选中树节点并加载对应章节/卡片侧栏状态。",
+      "tags": [
+        "ui",
+        "selection",
+        "state"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/views/WorkspaceView.vue:openChapterMemory",
+      "type": "function",
+      "name": "openChapterMemory",
+      "filePath": "src/views/WorkspaceView.vue",
+      "lineRange": [
+        479,
+        492
+      ],
+      "summary": "打开章节记忆面板并加载 memory items。",
+      "tags": [
+        "memory",
+        "api-handler",
+        "ui"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/views/WorkspaceView.vue:autoLayout",
+      "type": "function",
+      "name": "autoLayout",
+      "filePath": "src/views/WorkspaceView.vue",
+      "lineRange": [
+        748,
+        761
+      ],
+      "summary": "对故事树应用自动布局并同步到画布。",
+      "tags": [
+        "layout",
+        "vue-flow",
+        "tree"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/views/WorkspaceView.vue:pickAndSetCover",
+      "type": "function",
+      "name": "pickAndSetCover",
+      "filePath": "src/views/WorkspaceView.vue",
+      "lineRange": [
+        967,
+        980
+      ],
+      "summary": "选择图片文件并设为小说封面。",
+      "tags": [
+        "media",
+        "api-handler",
+        "novel"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/views/WorkspaceView.vue:persistSelectedKnowledge",
+      "type": "function",
+      "name": "persistSelectedKnowledge",
+      "filePath": "src/views/WorkspaceView.vue",
+      "lineRange": [
+        1124,
+        1136
+      ],
+      "summary": "持久化选中知识卡的字段变更。",
+      "tags": [
+        "persistence",
+        "knowledge-base",
+        "api-handler"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/views/WorkspaceView.vue:linkedNotice",
+      "type": "function",
+      "name": "linkedNotice",
+      "filePath": "src/views/WorkspaceView.vue",
+      "lineRange": [
+        333,
+        344
+      ],
+      "summary": "根据连线结果生成用户可读的关联提示文案。",
+      "tags": [
+        "ui",
+        "i18n",
+        "feedback"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/views/WorkspaceView.vue:saveRelation",
+      "type": "function",
+      "name": "saveRelation",
+      "filePath": "src/views/WorkspaceView.vue",
+      "lineRange": [
+        370,
+        381
+      ],
+      "summary": "保存角色-角色边的关系标签。",
+      "tags": [
+        "persistence",
+        "graph",
+        "character"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/views/WorkspaceView.vue:stopChapter",
+      "type": "function",
+      "name": "stopChapter",
+      "filePath": "src/views/WorkspaceView.vue",
+      "lineRange": [
+        549,
+        560
+      ],
+      "summary": "中止进行中的章节生成/精修任务。",
+      "tags": [
+        "cancellation",
+        "api-handler",
+        "async"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/views/WorkspaceView.vue:loadAll",
+      "type": "function",
+      "name": "loadAll",
+      "filePath": "src/views/WorkspaceView.vue",
+      "lineRange": [
+        240,
+        250
+      ],
+      "summary": "加载小说项目、故事树与知识书列表。",
+      "tags": [
+        "api-handler",
+        "bootstrap",
+        "state"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/views/WorkspaceView.vue:onEdgeDoubleClick",
+      "type": "function",
+      "name": "onEdgeDoubleClick",
+      "filePath": "src/views/WorkspaceView.vue",
+      "lineRange": [
+        431,
+        441
+      ],
+      "summary": "双击边时编辑或删除关系。",
+      "tags": [
+        "event-handler",
+        "vue-flow",
+        "ui"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/views/WorkspaceView.vue:deleteSelectedCard",
+      "type": "function",
+      "name": "deleteSelectedCard",
+      "filePath": "src/views/WorkspaceView.vue",
+      "lineRange": [
+        1011,
+        1021
+      ],
+      "summary": "发起选中卡片删除的二次确认流程。",
+      "tags": [
+        "destructive",
+        "modal",
+        "ui"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:src/views/WorkspaceView.vue:toggleKnowledgeBook",
+      "type": "function",
+      "name": "toggleKnowledgeBook",
+      "filePath": "src/views/WorkspaceView.vue",
+      "lineRange": [
+        1113,
+        1122
+      ],
+      "summary": "切换知识书在当前知识卡上的勾选关联。",
+      "tags": [
+        "knowledge-base",
+        "ui",
+        "state"
+      ],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:src/App.vue",
+      "target": "function:src/App.vue:refreshKey",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/LibraryView.vue",
+      "target": "function:src/views/LibraryView.vue:doImport",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/LibraryView.vue",
+      "target": "function:src/views/LibraryView.vue:saveEdit",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/LibraryView.vue",
+      "target": "function:src/views/LibraryView.vue:reextract",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/LibraryView.vue",
+      "target": "function:src/views/LibraryView.vue:confirmDelete",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/LibraryView.vue",
+      "target": "function:src/views/LibraryView.vue:openChunks",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/LibraryView.vue",
+      "target": "function:src/views/LibraryView.vue:archive",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/NovelsView.vue",
+      "target": "function:src/views/NovelsView.vue:send",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/NovelsView.vue",
+      "target": "function:src/views/NovelsView.vue:confirmDelete",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/SettingsView.vue",
+      "target": "function:src/views/SettingsView.vue:save",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/SettingsView.vue",
+      "target": "function:src/views/SettingsView.vue:load",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/SettingsView.vue",
+      "target": "function:src/views/SettingsView.vue:refreshCatalog",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/StatsView.vue",
+      "target": "function:src/views/StatsView.vue:buildMonthOptions",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/StatsView.vue",
+      "target": "function:src/views/StatsView.vue:load",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/StatsView.vue",
+      "target": "function:src/views/StatsView.vue:onSegEnter",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/StatsView.vue",
+      "target": "function:src/views/StatsView.vue:loadMonth",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/WorkspaceView.vue",
+      "target": "function:src/views/WorkspaceView.vue:addCard",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/WorkspaceView.vue",
+      "target": "function:src/views/WorkspaceView.vue:sendCardChat",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/WorkspaceView.vue",
+      "target": "function:src/views/WorkspaceView.vue:sendChat",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/WorkspaceView.vue",
+      "target": "function:src/views/WorkspaceView.vue:syncFlowFromTree",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/WorkspaceView.vue",
+      "target": "function:src/views/WorkspaceView.vue:runAutoAll",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/WorkspaceView.vue",
+      "target": "function:src/views/WorkspaceView.vue:confirmPendingCardDelete",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/WorkspaceView.vue",
+      "target": "function:src/views/WorkspaceView.vue:linkEdgeRefs",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/WorkspaceView.vue",
+      "target": "function:src/views/WorkspaceView.vue:generate",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/WorkspaceView.vue",
+      "target": "function:src/views/WorkspaceView.vue:refine",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/WorkspaceView.vue",
+      "target": "function:src/views/WorkspaceView.vue:onChatKeydown",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/WorkspaceView.vue",
+      "target": "function:src/views/WorkspaceView.vue:unlinkEdgeRefs",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/WorkspaceView.vue",
+      "target": "function:src/views/WorkspaceView.vue:onConnect",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/WorkspaceView.vue",
+      "target": "function:src/views/WorkspaceView.vue:planNext",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/WorkspaceView.vue",
+      "target": "function:src/views/WorkspaceView.vue:copyChapterBody",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/WorkspaceView.vue",
+      "target": "function:src/views/WorkspaceView.vue:startResize",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/WorkspaceView.vue",
+      "target": "function:src/views/WorkspaceView.vue:persistNovelPlan",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/WorkspaceView.vue",
+      "target": "function:src/views/WorkspaceView.vue:onCanvasKeydown",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/WorkspaceView.vue",
+      "target": "function:src/views/WorkspaceView.vue:onEdgeUpdate",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/WorkspaceView.vue",
+      "target": "function:src/views/WorkspaceView.vue:runExtractKnowledge",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/WorkspaceView.vue",
+      "target": "function:src/views/WorkspaceView.vue:cloneTreeNodeData",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/WorkspaceView.vue",
+      "target": "function:src/views/WorkspaceView.vue:persistSelectedCardText",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/WorkspaceView.vue",
+      "target": "function:src/views/WorkspaceView.vue:kindFromNodes",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/WorkspaceView.vue",
+      "target": "function:src/views/WorkspaceView.vue:selectNode",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/WorkspaceView.vue",
+      "target": "function:src/views/WorkspaceView.vue:openChapterMemory",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/WorkspaceView.vue",
+      "target": "function:src/views/WorkspaceView.vue:autoLayout",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/WorkspaceView.vue",
+      "target": "function:src/views/WorkspaceView.vue:pickAndSetCover",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/WorkspaceView.vue",
+      "target": "function:src/views/WorkspaceView.vue:persistSelectedKnowledge",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/WorkspaceView.vue",
+      "target": "function:src/views/WorkspaceView.vue:linkedNotice",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/WorkspaceView.vue",
+      "target": "function:src/views/WorkspaceView.vue:saveRelation",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/WorkspaceView.vue",
+      "target": "function:src/views/WorkspaceView.vue:stopChapter",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/WorkspaceView.vue",
+      "target": "function:src/views/WorkspaceView.vue:loadAll",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/WorkspaceView.vue",
+      "target": "function:src/views/WorkspaceView.vue:onEdgeDoubleClick",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/WorkspaceView.vue",
+      "target": "function:src/views/WorkspaceView.vue:deleteSelectedCard",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/views/WorkspaceView.vue",
+      "target": "function:src/views/WorkspaceView.vue:toggleKnowledgeBook",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:src/main.ts",
+      "target": "file:src/App.vue",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/main.ts",
+      "target": "file:src/router/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/main.ts",
+      "target": "file:src/style.css",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/router/index.ts",
+      "target": "file:src/views/LibraryView.vue",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/router/index.ts",
+      "target": "file:src/views/NovelsView.vue",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/router/index.ts",
+      "target": "file:src/views/SettingsView.vue",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/router/index.ts",
+      "target": "file:src/views/StatsView.vue",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:src/router/index.ts",
+      "target": "file:src/views/WorkspaceView.vue",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    }
+  ]
+}

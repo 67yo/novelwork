@@ -3,21 +3,23 @@ description: Keep Project.md in sync when chapter AI flows change
 alwaysApply: true
 ---
 
-# Project.md sync (Nove Work)
+# Project.md sync (Novel Work)
 
 `Project.md` is the source of truth for chapter AI strategy: chapter-card outlines, pre-generate, refine, word-count rules, and chapter memory.
 
 When you change any of the following, **update `Project.md` in the same change**:
 
-- `generate_chapter` / `preview_generate_chapter` / `refine_chapter` / `save_chapter` / `preview_chapter_outline_brief` / `generate_chapter_cards` / `plan_next_chapters` / `generate_chapter_plots` / `regenerate_chapter_memory` / `set_chapter_memory`
-- Related prompts in `src-tauri/src/prompts.rs` (`generate_chapter_*`, `refine_chapter_*`, `repair_*`, `outline_gen_brief`, `gen_chapter_cards_*`, `plan_next_chapters_*`, `gen_chapter_plots_*`, `extract_chapter_memory_*`)
+- `generate_chapter` / `preview_generate_chapter` / `refine_chapter` / `rewrite_chapter_paragraph` / `save_chapter` / `preview_chapter_outline_brief` / `generate_chapter_cards` / `plan_next_chapters` / `regenerate_chapter_outline` / `generate_chapter_plots` / `consolidate_plot_cards` / `regenerate_chapter_memory` / `set_chapter_memory`
+- Related helpers: `assemble_outline_gen_brief` / `root_linked_plots_and_knowledge` / `root_generate_reference` / `chapter_context` / `plot_is_injectable`
+- Related prompts in `src-tauri/src/prompts.rs` (`generate_chapter_*`, `refine_chapter_*`, `rewrite_paragraph_*`, `repair_*`, `outline_gen_brief`, `gen_chapter_cards_*`, `plan_next_chapters_*`, `gen_chapter_plots_*`, `consolidate_plots_*`, `extract_chapter_memory_*`)
 - `chapter_constraints.rs`, chapter memory extract/store timing, or `WORD_COUNT_TOLERANCE`
-- Workspace UI behavior for those flows (root generate cards, refine modes, memory panels)
+- Workspace UI behavior for those flows (root generate cards, **整理剧情**, refine modes, memory panels, paragraph rewrite gutter)
 
 ## How to update
 
-1. Edit the matching section (§0 concepts, §1 outlines, §2 generate, §3 refine, §4 length, §5 memory, §6 UI).
+1. Edit the matching section (§0 concepts, §1 outlines especially **§1.0 / §1.0.1**, §2 generate, §3 refine / **§3.3a** paragraph rewrite, §4 length, §5 memory, §6 UI).
 2. Adjust the checklists if steps or entry points change.
-3. Do not leave `Project.md` describing removed passes (e.g. length-repair LLM, memory-on-generate).
+3. Do not leave `Project.md` describing removed passes (e.g. length-repair LLM, memory-on-generate, novel-bound public libraries as 设定源).
+4. If outline materials change (root plot/knowledge cards), update §1.0.1 in the same PR — do not leave the table claiming “人物 only”.
 
 UI copy still follows `i18n-sync.mdc`; this rule is for strategy/docs only.

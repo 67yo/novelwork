@@ -84,6 +84,13 @@ pub fn format_contract(zh: bool, beats: &[LandBeat]) -> String {
                     "cast"
                 }
             }
+            "canon" => {
+                if zh {
+                    "设定"
+                } else {
+                    "canon"
+                }
+            }
             _ => {
                 if zh {
                     "大纲"

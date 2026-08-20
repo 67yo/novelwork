@@ -54,48 +54,9 @@ impl ParsedSource {
             .collect::<Vec<_>>()
             .join("\n")
     }
-
-    /// Samples for LLM: opening of first/middle/last chapters (cap total chars).
-    pub fn style_samples(&self, per_chapter: usize, max_total: usize) -> String {
-        if self.chapters.is_empty() {
-            return String::new();
-        }
-        let n = self.chapters.len();
-        let mut idxs = vec![0usize];
-        if n > 2 {
-            idxs.push(n / 2);
-        }
-        if n > 1 {
-            idxs.push(n - 1);
-        }
-        idxs.sort();
-        idxs.dedup();
-        // also include 2nd chapter when available
-        if n > 3 {
-            idxs.insert(1, 1);
-            idxs.sort();
-            idxs.dedup();
-        }
-        let mut out = String::new();
-        for i in idxs {
-            let ch = &self.chapters[i];
-            let title = if ch.title.is_empty() {
-                format!("第{}章", i + 1)
-            } else {
-                ch.title.clone()
-            };
-            let sample: String = ch.text.chars().take(per_chapter).collect();
-            let block = format!("—— {title} ——\n{sample}\n\n");
-            if out.chars().count() + block.chars().count() > max_total {
-                break;
-            }
-            out.push_str(&block);
-        }
-        out
-    }
 }
 
-/// Persist chunks into LanceDB (text columns). Demo skips real embeddings.
+/// Persist chunks into LanceDB (text columns).
 pub async fn upsert_chunks(book_id: &str, chunks: &[String]) -> Result<()> {
     let db = lancedb::connect(lancedb_dir().to_str().unwrap_or("./lancedb"))
         .execute()
@@ -152,21 +113,27 @@ pub fn split_book(text: &str) -> Vec<String> {
     chunk_text(text, 1000, 20)
 }
 
-/// Build storage chunks: analysis → TOC → per-chapter body.
-pub fn build_knowledge_chunks(src: &ParsedSource, analysis: Option<&str>) -> Vec<String> {
+/// Build storage chunks (no AI analysis).
+/// - TXT / 单章：全文按 1000 字切段、段间重叠 20 字
+/// - EPUB 多章：目录块 + 每章正文按 1000/20 切段
+pub fn build_knowledge_chunks(src: &ParsedSource) -> Vec<String> {
     let mut chunks = Vec::new();
-    if let Some(a) = analysis.map(str::trim).filter(|s| !s.is_empty()) {
-        chunks.extend(split_book(&format!("【知识库分析】\n{a}")));
+    if src.chapters.len() <= 1 {
+        chunks.extend(split_book(&src.full_text()));
+        return chunks;
     }
-    if src.chapters.len() > 1 {
-        chunks.push(format!(
-            "【目录】\n书名：{}\n作者：{}\n共 {} 章\n\n{}",
-            src.title,
-            src.author,
-            src.chapters.len(),
-            src.toc_lines()
-        ));
-    }
+    chunks.push(format!(
+        "【目录】\n书名：{}\n作者：{}\n分类：{}\n共 {} 章\n\n{}",
+        src.title,
+        src.author,
+        if src.subjects.is_empty() {
+            "—".into()
+        } else {
+            src.subjects.join("、")
+        },
+        src.chapters.len(),
+        src.toc_lines()
+    ));
     for (i, ch) in src.chapters.iter().enumerate() {
         let head = if ch.title.trim().is_empty() {
             format!("【第{}章】", i + 1)
@@ -246,7 +213,7 @@ pub async fn fetch_url_main(url: &str) -> Result<(String, String, String)> {
         return Err(anyhow!("请填写以 http:// 或 https:// 开头的网址"));
     }
     let client = reqwest::Client::builder()
-        .user_agent("Mozilla/5.0 (compatible; NoveWork/0.1; knowledge-import)")
+        .user_agent("Mozilla/5.0 (compatible; NovelWork/0.1; knowledge-import)")
         .timeout(std::time::Duration::from_secs(60))
         .redirect(reqwest::redirect::Policy::limited(10))
         .build()?;
@@ -903,11 +870,11 @@ mod tests {
     }
 
     #[test]
-    fn build_chunks_puts_analysis_first() {
+    fn build_chunks_epub_has_toc() {
         let src = ParsedSource {
             title: "测".into(),
             author: "甲".into(),
-            subjects: Vec::new(),
+            subjects: vec!["玄幻".into()],
             chapters: vec![
                 SourceChapter {
                     title: "一".into(),
@@ -919,9 +886,28 @@ mod tests {
                 },
             ],
         };
-        let chunks = build_knowledge_chunks(&src, Some("## 写作手法\n短句"));
-        assert!(chunks[0].contains("知识库分析"));
-        assert!(chunks.iter().any(|c| c.contains("【目录】")));
+        let chunks = build_knowledge_chunks(&src);
+        assert!(chunks[0].contains("【目录】"));
+        assert!(chunks[0].contains("玄幻"));
+        assert!(chunks.iter().any(|c| c.contains("【第1章 一】")));
+    }
+
+    #[test]
+    fn build_chunks_txt_plain_split() {
+        let text: String = (0..1200).map(|_| '字').collect();
+        let src = ParsedSource {
+            title: "测".into(),
+            author: "甲".into(),
+            subjects: Vec::new(),
+            chapters: vec![SourceChapter {
+                title: "全文".into(),
+                text: text.clone(),
+            }],
+        };
+        let chunks = build_knowledge_chunks(&src);
+        assert_eq!(chunks.len(), 2);
+        assert!(!chunks[0].contains("【第"));
+        assert_eq!(chunks[0].chars().count(), 1000);
     }
 
     #[test]

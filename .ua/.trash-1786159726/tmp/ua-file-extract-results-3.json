@@ -1,0 +1,4075 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 5,
+  "filesSkipped": [],
+  "analysisOutcomes": {
+    "structure": {
+      "succeeded": 5,
+      "failed": 0
+    },
+    "callGraph": {
+      "succeeded": 5,
+      "failed": 0,
+      "skipped": 0
+    }
+  },
+  "results": [
+    {
+      "path": "src-tauri/src/catalog.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 153,
+      "nonEmptyLines": 144,
+      "functions": [
+        {
+          "name": "refresh",
+          "startLine": 8,
+          "endLine": 60,
+          "params": [
+            "db"
+          ]
+        },
+        {
+          "name": "fetch_openai_compat",
+          "startLine": 62,
+          "endLine": 83,
+          "params": [
+            "url",
+            "api_key"
+          ]
+        },
+        {
+          "name": "fetch_gemini",
+          "startLine": 85,
+          "endLine": 125,
+          "params": [
+            "api_key"
+          ]
+        },
+        {
+          "name": "fetch_claude",
+          "startLine": 127,
+          "endLine": 153,
+          "params": [
+            "api_key"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "refresh",
+          "line": 8,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "refresh",
+          "callee": "db.get_settings",
+          "lineNumber": 9
+        },
+        {
+          "caller": "refresh",
+          "callee": "db.get_model_catalog().unwrap_or_default",
+          "lineNumber": 10
+        },
+        {
+          "caller": "refresh",
+          "callee": "db.get_model_catalog",
+          "lineNumber": 10
+        },
+        {
+          "caller": "refresh",
+          "callee": "catalog.errors.clear",
+          "lineNumber": 11
+        },
+        {
+          "caller": "refresh",
+          "callee": "settings.deepseek_api_key.trim().is_empty",
+          "lineNumber": 13
+        },
+        {
+          "caller": "refresh",
+          "callee": "settings.deepseek_api_key.trim",
+          "lineNumber": 13
+        },
+        {
+          "caller": "refresh",
+          "callee": "fetch_openai_compat",
+          "lineNumber": 14
+        },
+        {
+          "caller": "refresh",
+          "callee": "catalog.errors.insert",
+          "lineNumber": 25
+        },
+        {
+          "caller": "refresh",
+          "callee": "\"deepseek\".into",
+          "lineNumber": 25
+        },
+        {
+          "caller": "refresh",
+          "callee": "e.to_string",
+          "lineNumber": 25
+        },
+        {
+          "caller": "refresh",
+          "callee": "settings.gemini_api_key.trim().is_empty",
+          "lineNumber": 30
+        },
+        {
+          "caller": "refresh",
+          "callee": "settings.gemini_api_key.trim",
+          "lineNumber": 30
+        },
+        {
+          "caller": "refresh",
+          "callee": "fetch_gemini",
+          "lineNumber": 31
+        },
+        {
+          "caller": "refresh",
+          "callee": "catalog.errors.insert",
+          "lineNumber": 34
+        },
+        {
+          "caller": "refresh",
+          "callee": "\"gemini\".into",
+          "lineNumber": 34
+        },
+        {
+          "caller": "refresh",
+          "callee": "e.to_string",
+          "lineNumber": 34
+        },
+        {
+          "caller": "refresh",
+          "callee": "settings.claude_api_key.trim().is_empty",
+          "lineNumber": 39
+        },
+        {
+          "caller": "refresh",
+          "callee": "settings.claude_api_key.trim",
+          "lineNumber": 39
+        },
+        {
+          "caller": "refresh",
+          "callee": "fetch_claude",
+          "lineNumber": 40
+        },
+        {
+          "caller": "refresh",
+          "callee": "catalog.errors.insert",
+          "lineNumber": 43
+        },
+        {
+          "caller": "refresh",
+          "callee": "\"claude\".into",
+          "lineNumber": 43
+        },
+        {
+          "caller": "refresh",
+          "callee": "e.to_string",
+          "lineNumber": 43
+        },
+        {
+          "caller": "refresh",
+          "callee": "settings.grok_api_key.trim().is_empty",
+          "lineNumber": 48
+        },
+        {
+          "caller": "refresh",
+          "callee": "settings.grok_api_key.trim",
+          "lineNumber": 48
+        },
+        {
+          "caller": "refresh",
+          "callee": "fetch_openai_compat",
+          "lineNumber": 49
+        },
+        {
+          "caller": "refresh",
+          "callee": "catalog.errors.insert",
+          "lineNumber": 52
+        },
+        {
+          "caller": "refresh",
+          "callee": "\"grok\".into",
+          "lineNumber": 52
+        },
+        {
+          "caller": "refresh",
+          "callee": "e.to_string",
+          "lineNumber": 52
+        },
+        {
+          "caller": "refresh",
+          "callee": "Utc::now().to_rfc3339",
+          "lineNumber": 57
+        },
+        {
+          "caller": "refresh",
+          "callee": "Utc::now",
+          "lineNumber": 57
+        },
+        {
+          "caller": "refresh",
+          "callee": "db.save_model_catalog",
+          "lineNumber": 58
+        },
+        {
+          "caller": "refresh",
+          "callee": "Ok",
+          "lineNumber": 59
+        },
+        {
+          "caller": "fetch_openai_compat",
+          "callee": "reqwest::Client::new",
+          "lineNumber": 71
+        },
+        {
+          "caller": "fetch_openai_compat",
+          "callee": "client.get(url).bearer_auth(api_key).send",
+          "lineNumber": 72
+        },
+        {
+          "caller": "fetch_openai_compat",
+          "callee": "client.get(url).bearer_auth",
+          "lineNumber": 72
+        },
+        {
+          "caller": "fetch_openai_compat",
+          "callee": "client.get",
+          "lineNumber": 72
+        },
+        {
+          "caller": "fetch_openai_compat",
+          "callee": "resp.status().is_success",
+          "lineNumber": 73
+        },
+        {
+          "caller": "fetch_openai_compat",
+          "callee": "resp.status",
+          "lineNumber": 73
+        },
+        {
+          "caller": "fetch_openai_compat",
+          "callee": "resp.status",
+          "lineNumber": 74
+        },
+        {
+          "caller": "fetch_openai_compat",
+          "callee": "resp.text().await.unwrap_or_default",
+          "lineNumber": 75
+        },
+        {
+          "caller": "fetch_openai_compat",
+          "callee": "resp.text",
+          "lineNumber": 75
+        },
+        {
+          "caller": "fetch_openai_compat",
+          "callee": "Err",
+          "lineNumber": 76
+        },
+        {
+          "caller": "fetch_openai_compat",
+          "callee": "resp.json",
+          "lineNumber": 78
+        },
+        {
+          "caller": "fetch_openai_compat",
+          "callee": "parsed.data.into_iter().map(|i| i.id).collect",
+          "lineNumber": 79
+        },
+        {
+          "caller": "fetch_openai_compat",
+          "callee": "parsed.data.into_iter().map",
+          "lineNumber": 79
+        },
+        {
+          "caller": "fetch_openai_compat",
+          "callee": "parsed.data.into_iter",
+          "lineNumber": 79
+        },
+        {
+          "caller": "fetch_openai_compat",
+          "callee": "ids.sort",
+          "lineNumber": 80
+        },
+        {
+          "caller": "fetch_openai_compat",
+          "callee": "ids.dedup",
+          "lineNumber": 81
+        },
+        {
+          "caller": "fetch_openai_compat",
+          "callee": "Ok",
+          "lineNumber": 82
+        },
+        {
+          "caller": "fetch_gemini",
+          "callee": "reqwest::Client::new",
+          "lineNumber": 100
+        },
+        {
+          "caller": "fetch_gemini",
+          "callee": "client.get(&url).send",
+          "lineNumber": 101
+        },
+        {
+          "caller": "fetch_gemini",
+          "callee": "client.get",
+          "lineNumber": 101
+        },
+        {
+          "caller": "fetch_gemini",
+          "callee": "resp.status().is_success",
+          "lineNumber": 102
+        },
+        {
+          "caller": "fetch_gemini",
+          "callee": "resp.status",
+          "lineNumber": 102
+        },
+        {
+          "caller": "fetch_gemini",
+          "callee": "resp.status",
+          "lineNumber": 103
+        },
+        {
+          "caller": "fetch_gemini",
+          "callee": "resp.text().await.unwrap_or_default",
+          "lineNumber": 104
+        },
+        {
+          "caller": "fetch_gemini",
+          "callee": "resp.text",
+          "lineNumber": 104
+        },
+        {
+          "caller": "fetch_gemini",
+          "callee": "Err",
+          "lineNumber": 105
+        },
+        {
+          "caller": "fetch_gemini",
+          "callee": "resp.json",
+          "lineNumber": 107
+        },
+        {
+          "caller": "fetch_gemini",
+          "callee": "Vec::new",
+          "lineNumber": 108
+        },
+        {
+          "caller": "fetch_gemini",
+          "callee": "parsed.models.unwrap_or_default",
+          "lineNumber": 109
+        },
+        {
+          "caller": "fetch_gemini",
+          "callee": "m.supported.is_empty",
+          "lineNumber": 110
+        },
+        {
+          "caller": "fetch_gemini",
+          "callee": "m.supported.iter().any",
+          "lineNumber": 110
+        },
+        {
+          "caller": "fetch_gemini",
+          "callee": "m.supported.iter",
+          "lineNumber": 110
+        },
+        {
+          "caller": "fetch_gemini",
+          "callee": "m\n            .name\n            .strip_prefix(\"models/\")\n            .unwrap_or(&m.name).to_string",
+          "lineNumber": 113
+        },
+        {
+          "caller": "fetch_gemini",
+          "callee": "m\n            .name\n            .strip_prefix(\"models/\").unwrap_or",
+          "lineNumber": 113
+        },
+        {
+          "caller": "fetch_gemini",
+          "callee": "m\n            .name.strip_prefix",
+          "lineNumber": 113
+        },
+        {
+          "caller": "fetch_gemini",
+          "callee": "id.is_empty",
+          "lineNumber": 118
+        },
+        {
+          "caller": "fetch_gemini",
+          "callee": "ids.push",
+          "lineNumber": 119
+        },
+        {
+          "caller": "fetch_gemini",
+          "callee": "ids.sort",
+          "lineNumber": 122
+        },
+        {
+          "caller": "fetch_gemini",
+          "callee": "ids.dedup",
+          "lineNumber": 123
+        },
+        {
+          "caller": "fetch_gemini",
+          "callee": "Ok",
+          "lineNumber": 124
+        },
+        {
+          "caller": "fetch_claude",
+          "callee": "reqwest::Client::new",
+          "lineNumber": 136
+        },
+        {
+          "caller": "fetch_claude",
+          "callee": "client\n        .get(\"https://api.anthropic.com/v1/models\")\n        .header(\"x-api-key\", api_key)\n        .header(\"anthropic-version\", \"2023-06-01\").send",
+          "lineNumber": 137
+        },
+        {
+          "caller": "fetch_claude",
+          "callee": "client\n        .get(\"https://api.anthropic.com/v1/models\")\n        .header(\"x-api-key\", api_key).header",
+          "lineNumber": 137
+        },
+        {
+          "caller": "fetch_claude",
+          "callee": "client\n        .get(\"https://api.anthropic.com/v1/models\").header",
+          "lineNumber": 137
+        },
+        {
+          "caller": "fetch_claude",
+          "callee": "client.get",
+          "lineNumber": 137
+        },
+        {
+          "caller": "fetch_claude",
+          "callee": "resp.status().is_success",
+          "lineNumber": 143
+        },
+        {
+          "caller": "fetch_claude",
+          "callee": "resp.status",
+          "lineNumber": 143
+        },
+        {
+          "caller": "fetch_claude",
+          "callee": "resp.status",
+          "lineNumber": 144
+        },
+        {
+          "caller": "fetch_claude",
+          "callee": "resp.text().await.unwrap_or_default",
+          "lineNumber": 145
+        },
+        {
+          "caller": "fetch_claude",
+          "callee": "resp.text",
+          "lineNumber": 145
+        },
+        {
+          "caller": "fetch_claude",
+          "callee": "Err",
+          "lineNumber": 146
+        },
+        {
+          "caller": "fetch_claude",
+          "callee": "resp.json",
+          "lineNumber": 148
+        },
+        {
+          "caller": "fetch_claude",
+          "callee": "parsed.data.into_iter().map(|i| i.id).collect",
+          "lineNumber": 149
+        },
+        {
+          "caller": "fetch_claude",
+          "callee": "parsed.data.into_iter().map",
+          "lineNumber": 149
+        },
+        {
+          "caller": "fetch_claude",
+          "callee": "parsed.data.into_iter",
+          "lineNumber": 149
+        },
+        {
+          "caller": "fetch_claude",
+          "callee": "ids.sort",
+          "lineNumber": 150
+        },
+        {
+          "caller": "fetch_claude",
+          "callee": "ids.dedup",
+          "lineNumber": 151
+        },
+        {
+          "caller": "fetch_claude",
+          "callee": "Ok",
+          "lineNumber": 152
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 1,
+        "functionCount": 4,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "src-tauri/src/db.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 808,
+      "nonEmptyLines": 773,
+      "functions": [
+        {
+          "name": "open",
+          "startLine": 12,
+          "endLine": 105,
+          "params": []
+        },
+        {
+          "name": "get_settings",
+          "startLine": 107,
+          "endLine": 166,
+          "params": []
+        },
+        {
+          "name": "save_settings",
+          "startLine": 168,
+          "endLine": 194,
+          "params": [
+            "s"
+          ]
+        },
+        {
+          "name": "get_model_catalog",
+          "startLine": 196,
+          "endLine": 211,
+          "params": []
+        },
+        {
+          "name": "save_model_catalog",
+          "startLine": 213,
+          "endLine": 222,
+          "params": [
+            "c"
+          ]
+        },
+        {
+          "name": "list_knowledge",
+          "startLine": 224,
+          "endLine": 247,
+          "params": []
+        },
+        {
+          "name": "get_knowledge",
+          "startLine": 249,
+          "endLine": 254,
+          "params": [
+            "id"
+          ]
+        },
+        {
+          "name": "set_knowledge_archived",
+          "startLine": 256,
+          "endLine": 266,
+          "params": [
+            "id",
+            "archived"
+          ]
+        },
+        {
+          "name": "delete_knowledge",
+          "startLine": 268,
+          "endLine": 276,
+          "params": [
+            "id"
+          ]
+        },
+        {
+          "name": "unlink_knowledge_from_novels",
+          "startLine": 279,
+          "endLine": 289,
+          "params": [
+            "book_id"
+          ]
+        },
+        {
+          "name": "rename_knowledge",
+          "startLine": 291,
+          "endLine": 305,
+          "params": [
+            "id",
+            "title"
+          ]
+        },
+        {
+          "name": "update_knowledge",
+          "startLine": 307,
+          "endLine": 334,
+          "params": [
+            "id",
+            "title",
+            "author",
+            "extract_prompt",
+            "genres"
+          ]
+        },
+        {
+          "name": "list_knowledge_chunks",
+          "startLine": 336,
+          "endLine": 351,
+          "params": [
+            "book_id"
+          ]
+        },
+        {
+          "name": "insert_knowledge",
+          "startLine": 353,
+          "endLine": 378,
+          "params": [
+            "book",
+            "chunks"
+          ]
+        },
+        {
+          "name": "replace_knowledge_content",
+          "startLine": 381,
+          "endLine": 418,
+          "params": [
+            "id",
+            "title",
+            "author",
+            "genres",
+            "source_path",
+            "extract_prompt",
+            "chunks"
+          ]
+        },
+        {
+          "name": "list_novels",
+          "startLine": 420,
+          "endLine": 430,
+          "params": []
+        },
+        {
+          "name": "get_novel",
+          "startLine": 432,
+          "endLine": 442,
+          "params": [
+            "id"
+          ]
+        },
+        {
+          "name": "upsert_novel",
+          "startLine": 444,
+          "endLine": 476,
+          "params": [
+            "n"
+          ]
+        },
+        {
+          "name": "delete_novel",
+          "startLine": 478,
+          "endLine": 484,
+          "params": [
+            "id"
+          ]
+        },
+        {
+          "name": "replace_chapter_memory",
+          "startLine": 486,
+          "endLine": 512,
+          "params": [
+            "novel_id",
+            "node_id",
+            "chunks"
+          ]
+        },
+        {
+          "name": "delete_chapter_memory",
+          "startLine": 514,
+          "endLine": 521,
+          "params": [
+            "novel_id",
+            "node_id"
+          ]
+        },
+        {
+          "name": "list_chapter_memory_for_nodes",
+          "startLine": 524,
+          "endLine": 546,
+          "params": [
+            "novel_id",
+            "node_ids"
+          ]
+        },
+        {
+          "name": "list_chapter_memory",
+          "startLine": 549,
+          "endLine": 558,
+          "params": [
+            "novel_id"
+          ]
+        },
+        {
+          "name": "list_chat",
+          "startLine": 560,
+          "endLine": 576,
+          "params": [
+            "novel_id"
+          ]
+        },
+        {
+          "name": "insert_chat",
+          "startLine": 578,
+          "endLine": 585,
+          "params": [
+            "m"
+          ]
+        },
+        {
+          "name": "add_token_usage",
+          "startLine": 587,
+          "endLine": 616,
+          "params": [
+            "day",
+            "hour",
+            "model",
+            "novel_id",
+            "prompt_tokens",
+            "completion_tokens",
+            "total_tokens"
+          ]
+        },
+        {
+          "name": "list_token_usage_day",
+          "startLine": 618,
+          "endLine": 637,
+          "params": [
+            "day"
+          ]
+        },
+        {
+          "name": "list_token_usage_by_novel",
+          "startLine": 640,
+          "endLine": 701,
+          "params": [
+            "day"
+          ]
+        },
+        {
+          "name": "list_token_usage_month",
+          "startLine": 704,
+          "endLine": 723,
+          "params": [
+            "month"
+          ]
+        },
+        {
+          "name": "migrate_token_usage_novel_id",
+          "startLine": 727,
+          "endLine": 755,
+          "params": [
+            "conn"
+          ]
+        },
+        {
+          "name": "map_novel",
+          "startLine": 757,
+          "endLine": 774,
+          "params": [
+            "row"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "Db",
+          "startLine": 7,
+          "endLine": 9,
+          "methods": [
+            "open",
+            "get_settings",
+            "save_settings",
+            "get_model_catalog",
+            "save_model_catalog",
+            "list_knowledge",
+            "get_knowledge",
+            "set_knowledge_archived",
+            "delete_knowledge",
+            "unlink_knowledge_from_novels",
+            "rename_knowledge",
+            "update_knowledge",
+            "list_knowledge_chunks",
+            "insert_knowledge",
+            "replace_knowledge_content",
+            "list_novels",
+            "get_novel",
+            "upsert_novel",
+            "delete_novel",
+            "replace_chapter_memory",
+            "delete_chapter_memory",
+            "list_chapter_memory_for_nodes",
+            "list_chapter_memory",
+            "list_chat",
+            "insert_chat",
+            "add_token_usage",
+            "list_token_usage_day",
+            "list_token_usage_by_novel",
+            "list_token_usage_month"
+          ],
+          "properties": [
+            "conn"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "Db",
+          "line": 7,
+          "isDefault": false
+        },
+        {
+          "name": "open",
+          "line": 12,
+          "isDefault": false
+        },
+        {
+          "name": "get_settings",
+          "line": 107,
+          "isDefault": false
+        },
+        {
+          "name": "save_settings",
+          "line": 168,
+          "isDefault": false
+        },
+        {
+          "name": "get_model_catalog",
+          "line": 196,
+          "isDefault": false
+        },
+        {
+          "name": "save_model_catalog",
+          "line": 213,
+          "isDefault": false
+        },
+        {
+          "name": "list_knowledge",
+          "line": 224,
+          "isDefault": false
+        },
+        {
+          "name": "get_knowledge",
+          "line": 249,
+          "isDefault": false
+        },
+        {
+          "name": "set_knowledge_archived",
+          "line": 256,
+          "isDefault": false
+        },
+        {
+          "name": "delete_knowledge",
+          "line": 268,
+          "isDefault": false
+        },
+        {
+          "name": "unlink_knowledge_from_novels",
+          "line": 279,
+          "isDefault": false
+        },
+        {
+          "name": "rename_knowledge",
+          "line": 291,
+          "isDefault": false
+        },
+        {
+          "name": "update_knowledge",
+          "line": 307,
+          "isDefault": false
+        },
+        {
+          "name": "list_knowledge_chunks",
+          "line": 336,
+          "isDefault": false
+        },
+        {
+          "name": "insert_knowledge",
+          "line": 353,
+          "isDefault": false
+        },
+        {
+          "name": "replace_knowledge_content",
+          "line": 381,
+          "isDefault": false
+        },
+        {
+          "name": "list_novels",
+          "line": 420,
+          "isDefault": false
+        },
+        {
+          "name": "get_novel",
+          "line": 432,
+          "isDefault": false
+        },
+        {
+          "name": "upsert_novel",
+          "line": 444,
+          "isDefault": false
+        },
+        {
+          "name": "delete_novel",
+          "line": 478,
+          "isDefault": false
+        },
+        {
+          "name": "replace_chapter_memory",
+          "line": 486,
+          "isDefault": false
+        },
+        {
+          "name": "delete_chapter_memory",
+          "line": 514,
+          "isDefault": false
+        },
+        {
+          "name": "list_chapter_memory_for_nodes",
+          "line": 524,
+          "isDefault": false
+        },
+        {
+          "name": "list_chapter_memory",
+          "line": 549,
+          "isDefault": false
+        },
+        {
+          "name": "list_chat",
+          "line": 560,
+          "isDefault": false
+        },
+        {
+          "name": "insert_chat",
+          "line": 578,
+          "isDefault": false
+        },
+        {
+          "name": "add_token_usage",
+          "line": 587,
+          "isDefault": false
+        },
+        {
+          "name": "list_token_usage_day",
+          "line": 618,
+          "isDefault": false
+        },
+        {
+          "name": "list_token_usage_by_novel",
+          "line": 640,
+          "isDefault": false
+        },
+        {
+          "name": "list_token_usage_month",
+          "line": 704,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "open",
+          "callee": "Connection::open(db_path()).context",
+          "lineNumber": 13
+        },
+        {
+          "caller": "open",
+          "callee": "Connection::open",
+          "lineNumber": 13
+        },
+        {
+          "caller": "open",
+          "callee": "db_path",
+          "lineNumber": 13
+        },
+        {
+          "caller": "open",
+          "callee": "conn.execute_batch",
+          "lineNumber": 14
+        },
+        {
+          "caller": "open",
+          "callee": "conn.execute",
+          "lineNumber": 77
+        },
+        {
+          "caller": "open",
+          "callee": "conn.execute",
+          "lineNumber": 81
+        },
+        {
+          "caller": "open",
+          "callee": "conn.execute",
+          "lineNumber": 85
+        },
+        {
+          "caller": "open",
+          "callee": "conn.execute",
+          "lineNumber": 89
+        },
+        {
+          "caller": "open",
+          "callee": "conn.execute",
+          "lineNumber": 93
+        },
+        {
+          "caller": "open",
+          "callee": "conn.execute",
+          "lineNumber": 97
+        },
+        {
+          "caller": "open",
+          "callee": "migrate_token_usage_novel_id",
+          "lineNumber": 101
+        },
+        {
+          "caller": "open",
+          "callee": "Ok",
+          "lineNumber": 102
+        },
+        {
+          "caller": "open",
+          "callee": "Mutex::new",
+          "lineNumber": 103
+        },
+        {
+          "caller": "get_settings",
+          "callee": "self.conn.lock().unwrap",
+          "lineNumber": 109
+        },
+        {
+          "caller": "get_settings",
+          "callee": "self.conn.lock",
+          "lineNumber": 109
+        },
+        {
+          "caller": "get_settings",
+          "callee": "std::collections::HashMap::<String, String>::new",
+          "lineNumber": 110
+        },
+        {
+          "caller": "get_settings",
+          "callee": "std::collections::HashMap::<String, String>::new",
+          "lineNumber": 111
+        },
+        {
+          "caller": "get_settings",
+          "callee": "conn.prepare",
+          "lineNumber": 112
+        },
+        {
+          "caller": "get_settings",
+          "callee": "stmt.query_map",
+          "lineNumber": 113
+        },
+        {
+          "caller": "get_settings",
+          "callee": "Ok",
+          "lineNumber": 114
+        },
+        {
+          "caller": "get_settings",
+          "callee": "row.get::<_, String>",
+          "lineNumber": 114
+        },
+        {
+          "caller": "get_settings",
+          "callee": "row.get::<_, String>",
+          "lineNumber": 114
+        },
+        {
+          "caller": "get_settings",
+          "callee": "k.as_str",
+          "lineNumber": 118
+        },
+        {
+          "caller": "get_settings",
+          "callee": "raws.insert",
+          "lineNumber": 121
+        },
+        {
+          "caller": "get_settings",
+          "callee": "plain.insert",
+          "lineNumber": 124
+        },
+        {
+          "caller": "get_settings",
+          "callee": "crate::secret::decrypt_secret",
+          "lineNumber": 132
+        },
+        {
+          "caller": "get_settings",
+          "callee": "raws.get(k).map(|s| s.as_str()).unwrap_or",
+          "lineNumber": 132
+        },
+        {
+          "caller": "get_settings",
+          "callee": "raws.get(k).map",
+          "lineNumber": 132
+        },
+        {
+          "caller": "get_settings",
+          "callee": "raws.get",
+          "lineNumber": 132
+        },
+        {
+          "caller": "get_settings",
+          "callee": "s.as_str",
+          "lineNumber": 132
+        },
+        {
+          "caller": "get_settings",
+          "callee": "AppSettings::default",
+          "lineNumber": 134
+        },
+        {
+          "caller": "get_settings",
+          "callee": "plain\n                .get(k)\n                .map(|s| s.as_str())\n                .filter(|s| !s.is_empty())\n                .unwrap_or(fallback).to_string",
+          "lineNumber": 136
+        },
+        {
+          "caller": "get_settings",
+          "callee": "plain\n                .get(k)\n                .map(|s| s.as_str())\n                .filter(|s| !s.is_empty()).unwrap_or",
+          "lineNumber": 136
+        },
+        {
+          "caller": "get_settings",
+          "callee": "plain\n                .get(k)\n                .map(|s| s.as_str()).filter",
+          "lineNumber": 136
+        },
+        {
+          "caller": "get_settings",
+          "callee": "plain\n                .get(k).map",
+          "lineNumber": 136
+        },
+        {
+          "caller": "get_settings",
+          "callee": "plain.get",
+          "lineNumber": 136
+        },
+        {
+          "caller": "get_settings",
+          "callee": "s.as_str",
+          "lineNumber": 138
+        },
+        {
+          "caller": "get_settings",
+          "callee": "s.is_empty",
+          "lineNumber": 139
+        },
+        {
+          "caller": "get_settings",
+          "callee": "decrypt",
+          "lineNumber": 144
+        },
+        {
+          "caller": "get_settings",
+          "callee": "decrypt",
+          "lineNumber": 145
+        },
+        {
+          "caller": "get_settings",
+          "callee": "decrypt",
+          "lineNumber": 146
+        },
+        {
+          "caller": "get_settings",
+          "callee": "decrypt",
+          "lineNumber": 147
+        },
+        {
+          "caller": "get_settings",
+          "callee": "decrypt",
+          "lineNumber": 148
+        },
+        {
+          "caller": "get_settings",
+          "callee": "get",
+          "lineNumber": 149
+        },
+        {
+          "caller": "get_settings",
+          "callee": "get",
+          "lineNumber": 150
+        },
+        {
+          "caller": "get_settings",
+          "callee": "get",
+          "lineNumber": 151
+        },
+        {
+          "caller": "get_settings",
+          "callee": "get",
+          "lineNumber": 152
+        },
+        {
+          "caller": "get_settings",
+          "callee": "get",
+          "lineNumber": 153
+        },
+        {
+          "caller": "get_settings",
+          "callee": "get",
+          "lineNumber": 154
+        },
+        {
+          "caller": "get_settings",
+          "callee": "get",
+          "lineNumber": 155
+        },
+        {
+          "caller": "get_settings",
+          "callee": "get",
+          "lineNumber": 156
+        },
+        {
+          "caller": "get_settings",
+          "callee": "raws\n            .values().any",
+          "lineNumber": 159
+        },
+        {
+          "caller": "get_settings",
+          "callee": "raws.values",
+          "lineNumber": 159
+        },
+        {
+          "caller": "get_settings",
+          "callee": "v.is_empty",
+          "lineNumber": 161
+        },
+        {
+          "caller": "get_settings",
+          "callee": "v.starts_with",
+          "lineNumber": 161
+        },
+        {
+          "caller": "get_settings",
+          "callee": "self.save_settings",
+          "lineNumber": 163
+        },
+        {
+          "caller": "get_settings",
+          "callee": "Ok",
+          "lineNumber": 165
+        },
+        {
+          "caller": "save_settings",
+          "callee": "crate::secret::encrypt_secret",
+          "lineNumber": 169
+        },
+        {
+          "caller": "save_settings",
+          "callee": "enc",
+          "lineNumber": 171
+        },
+        {
+          "caller": "save_settings",
+          "callee": "enc",
+          "lineNumber": 172
+        },
+        {
+          "caller": "save_settings",
+          "callee": "enc",
+          "lineNumber": 173
+        },
+        {
+          "caller": "save_settings",
+          "callee": "enc",
+          "lineNumber": 174
+        },
+        {
+          "caller": "save_settings",
+          "callee": "enc",
+          "lineNumber": 175
+        },
+        {
+          "caller": "save_settings",
+          "callee": "s.deepseek_base_url.clone",
+          "lineNumber": 176
+        },
+        {
+          "caller": "save_settings",
+          "callee": "s.default_model.clone",
+          "lineNumber": 177
+        },
+        {
+          "caller": "save_settings",
+          "callee": "s.create_model.clone",
+          "lineNumber": 178
+        },
+        {
+          "caller": "save_settings",
+          "callee": "s.generate_model.clone",
+          "lineNumber": 179
+        },
+        {
+          "caller": "save_settings",
+          "callee": "s.chat_model.clone",
+          "lineNumber": 180
+        },
+        {
+          "caller": "save_settings",
+          "callee": "s.refine_model.clone",
+          "lineNumber": 181
+        },
+        {
+          "caller": "save_settings",
+          "callee": "s.knowledge_model.clone",
+          "lineNumber": 182
+        },
+        {
+          "caller": "save_settings",
+          "callee": "s.ui_locale.clone",
+          "lineNumber": 183
+        },
+        {
+          "caller": "save_settings",
+          "callee": "self.conn.lock().unwrap",
+          "lineNumber": 185
+        },
+        {
+          "caller": "save_settings",
+          "callee": "self.conn.lock",
+          "lineNumber": 185
+        },
+        {
+          "caller": "save_settings",
+          "callee": "conn.execute",
+          "lineNumber": 187
+        },
+        {
+          "caller": "save_settings",
+          "callee": "Ok",
+          "lineNumber": 193
+        },
+        {
+          "caller": "get_model_catalog",
+          "callee": "self.conn.lock().unwrap",
+          "lineNumber": 197
+        },
+        {
+          "caller": "get_model_catalog",
+          "callee": "self.conn.lock",
+          "lineNumber": 197
+        },
+        {
+          "caller": "get_model_catalog",
+          "callee": "conn\n            .query_row(\n                \"SELECT value FROM settings WHERE key='model_catalog'\",\n                [],\n                |row| row.get(0),\n            ).optional",
+          "lineNumber": 198
+        },
+        {
+          "caller": "get_model_catalog",
+          "callee": "conn.query_row",
+          "lineNumber": 198
+        },
+        {
+          "caller": "get_model_catalog",
+          "callee": "row.get",
+          "lineNumber": 202
+        },
+        {
+          "caller": "get_model_catalog",
+          "callee": "Ok",
+          "lineNumber": 205
+        },
+        {
+          "caller": "get_model_catalog",
+          "callee": "s.trim().is_empty",
+          "lineNumber": 206
+        },
+        {
+          "caller": "get_model_catalog",
+          "callee": "s.trim",
+          "lineNumber": 206
+        },
+        {
+          "caller": "get_model_catalog",
+          "callee": "serde_json::from_str(&s).unwrap_or_else",
+          "lineNumber": 207
+        },
+        {
+          "caller": "get_model_catalog",
+          "callee": "serde_json::from_str",
+          "lineNumber": 207
+        },
+        {
+          "caller": "get_model_catalog",
+          "callee": "ModelCatalog::seed",
+          "lineNumber": 207
+        },
+        {
+          "caller": "get_model_catalog",
+          "callee": "ModelCatalog::seed",
+          "lineNumber": 209
+        },
+        {
+          "caller": "save_model_catalog",
+          "callee": "self.conn.lock().unwrap",
+          "lineNumber": 214
+        },
+        {
+          "caller": "save_model_catalog",
+          "callee": "self.conn.lock",
+          "lineNumber": 214
+        },
+        {
+          "caller": "save_model_catalog",
+          "callee": "serde_json::to_string",
+          "lineNumber": 215
+        },
+        {
+          "caller": "save_model_catalog",
+          "callee": "conn.execute",
+          "lineNumber": 216
+        },
+        {
+          "caller": "save_model_catalog",
+          "callee": "Ok",
+          "lineNumber": 221
+        },
+        {
+          "caller": "list_knowledge",
+          "callee": "self.conn.lock().unwrap",
+          "lineNumber": 225
+        },
+        {
+          "caller": "list_knowledge",
+          "callee": "self.conn.lock",
+          "lineNumber": 225
+        },
+        {
+          "caller": "list_knowledge",
+          "callee": "conn.prepare",
+          "lineNumber": 226
+        },
+        {
+          "caller": "list_knowledge",
+          "callee": "stmt.query_map",
+          "lineNumber": 231
+        },
+        {
+          "caller": "list_knowledge",
+          "callee": "row.get",
+          "lineNumber": 232
+        },
+        {
+          "caller": "list_knowledge",
+          "callee": "row.get(8).unwrap_or",
+          "lineNumber": 233
+        },
+        {
+          "caller": "list_knowledge",
+          "callee": "row.get",
+          "lineNumber": 233
+        },
+        {
+          "caller": "list_knowledge",
+          "callee": "Ok",
+          "lineNumber": 234
+        },
+        {
+          "caller": "list_knowledge",
+          "callee": "row.get",
+          "lineNumber": 235
+        },
+        {
+          "caller": "list_knowledge",
+          "callee": "row.get",
+          "lineNumber": 236
+        },
+        {
+          "caller": "list_knowledge",
+          "callee": "row.get",
+          "lineNumber": 237
+        },
+        {
+          "caller": "list_knowledge",
+          "callee": "serde_json::from_str(&genres).unwrap_or_default",
+          "lineNumber": 238
+        },
+        {
+          "caller": "list_knowledge",
+          "callee": "serde_json::from_str",
+          "lineNumber": 238
+        },
+        {
+          "caller": "list_knowledge",
+          "callee": "row.get",
+          "lineNumber": 239
+        },
+        {
+          "caller": "list_knowledge",
+          "callee": "row.get",
+          "lineNumber": 240
+        },
+        {
+          "caller": "list_knowledge",
+          "callee": "row.get",
+          "lineNumber": 241
+        },
+        {
+          "caller": "list_knowledge",
+          "callee": "row.get",
+          "lineNumber": 242
+        },
+        {
+          "caller": "list_knowledge",
+          "callee": "Ok",
+          "lineNumber": 246
+        },
+        {
+          "caller": "list_knowledge",
+          "callee": "rows.filter_map(|r| r.ok()).collect",
+          "lineNumber": 246
+        },
+        {
+          "caller": "list_knowledge",
+          "callee": "rows.filter_map",
+          "lineNumber": 246
+        },
+        {
+          "caller": "list_knowledge",
+          "callee": "r.ok",
+          "lineNumber": 246
+        },
+        {
+          "caller": "get_knowledge",
+          "callee": "Ok",
+          "lineNumber": 250
+        },
+        {
+          "caller": "get_knowledge",
+          "callee": "self\n            .list_knowledge()?\n            .into_iter().find",
+          "lineNumber": 250
+        },
+        {
+          "caller": "get_knowledge",
+          "callee": "self\n            .list_knowledge()?.into_iter",
+          "lineNumber": 250
+        },
+        {
+          "caller": "get_knowledge",
+          "callee": "self.list_knowledge",
+          "lineNumber": 250
+        },
+        {
+          "caller": "set_knowledge_archived",
+          "callee": "self.conn.lock().unwrap",
+          "lineNumber": 257
+        },
+        {
+          "caller": "set_knowledge_archived",
+          "callee": "self.conn.lock",
+          "lineNumber": 257
+        },
+        {
+          "caller": "set_knowledge_archived",
+          "callee": "conn.execute",
+          "lineNumber": 258
+        },
+        {
+          "caller": "set_knowledge_archived",
+          "callee": "Ok",
+          "lineNumber": 265
+        },
+        {
+          "caller": "delete_knowledge",
+          "callee": "self.conn.lock().unwrap",
+          "lineNumber": 269
+        },
+        {
+          "caller": "delete_knowledge",
+          "callee": "self.conn.lock",
+          "lineNumber": 269
+        },
+        {
+          "caller": "delete_knowledge",
+          "callee": "conn.execute",
+          "lineNumber": 271
+        },
+        {
+          "caller": "delete_knowledge",
+          "callee": "Ok",
+          "lineNumber": 275
+        },
+        {
+          "caller": "unlink_knowledge_from_novels",
+          "callee": "self.list_novels",
+          "lineNumber": 280
+        },
+        {
+          "caller": "unlink_knowledge_from_novels",
+          "callee": "n.knowledge_ids.len",
+          "lineNumber": 282
+        },
+        {
+          "caller": "unlink_knowledge_from_novels",
+          "callee": "n.knowledge_ids.retain",
+          "lineNumber": 283
+        },
+        {
+          "caller": "unlink_knowledge_from_novels",
+          "callee": "n.knowledge_ids.len",
+          "lineNumber": 284
+        },
+        {
+          "caller": "unlink_knowledge_from_novels",
+          "callee": "self.upsert_novel",
+          "lineNumber": 285
+        },
+        {
+          "caller": "unlink_knowledge_from_novels",
+          "callee": "Ok",
+          "lineNumber": 288
+        },
+        {
+          "caller": "rename_knowledge",
+          "callee": "title.trim",
+          "lineNumber": 292
+        },
+        {
+          "caller": "rename_knowledge",
+          "callee": "title.is_empty",
+          "lineNumber": 293
+        },
+        {
+          "caller": "rename_knowledge",
+          "callee": "self.conn.lock().unwrap",
+          "lineNumber": 296
+        },
+        {
+          "caller": "rename_knowledge",
+          "callee": "self.conn.lock",
+          "lineNumber": 296
+        },
+        {
+          "caller": "rename_knowledge",
+          "callee": "conn.execute",
+          "lineNumber": 297
+        },
+        {
+          "caller": "rename_knowledge",
+          "callee": "Ok",
+          "lineNumber": 304
+        },
+        {
+          "caller": "update_knowledge",
+          "callee": "title.trim",
+          "lineNumber": 315
+        },
+        {
+          "caller": "update_knowledge",
+          "callee": "title.is_empty",
+          "lineNumber": 316
+        },
+        {
+          "caller": "update_knowledge",
+          "callee": "self.conn.lock().unwrap",
+          "lineNumber": 319
+        },
+        {
+          "caller": "update_knowledge",
+          "callee": "self.conn.lock",
+          "lineNumber": 319
+        },
+        {
+          "caller": "update_knowledge",
+          "callee": "conn.execute",
+          "lineNumber": 320
+        },
+        {
+          "caller": "update_knowledge",
+          "callee": "Ok",
+          "lineNumber": 333
+        },
+        {
+          "caller": "list_knowledge_chunks",
+          "callee": "self.conn.lock().unwrap",
+          "lineNumber": 340
+        },
+        {
+          "caller": "list_knowledge_chunks",
+          "callee": "self.conn.lock",
+          "lineNumber": 340
+        },
+        {
+          "caller": "list_knowledge_chunks",
+          "callee": "conn.prepare",
+          "lineNumber": 341
+        },
+        {
+          "caller": "list_knowledge_chunks",
+          "callee": "stmt.query_map",
+          "lineNumber": 344
+        },
+        {
+          "caller": "list_knowledge_chunks",
+          "callee": "Ok",
+          "lineNumber": 345
+        },
+        {
+          "caller": "list_knowledge_chunks",
+          "callee": "row.get::<_, i64>",
+          "lineNumber": 346
+        },
+        {
+          "caller": "list_knowledge_chunks",
+          "callee": "row.get",
+          "lineNumber": 347
+        },
+        {
+          "caller": "list_knowledge_chunks",
+          "callee": "Ok",
+          "lineNumber": 350
+        },
+        {
+          "caller": "list_knowledge_chunks",
+          "callee": "rows.filter_map(|r| r.ok()).collect",
+          "lineNumber": 350
+        },
+        {
+          "caller": "list_knowledge_chunks",
+          "callee": "rows.filter_map",
+          "lineNumber": 350
+        },
+        {
+          "caller": "list_knowledge_chunks",
+          "callee": "r.ok",
+          "lineNumber": 350
+        },
+        {
+          "caller": "insert_knowledge",
+          "callee": "self.conn.lock().unwrap",
+          "lineNumber": 354
+        },
+        {
+          "caller": "insert_knowledge",
+          "callee": "self.conn.lock",
+          "lineNumber": 354
+        },
+        {
+          "caller": "insert_knowledge",
+          "callee": "conn.unchecked_transaction",
+          "lineNumber": 355
+        },
+        {
+          "caller": "insert_knowledge",
+          "callee": "tx.execute",
+          "lineNumber": 356
+        },
+        {
+          "caller": "insert_knowledge",
+          "callee": "chunks.iter().enumerate",
+          "lineNumber": 370
+        },
+        {
+          "caller": "insert_knowledge",
+          "callee": "chunks.iter",
+          "lineNumber": 370
+        },
+        {
+          "caller": "insert_knowledge",
+          "callee": "tx.execute",
+          "lineNumber": 371
+        },
+        {
+          "caller": "insert_knowledge",
+          "callee": "tx.commit",
+          "lineNumber": 376
+        },
+        {
+          "caller": "insert_knowledge",
+          "callee": "Ok",
+          "lineNumber": 377
+        },
+        {
+          "caller": "replace_knowledge_content",
+          "callee": "self.conn.lock().unwrap",
+          "lineNumber": 391
+        },
+        {
+          "caller": "replace_knowledge_content",
+          "callee": "self.conn.lock",
+          "lineNumber": 391
+        },
+        {
+          "caller": "replace_knowledge_content",
+          "callee": "conn.unchecked_transaction",
+          "lineNumber": 392
+        },
+        {
+          "caller": "replace_knowledge_content",
+          "callee": "tx.execute",
+          "lineNumber": 393
+        },
+        {
+          "caller": "replace_knowledge_content",
+          "callee": "tx.execute",
+          "lineNumber": 409
+        },
+        {
+          "caller": "replace_knowledge_content",
+          "callee": "chunks.iter().enumerate",
+          "lineNumber": 410
+        },
+        {
+          "caller": "replace_knowledge_content",
+          "callee": "chunks.iter",
+          "lineNumber": 410
+        },
+        {
+          "caller": "replace_knowledge_content",
+          "callee": "tx.execute",
+          "lineNumber": 411
+        },
+        {
+          "caller": "replace_knowledge_content",
+          "callee": "tx.commit",
+          "lineNumber": 416
+        },
+        {
+          "caller": "replace_knowledge_content",
+          "callee": "Ok",
+          "lineNumber": 417
+        },
+        {
+          "caller": "list_novels",
+          "callee": "self.conn.lock().unwrap",
+          "lineNumber": 421
+        },
+        {
+          "caller": "list_novels",
+          "callee": "self.conn.lock",
+          "lineNumber": 421
+        },
+        {
+          "caller": "list_novels",
+          "callee": "conn.prepare",
+          "lineNumber": 422
+        },
+        {
+          "caller": "list_novels",
+          "callee": "stmt.query_map",
+          "lineNumber": 428
+        },
+        {
+          "caller": "list_novels",
+          "callee": "Ok",
+          "lineNumber": 429
+        },
+        {
+          "caller": "list_novels",
+          "callee": "rows.filter_map(|r| r.ok()).collect",
+          "lineNumber": 429
+        },
+        {
+          "caller": "list_novels",
+          "callee": "rows.filter_map",
+          "lineNumber": 429
+        },
+        {
+          "caller": "list_novels",
+          "callee": "r.ok",
+          "lineNumber": 429
+        },
+        {
+          "caller": "get_novel",
+          "callee": "self.conn.lock().unwrap",
+          "lineNumber": 433
+        },
+        {
+          "caller": "get_novel",
+          "callee": "self.conn.lock",
+          "lineNumber": 433
+        },
+        {
+          "caller": "get_novel",
+          "callee": "conn.prepare",
+          "lineNumber": 434
+        },
+        {
+          "caller": "get_novel",
+          "callee": "stmt.query_map",
+          "lineNumber": 440
+        },
+        {
+          "caller": "get_novel",
+          "callee": "Ok",
+          "lineNumber": 441
+        },
+        {
+          "caller": "get_novel",
+          "callee": "rows.next().transpose",
+          "lineNumber": 441
+        },
+        {
+          "caller": "get_novel",
+          "callee": "rows.next",
+          "lineNumber": 441
+        },
+        {
+          "caller": "upsert_novel",
+          "callee": "self.conn.lock().unwrap",
+          "lineNumber": 445
+        },
+        {
+          "caller": "upsert_novel",
+          "callee": "self.conn.lock",
+          "lineNumber": 445
+        },
+        {
+          "caller": "upsert_novel",
+          "callee": "conn.execute",
+          "lineNumber": 446
+        },
+        {
+          "caller": "upsert_novel",
+          "callee": "Ok",
+          "lineNumber": 475
+        },
+        {
+          "caller": "delete_novel",
+          "callee": "self.conn.lock().unwrap",
+          "lineNumber": 479
+        },
+        {
+          "caller": "delete_novel",
+          "callee": "self.conn.lock",
+          "lineNumber": 479
+        },
+        {
+          "caller": "delete_novel",
+          "callee": "conn.execute",
+          "lineNumber": 480
+        },
+        {
+          "caller": "delete_novel",
+          "callee": "conn.execute",
+          "lineNumber": 481
+        },
+        {
+          "caller": "delete_novel",
+          "callee": "conn.execute",
+          "lineNumber": 482
+        },
+        {
+          "caller": "delete_novel",
+          "callee": "Ok",
+          "lineNumber": 483
+        },
+        {
+          "caller": "replace_chapter_memory",
+          "callee": "self.conn.lock().unwrap",
+          "lineNumber": 492
+        },
+        {
+          "caller": "replace_chapter_memory",
+          "callee": "self.conn.lock",
+          "lineNumber": 492
+        },
+        {
+          "caller": "replace_chapter_memory",
+          "callee": "conn.unchecked_transaction",
+          "lineNumber": 493
+        },
+        {
+          "caller": "replace_chapter_memory",
+          "callee": "tx.execute",
+          "lineNumber": 494
+        },
+        {
+          "caller": "replace_chapter_memory",
+          "callee": "chunks.iter().enumerate",
+          "lineNumber": 498
+        },
+        {
+          "caller": "replace_chapter_memory",
+          "callee": "chunks.iter",
+          "lineNumber": 498
+        },
+        {
+          "caller": "replace_chapter_memory",
+          "callee": "tx.execute",
+          "lineNumber": 499
+        },
+        {
+          "caller": "replace_chapter_memory",
+          "callee": "tx.commit",
+          "lineNumber": 510
+        },
+        {
+          "caller": "replace_chapter_memory",
+          "callee": "Ok",
+          "lineNumber": 511
+        },
+        {
+          "caller": "delete_chapter_memory",
+          "callee": "self.conn.lock().unwrap",
+          "lineNumber": 515
+        },
+        {
+          "caller": "delete_chapter_memory",
+          "callee": "self.conn.lock",
+          "lineNumber": 515
+        },
+        {
+          "caller": "delete_chapter_memory",
+          "callee": "conn.execute",
+          "lineNumber": 516
+        },
+        {
+          "caller": "delete_chapter_memory",
+          "callee": "Ok",
+          "lineNumber": 520
+        },
+        {
+          "caller": "list_chapter_memory_for_nodes",
+          "callee": "node_ids.is_empty",
+          "lineNumber": 529
+        },
+        {
+          "caller": "list_chapter_memory_for_nodes",
+          "callee": "Ok",
+          "lineNumber": 530
+        },
+        {
+          "caller": "list_chapter_memory_for_nodes",
+          "callee": "Vec::new",
+          "lineNumber": 530
+        },
+        {
+          "caller": "list_chapter_memory_for_nodes",
+          "callee": "self.conn.lock().unwrap",
+          "lineNumber": 532
+        },
+        {
+          "caller": "list_chapter_memory_for_nodes",
+          "callee": "self.conn.lock",
+          "lineNumber": 532
+        },
+        {
+          "caller": "list_chapter_memory_for_nodes",
+          "callee": "Vec::new",
+          "lineNumber": 533
+        },
+        {
+          "caller": "list_chapter_memory_for_nodes",
+          "callee": "conn.prepare",
+          "lineNumber": 535
+        },
+        {
+          "caller": "list_chapter_memory_for_nodes",
+          "callee": "stmt.query_map",
+          "lineNumber": 538
+        },
+        {
+          "caller": "list_chapter_memory_for_nodes",
+          "callee": "Ok",
+          "lineNumber": 539
+        },
+        {
+          "caller": "list_chapter_memory_for_nodes",
+          "callee": "row.get::<_, String>",
+          "lineNumber": 539
+        },
+        {
+          "caller": "list_chapter_memory_for_nodes",
+          "callee": "row.get::<_, String>",
+          "lineNumber": 539
+        },
+        {
+          "caller": "list_chapter_memory_for_nodes",
+          "callee": "out.push",
+          "lineNumber": 542
+        },
+        {
+          "caller": "list_chapter_memory_for_nodes",
+          "callee": "Ok",
+          "lineNumber": 545
+        },
+        {
+          "caller": "list_chapter_memory",
+          "callee": "self.conn.lock().unwrap",
+          "lineNumber": 550
+        },
+        {
+          "caller": "list_chapter_memory",
+          "callee": "self.conn.lock",
+          "lineNumber": 550
+        },
+        {
+          "caller": "list_chapter_memory",
+          "callee": "conn.prepare",
+          "lineNumber": 551
+        },
+        {
+          "caller": "list_chapter_memory",
+          "callee": "stmt.query_map",
+          "lineNumber": 554
+        },
+        {
+          "caller": "list_chapter_memory",
+          "callee": "Ok",
+          "lineNumber": 555
+        },
+        {
+          "caller": "list_chapter_memory",
+          "callee": "row.get::<_, String>",
+          "lineNumber": 555
+        },
+        {
+          "caller": "list_chapter_memory",
+          "callee": "row.get::<_, String>",
+          "lineNumber": 555
+        },
+        {
+          "caller": "list_chapter_memory",
+          "callee": "Ok",
+          "lineNumber": 557
+        },
+        {
+          "caller": "list_chapter_memory",
+          "callee": "rows.filter_map(|r| r.ok()).collect",
+          "lineNumber": 557
+        },
+        {
+          "caller": "list_chapter_memory",
+          "callee": "rows.filter_map",
+          "lineNumber": 557
+        },
+        {
+          "caller": "list_chapter_memory",
+          "callee": "r.ok",
+          "lineNumber": 557
+        },
+        {
+          "caller": "list_chat",
+          "callee": "self.conn.lock().unwrap",
+          "lineNumber": 561
+        },
+        {
+          "caller": "list_chat",
+          "callee": "self.conn.lock",
+          "lineNumber": 561
+        },
+        {
+          "caller": "list_chat",
+          "callee": "conn.prepare",
+          "lineNumber": 562
+        },
+        {
+          "caller": "list_chat",
+          "callee": "stmt.query_map",
+          "lineNumber": 566
+        },
+        {
+          "caller": "list_chat",
+          "callee": "Ok",
+          "lineNumber": 567
+        },
+        {
+          "caller": "list_chat",
+          "callee": "row.get",
+          "lineNumber": 568
+        },
+        {
+          "caller": "list_chat",
+          "callee": "row.get",
+          "lineNumber": 569
+        },
+        {
+          "caller": "list_chat",
+          "callee": "row.get",
+          "lineNumber": 570
+        },
+        {
+          "caller": "list_chat",
+          "callee": "row.get",
+          "lineNumber": 571
+        },
+        {
+          "caller": "list_chat",
+          "callee": "row.get",
+          "lineNumber": 572
+        },
+        {
+          "caller": "list_chat",
+          "callee": "Ok",
+          "lineNumber": 575
+        },
+        {
+          "caller": "list_chat",
+          "callee": "rows.filter_map(|r| r.ok()).collect",
+          "lineNumber": 575
+        },
+        {
+          "caller": "list_chat",
+          "callee": "rows.filter_map",
+          "lineNumber": 575
+        },
+        {
+          "caller": "list_chat",
+          "callee": "r.ok",
+          "lineNumber": 575
+        },
+        {
+          "caller": "insert_chat",
+          "callee": "self.conn.lock().unwrap",
+          "lineNumber": 579
+        },
+        {
+          "caller": "insert_chat",
+          "callee": "self.conn.lock",
+          "lineNumber": 579
+        },
+        {
+          "caller": "insert_chat",
+          "callee": "conn.execute",
+          "lineNumber": 580
+        },
+        {
+          "caller": "insert_chat",
+          "callee": "Ok",
+          "lineNumber": 584
+        },
+        {
+          "caller": "add_token_usage",
+          "callee": "self.conn.lock().unwrap",
+          "lineNumber": 597
+        },
+        {
+          "caller": "add_token_usage",
+          "callee": "self.conn.lock",
+          "lineNumber": 597
+        },
+        {
+          "caller": "add_token_usage",
+          "callee": "conn.execute",
+          "lineNumber": 598
+        },
+        {
+          "caller": "add_token_usage",
+          "callee": "Ok",
+          "lineNumber": 615
+        },
+        {
+          "caller": "list_token_usage_day",
+          "callee": "self.conn.lock().unwrap",
+          "lineNumber": 619
+        },
+        {
+          "caller": "list_token_usage_day",
+          "callee": "self.conn.lock",
+          "lineNumber": 619
+        },
+        {
+          "caller": "list_token_usage_day",
+          "callee": "conn.prepare",
+          "lineNumber": 620
+        },
+        {
+          "caller": "list_token_usage_day",
+          "callee": "stmt.query_map",
+          "lineNumber": 627
+        },
+        {
+          "caller": "list_token_usage_day",
+          "callee": "Ok",
+          "lineNumber": 628
+        },
+        {
+          "caller": "list_token_usage_day",
+          "callee": "row.get::<_, i64>",
+          "lineNumber": 629
+        },
+        {
+          "caller": "list_token_usage_day",
+          "callee": "row.get",
+          "lineNumber": 630
+        },
+        {
+          "caller": "list_token_usage_day",
+          "callee": "row.get",
+          "lineNumber": 631
+        },
+        {
+          "caller": "list_token_usage_day",
+          "callee": "row.get",
+          "lineNumber": 632
+        },
+        {
+          "caller": "list_token_usage_day",
+          "callee": "row.get",
+          "lineNumber": 633
+        },
+        {
+          "caller": "list_token_usage_day",
+          "callee": "Ok",
+          "lineNumber": 636
+        },
+        {
+          "caller": "list_token_usage_day",
+          "callee": "rows.filter_map(|r| r.ok()).collect",
+          "lineNumber": 636
+        },
+        {
+          "caller": "list_token_usage_day",
+          "callee": "rows.filter_map",
+          "lineNumber": 636
+        },
+        {
+          "caller": "list_token_usage_day",
+          "callee": "r.ok",
+          "lineNumber": 636
+        },
+        {
+          "caller": "list_token_usage_by_novel",
+          "callee": "self.conn.lock().unwrap",
+          "lineNumber": 644
+        },
+        {
+          "caller": "list_token_usage_by_novel",
+          "callee": "self.conn.lock",
+          "lineNumber": 644
+        },
+        {
+          "caller": "list_token_usage_by_novel",
+          "callee": "std::collections::HashMap::<String, String>::new",
+          "lineNumber": 645
+        },
+        {
+          "caller": "list_token_usage_by_novel",
+          "callee": "conn.prepare",
+          "lineNumber": 647
+        },
+        {
+          "caller": "list_token_usage_by_novel",
+          "callee": "stmt.query_map",
+          "lineNumber": 648
+        },
+        {
+          "caller": "list_token_usage_by_novel",
+          "callee": "Ok",
+          "lineNumber": 649
+        },
+        {
+          "caller": "list_token_usage_by_novel",
+          "callee": "row.get::<_, String>",
+          "lineNumber": 649
+        },
+        {
+          "caller": "list_token_usage_by_novel",
+          "callee": "row.get::<_, String>",
+          "lineNumber": 649
+        },
+        {
+          "caller": "list_token_usage_by_novel",
+          "callee": "titles.insert",
+          "lineNumber": 653
+        },
+        {
+          "caller": "list_token_usage_by_novel",
+          "callee": "std::collections::HashMap::<String, (i64, i64)>::new",
+          "lineNumber": 656
+        },
+        {
+          "caller": "list_token_usage_by_novel",
+          "callee": "conn.prepare",
+          "lineNumber": 658
+        },
+        {
+          "caller": "list_token_usage_by_novel",
+          "callee": "stmt.query_map",
+          "lineNumber": 662
+        },
+        {
+          "caller": "list_token_usage_by_novel",
+          "callee": "Ok",
+          "lineNumber": 663
+        },
+        {
+          "caller": "list_token_usage_by_novel",
+          "callee": "row.get::<_, String>",
+          "lineNumber": 663
+        },
+        {
+          "caller": "list_token_usage_by_novel",
+          "callee": "row.get::<_, i64>",
+          "lineNumber": 663
+        },
+        {
+          "caller": "list_token_usage_by_novel",
+          "callee": "totals.insert",
+          "lineNumber": 667
+        },
+        {
+          "caller": "list_token_usage_by_novel",
+          "callee": "conn.prepare",
+          "lineNumber": 671
+        },
+        {
+          "caller": "list_token_usage_by_novel",
+          "callee": "stmt.query_map",
+          "lineNumber": 675
+        },
+        {
+          "caller": "list_token_usage_by_novel",
+          "callee": "Ok",
+          "lineNumber": 676
+        },
+        {
+          "caller": "list_token_usage_by_novel",
+          "callee": "row.get::<_, String>",
+          "lineNumber": 676
+        },
+        {
+          "caller": "list_token_usage_by_novel",
+          "callee": "row.get::<_, i64>",
+          "lineNumber": 676
+        },
+        {
+          "caller": "list_token_usage_by_novel",
+          "callee": "totals.entry(id).or_insert",
+          "lineNumber": 680
+        },
+        {
+          "caller": "list_token_usage_by_novel",
+          "callee": "totals.entry",
+          "lineNumber": 680
+        },
+        {
+          "caller": "list_token_usage_by_novel",
+          "callee": "totals\n            .into_iter()\n            .map(|(novel_id, (day_tokens, total_tokens))| {\n                let title = titles\n                    .get(&novel_id)\n                    .cloned()\n                    .unwrap_or_else(|| format!(\"({novel_id})\"));\n                crate::models::TokenUsageNovelRow {\n                    novel_id,\n                    title,\n                    day_tokens,\n                    total_tokens,\n                }\n            }).collect",
+          "lineNumber": 684
+        },
+        {
+          "caller": "list_token_usage_by_novel",
+          "callee": "totals\n            .into_iter().map",
+          "lineNumber": 684
+        },
+        {
+          "caller": "list_token_usage_by_novel",
+          "callee": "totals.into_iter",
+          "lineNumber": 684
+        },
+        {
+          "caller": "list_token_usage_by_novel",
+          "callee": "titles\n                    .get(&novel_id)\n                    .cloned().unwrap_or_else",
+          "lineNumber": 687
+        },
+        {
+          "caller": "list_token_usage_by_novel",
+          "callee": "titles\n                    .get(&novel_id).cloned",
+          "lineNumber": 687
+        },
+        {
+          "caller": "list_token_usage_by_novel",
+          "callee": "titles.get",
+          "lineNumber": 687
+        },
+        {
+          "caller": "list_token_usage_by_novel",
+          "callee": "out.sort_by",
+          "lineNumber": 699
+        },
+        {
+          "caller": "list_token_usage_by_novel",
+          "callee": "b.total_tokens.cmp",
+          "lineNumber": 699
+        },
+        {
+          "caller": "list_token_usage_by_novel",
+          "callee": "Ok",
+          "lineNumber": 700
+        },
+        {
+          "caller": "list_token_usage_month",
+          "callee": "self.conn.lock().unwrap",
+          "lineNumber": 709
+        },
+        {
+          "caller": "list_token_usage_month",
+          "callee": "self.conn.lock",
+          "lineNumber": 709
+        },
+        {
+          "caller": "list_token_usage_month",
+          "callee": "conn.prepare",
+          "lineNumber": 710
+        },
+        {
+          "caller": "list_token_usage_month",
+          "callee": "stmt.query_map",
+          "lineNumber": 716
+        },
+        {
+          "caller": "list_token_usage_month",
+          "callee": "Ok",
+          "lineNumber": 717
+        },
+        {
+          "caller": "list_token_usage_month",
+          "callee": "row.get",
+          "lineNumber": 718
+        },
+        {
+          "caller": "list_token_usage_month",
+          "callee": "row.get",
+          "lineNumber": 719
+        },
+        {
+          "caller": "list_token_usage_month",
+          "callee": "Ok",
+          "lineNumber": 722
+        },
+        {
+          "caller": "list_token_usage_month",
+          "callee": "rows.filter_map(|r| r.ok()).collect",
+          "lineNumber": 722
+        },
+        {
+          "caller": "list_token_usage_month",
+          "callee": "rows.filter_map",
+          "lineNumber": 722
+        },
+        {
+          "caller": "list_token_usage_month",
+          "callee": "r.ok",
+          "lineNumber": 722
+        },
+        {
+          "caller": "migrate_token_usage_novel_id",
+          "callee": "conn.prepare",
+          "lineNumber": 728
+        },
+        {
+          "caller": "migrate_token_usage_novel_id",
+          "callee": "stmt\n        .query_map([], |row| row.get::<_, String>(1))?\n        .filter_map(|r| r.ok()).any",
+          "lineNumber": 729
+        },
+        {
+          "caller": "migrate_token_usage_novel_id",
+          "callee": "stmt\n        .query_map([], |row| row.get::<_, String>(1))?.filter_map",
+          "lineNumber": 729
+        },
+        {
+          "caller": "migrate_token_usage_novel_id",
+          "callee": "stmt.query_map",
+          "lineNumber": 729
+        },
+        {
+          "caller": "migrate_token_usage_novel_id",
+          "callee": "row.get::<_, String>",
+          "lineNumber": 730
+        },
+        {
+          "caller": "migrate_token_usage_novel_id",
+          "callee": "r.ok",
+          "lineNumber": 731
+        },
+        {
+          "caller": "migrate_token_usage_novel_id",
+          "callee": "Ok",
+          "lineNumber": 734
+        },
+        {
+          "caller": "migrate_token_usage_novel_id",
+          "callee": "conn.execute_batch",
+          "lineNumber": 736
+        },
+        {
+          "caller": "migrate_token_usage_novel_id",
+          "callee": "Ok",
+          "lineNumber": 754
+        },
+        {
+          "caller": "map_novel",
+          "callee": "row.get",
+          "lineNumber": 758
+        },
+        {
+          "caller": "map_novel",
+          "callee": "row.get(8).unwrap_or",
+          "lineNumber": 759
+        },
+        {
+          "caller": "map_novel",
+          "callee": "row.get",
+          "lineNumber": 759
+        },
+        {
+          "caller": "map_novel",
+          "callee": "Ok",
+          "lineNumber": 760
+        },
+        {
+          "caller": "map_novel",
+          "callee": "row.get",
+          "lineNumber": 761
+        },
+        {
+          "caller": "map_novel",
+          "callee": "row.get",
+          "lineNumber": 762
+        },
+        {
+          "caller": "map_novel",
+          "callee": "row.get",
+          "lineNumber": 763
+        },
+        {
+          "caller": "map_novel",
+          "callee": "row.get",
+          "lineNumber": 764
+        },
+        {
+          "caller": "map_novel",
+          "callee": "serde_json::from_str(&kids).unwrap_or_default",
+          "lineNumber": 765
+        },
+        {
+          "caller": "map_novel",
+          "callee": "serde_json::from_str",
+          "lineNumber": 765
+        },
+        {
+          "caller": "map_novel",
+          "callee": "row.get",
+          "lineNumber": 766
+        },
+        {
+          "caller": "map_novel",
+          "callee": "row.get",
+          "lineNumber": 767
+        },
+        {
+          "caller": "map_novel",
+          "callee": "row.get",
+          "lineNumber": 768
+        },
+        {
+          "caller": "map_novel",
+          "callee": "row.get::<_, i64>(9).unwrap_or",
+          "lineNumber": 770
+        },
+        {
+          "caller": "map_novel",
+          "callee": "row.get::<_, i64>",
+          "lineNumber": 770
+        },
+        {
+          "caller": "map_novel",
+          "callee": "row.get::<_, i64>(10).unwrap_or",
+          "lineNumber": 771
+        },
+        {
+          "caller": "map_novel",
+          "callee": "row.get::<_, i64>",
+          "lineNumber": 771
+        },
+        {
+          "caller": "map_novel",
+          "callee": "row.get::<_, i64>(11).unwrap_or",
+          "lineNumber": 772
+        },
+        {
+          "caller": "map_novel",
+          "callee": "row.get::<_, i64>",
+          "lineNumber": 772
+        },
+        {
+          "caller": "month_like_aggregates_models",
+          "callee": "Connection::open_in_memory().unwrap",
+          "lineNumber": 782
+        },
+        {
+          "caller": "month_like_aggregates_models",
+          "callee": "Connection::open_in_memory",
+          "lineNumber": 782
+        },
+        {
+          "caller": "month_like_aggregates_models",
+          "callee": "conn.execute_batch(\n            \"CREATE TABLE token_usage (\n               day TEXT, hour INTEGER, model TEXT, novel_id TEXT DEFAULT '',\n               prompt_tokens INTEGER, completion_tokens INTEGER, total_tokens INTEGER\n             );\n             INSERT INTO token_usage VALUES\n               ('2026-08-01', 10, 'm1', '', 1, 1, 10),\n               ('2026-08-15', 11, 'm1', '', 1, 1, 20),\n               ('2026-07-01', 9, 'm2', '', 1, 1, 99);\",\n        ).unwrap",
+          "lineNumber": 783
+        },
+        {
+          "caller": "month_like_aggregates_models",
+          "callee": "conn.execute_batch",
+          "lineNumber": 783
+        },
+        {
+          "caller": "month_like_aggregates_models",
+          "callee": "conn\n            .prepare(\n                \"SELECT model, SUM(total_tokens) FROM token_usage\n                 WHERE day LIKE ?1 GROUP BY model ORDER BY SUM(total_tokens) DESC\",\n            ).unwrap",
+          "lineNumber": 795
+        },
+        {
+          "caller": "month_like_aggregates_models",
+          "callee": "conn.prepare",
+          "lineNumber": 795
+        },
+        {
+          "caller": "month_like_aggregates_models",
+          "callee": "stmt\n            .query_map(params![like], |row| Ok((row.get(0)?, row.get(1)?)))\n            .unwrap()\n            .map(|r| r.unwrap()).collect",
+          "lineNumber": 801
+        },
+        {
+          "caller": "month_like_aggregates_models",
+          "callee": "stmt\n            .query_map(params![like], |row| Ok((row.get(0)?, row.get(1)?)))\n            .unwrap().map",
+          "lineNumber": 801
+        },
+        {
+          "caller": "month_like_aggregates_models",
+          "callee": "stmt\n            .query_map(params![like], |row| Ok((row.get(0)?, row.get(1)?))).unwrap",
+          "lineNumber": 801
+        },
+        {
+          "caller": "month_like_aggregates_models",
+          "callee": "stmt.query_map",
+          "lineNumber": 801
+        },
+        {
+          "caller": "month_like_aggregates_models",
+          "callee": "Ok",
+          "lineNumber": 802
+        },
+        {
+          "caller": "month_like_aggregates_models",
+          "callee": "row.get",
+          "lineNumber": 802
+        },
+        {
+          "caller": "month_like_aggregates_models",
+          "callee": "row.get",
+          "lineNumber": 802
+        },
+        {
+          "caller": "month_like_aggregates_models",
+          "callee": "r.unwrap",
+          "lineNumber": 804
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 30,
+        "functionCount": 31,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "src-tauri/src/llm.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 232,
+      "nonEmptyLines": 206,
+      "functions": [
+        {
+          "name": "cancelled",
+          "startLine": 18,
+          "endLine": 23,
+          "params": [
+            "cancel"
+          ]
+        },
+        {
+          "name": "wait_cancel",
+          "startLine": 25,
+          "endLine": 36,
+          "params": [
+            "cancel"
+          ]
+        },
+        {
+          "name": "complete",
+          "startLine": 39,
+          "endLine": 147,
+          "params": [
+            "settings",
+            "system",
+            "user",
+            "model",
+            "cancel"
+          ]
+        },
+        {
+          "name": "mock_complete",
+          "startLine": 149,
+          "endLine": 162,
+          "params": [
+            "system",
+            "user"
+          ]
+        },
+        {
+          "name": "truncate",
+          "startLine": 164,
+          "endLine": 171,
+          "params": [
+            "s",
+            "n"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "CompletionResult",
+          "startLine": 9,
+          "endLine": 16,
+          "methods": [],
+          "properties": [
+            "content",
+            "used_mock",
+            "model",
+            "prompt_tokens",
+            "completion_tokens",
+            "total_tokens"
+          ]
+        },
+        {
+          "name": "ChatRequest",
+          "startLine": 174,
+          "endLine": 178,
+          "methods": [],
+          "properties": [
+            "model",
+            "messages",
+            "temperature"
+          ]
+        },
+        {
+          "name": "ChatMessage",
+          "startLine": 181,
+          "endLine": 184,
+          "methods": [],
+          "properties": [
+            "role",
+            "content"
+          ]
+        },
+        {
+          "name": "ChatResponse",
+          "startLine": 187,
+          "endLine": 191,
+          "methods": [],
+          "properties": [
+            "choices",
+            "usage"
+          ]
+        },
+        {
+          "name": "Usage",
+          "startLine": 194,
+          "endLine": 201,
+          "methods": [],
+          "properties": [
+            "prompt_tokens",
+            "completion_tokens",
+            "total_tokens"
+          ]
+        },
+        {
+          "name": "Choice",
+          "startLine": 204,
+          "endLine": 206,
+          "methods": [],
+          "properties": [
+            "message"
+          ]
+        },
+        {
+          "name": "ChoiceMessage",
+          "startLine": 209,
+          "endLine": 211,
+          "methods": [],
+          "properties": [
+            "content"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "CompletionResult",
+          "line": 9,
+          "isDefault": false
+        },
+        {
+          "name": "complete",
+          "line": 39,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "cancelled",
+          "callee": "cancel\n        .as_ref()\n        .map(|c| c.load(Ordering::Relaxed)).unwrap_or",
+          "lineNumber": 19
+        },
+        {
+          "caller": "cancelled",
+          "callee": "cancel\n        .as_ref().map",
+          "lineNumber": 19
+        },
+        {
+          "caller": "cancelled",
+          "callee": "cancel.as_ref",
+          "lineNumber": 19
+        },
+        {
+          "caller": "cancelled",
+          "callee": "c.load",
+          "lineNumber": 21
+        },
+        {
+          "caller": "wait_cancel",
+          "callee": "std::future::pending::<()>",
+          "lineNumber": 27
+        },
+        {
+          "caller": "wait_cancel",
+          "callee": "flag.load",
+          "lineNumber": 31
+        },
+        {
+          "caller": "wait_cancel",
+          "callee": "tokio::time::sleep",
+          "lineNumber": 34
+        },
+        {
+          "caller": "wait_cancel",
+          "callee": "Duration::from_millis",
+          "lineNumber": 34
+        },
+        {
+          "caller": "complete",
+          "callee": "model\n        .filter(|m| !m.trim().is_empty())\n        .unwrap_or(settings.default_model.as_str()).to_string",
+          "lineNumber": 46
+        },
+        {
+          "caller": "complete",
+          "callee": "model\n        .filter(|m| !m.trim().is_empty()).unwrap_or",
+          "lineNumber": 46
+        },
+        {
+          "caller": "complete",
+          "callee": "model.filter",
+          "lineNumber": 46
+        },
+        {
+          "caller": "complete",
+          "callee": "m.trim().is_empty",
+          "lineNumber": 47
+        },
+        {
+          "caller": "complete",
+          "callee": "m.trim",
+          "lineNumber": 47
+        },
+        {
+          "caller": "complete",
+          "callee": "settings.default_model.as_str",
+          "lineNumber": 48
+        },
+        {
+          "caller": "complete",
+          "callee": "cancelled",
+          "lineNumber": 51
+        },
+        {
+          "caller": "complete",
+          "callee": "Err",
+          "lineNumber": 52
+        },
+        {
+          "caller": "complete",
+          "callee": "settings.deepseek_api_key.trim().is_empty",
+          "lineNumber": 55
+        },
+        {
+          "caller": "complete",
+          "callee": "settings.deepseek_api_key.trim",
+          "lineNumber": 55
+        },
+        {
+          "caller": "complete",
+          "callee": "mock_complete",
+          "lineNumber": 56
+        },
+        {
+          "caller": "complete",
+          "callee": "system.len",
+          "lineNumber": 57
+        },
+        {
+          "caller": "complete",
+          "callee": "user.len",
+          "lineNumber": 57
+        },
+        {
+          "caller": "complete",
+          "callee": "content.len",
+          "lineNumber": 58
+        },
+        {
+          "caller": "complete",
+          "callee": "Ok",
+          "lineNumber": 59
+        },
+        {
+          "caller": "complete",
+          "callee": "rig_bridge::warm_client",
+          "lineNumber": 70
+        },
+        {
+          "caller": "complete",
+          "callee": "adk_bridge::describe",
+          "lineNumber": 71
+        },
+        {
+          "caller": "complete",
+          "callee": "settings.deepseek_base_url.trim_end_matches",
+          "lineNumber": 73
+        },
+        {
+          "caller": "complete",
+          "callee": "model.clone",
+          "lineNumber": 76
+        },
+        {
+          "caller": "complete",
+          "callee": "reqwest::Client::new",
+          "lineNumber": 90
+        },
+        {
+          "caller": "complete",
+          "callee": "client\n        .post(&url)\n        .bearer_auth(&settings.deepseek_api_key)\n        .json(&body).send",
+          "lineNumber": 91
+        },
+        {
+          "caller": "complete",
+          "callee": "client\n        .post(&url)\n        .bearer_auth(&settings.deepseek_api_key).json",
+          "lineNumber": 91
+        },
+        {
+          "caller": "complete",
+          "callee": "client\n        .post(&url).bearer_auth",
+          "lineNumber": 91
+        },
+        {
+          "caller": "complete",
+          "callee": "client.post",
+          "lineNumber": 91
+        },
+        {
+          "caller": "complete",
+          "callee": "cancelled",
+          "lineNumber": 102
+        },
+        {
+          "caller": "complete",
+          "callee": "Err",
+          "lineNumber": 103
+        },
+        {
+          "caller": "complete",
+          "callee": "resp.status().is_success",
+          "lineNumber": 106
+        },
+        {
+          "caller": "complete",
+          "callee": "resp.status",
+          "lineNumber": 106
+        },
+        {
+          "caller": "complete",
+          "callee": "resp.status",
+          "lineNumber": 107
+        },
+        {
+          "caller": "complete",
+          "callee": "Err",
+          "lineNumber": 112
+        },
+        {
+          "caller": "complete",
+          "callee": "parsed\n        .choices\n        .into_iter()\n        .next()\n        .and_then(|c| c.message.content).unwrap_or_default",
+          "lineNumber": 119
+        },
+        {
+          "caller": "complete",
+          "callee": "parsed\n        .choices\n        .into_iter()\n        .next().and_then",
+          "lineNumber": 119
+        },
+        {
+          "caller": "complete",
+          "callee": "parsed\n        .choices\n        .into_iter().next",
+          "lineNumber": 119
+        },
+        {
+          "caller": "complete",
+          "callee": "parsed\n        .choices.into_iter",
+          "lineNumber": 119
+        },
+        {
+          "caller": "complete",
+          "callee": "u.prompt_tokens.saturating_add",
+          "lineNumber": 130
+        },
+        {
+          "caller": "complete",
+          "callee": "system.len",
+          "lineNumber": 134
+        },
+        {
+          "caller": "complete",
+          "callee": "user.len",
+          "lineNumber": 134
+        },
+        {
+          "caller": "complete",
+          "callee": "content.len",
+          "lineNumber": 135
+        },
+        {
+          "caller": "complete",
+          "callee": "Ok",
+          "lineNumber": 139
+        },
+        {
+          "caller": "truncate",
+          "callee": "s.chars().take(n).collect",
+          "lineNumber": 165
+        },
+        {
+          "caller": "truncate",
+          "callee": "s.chars().take",
+          "lineNumber": 165
+        },
+        {
+          "caller": "truncate",
+          "callee": "s.chars",
+          "lineNumber": 165
+        },
+        {
+          "caller": "truncate",
+          "callee": "s.chars().count",
+          "lineNumber": 166
+        },
+        {
+          "caller": "truncate",
+          "callee": "s.chars",
+          "lineNumber": 166
+        },
+        {
+          "caller": "warm_client",
+          "callee": "openai::Client::builder()\n            .api_key(&settings.deepseek_api_key)\n            .base_url(&settings.deepseek_base_url)\n            .build().or_else",
+          "lineNumber": 219
+        },
+        {
+          "caller": "warm_client",
+          "callee": "openai::Client::builder()\n            .api_key(&settings.deepseek_api_key)\n            .base_url(&settings.deepseek_base_url).build",
+          "lineNumber": 219
+        },
+        {
+          "caller": "warm_client",
+          "callee": "openai::Client::builder()\n            .api_key(&settings.deepseek_api_key).base_url",
+          "lineNumber": 219
+        },
+        {
+          "caller": "warm_client",
+          "callee": "openai::Client::builder().api_key",
+          "lineNumber": 219
+        },
+        {
+          "caller": "warm_client",
+          "callee": "openai::Client::builder",
+          "lineNumber": 219
+        },
+        {
+          "caller": "warm_client",
+          "callee": "openai::Client::new",
+          "lineNumber": 223
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 2,
+        "functionCount": 5,
+        "classCount": 7
+      }
+    },
+    {
+      "path": "src-tauri/src/models.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 419,
+      "nonEmptyLines": 388,
+      "functions": [
+        {
+          "name": "all_ids",
+          "startLine": 39,
+          "endLine": 48,
+          "params": []
+        },
+        {
+          "name": "seed",
+          "startLine": 50,
+          "endLine": 64,
+          "params": []
+        },
+        {
+          "name": "default",
+          "startLine": 68,
+          "endLine": 84,
+          "params": []
+        },
+        {
+          "name": "default_word_min",
+          "startLine": 184,
+          "endLine": 186,
+          "params": []
+        },
+        {
+          "name": "default_word_max",
+          "startLine": 187,
+          "endLine": 189,
+          "params": []
+        },
+        {
+          "name": "default_chapter_count",
+          "startLine": 190,
+          "endLine": 192,
+          "params": []
+        }
+      ],
+      "classes": [
+        {
+          "name": "AppSettings",
+          "startLine": 4,
+          "endLine": 20,
+          "methods": [
+            "default"
+          ],
+          "properties": [
+            "deepseek_api_key",
+            "chatgpt_api_key",
+            "gemini_api_key",
+            "claude_api_key",
+            "grok_api_key",
+            "deepseek_base_url",
+            "default_model",
+            "create_model",
+            "generate_model",
+            "chat_model",
+            "refine_model",
+            "knowledge_model",
+            "ui_locale"
+          ]
+        },
+        {
+          "name": "ModelCatalog",
+          "startLine": 23,
+          "endLine": 36,
+          "methods": [
+            "all_ids",
+            "seed"
+          ],
+          "properties": [
+            "deepseek",
+            "gemini",
+            "claude",
+            "grok",
+            "updated_at",
+            "errors"
+          ]
+        },
+        {
+          "name": "SettingsView",
+          "startLine": 88,
+          "endLine": 108,
+          "methods": [],
+          "properties": [
+            "deepseek_api_key_masked",
+            "deepseek_api_key_configured",
+            "chatgpt_api_key_masked",
+            "chatgpt_api_key_configured",
+            "gemini_api_key_masked",
+            "gemini_api_key_configured",
+            "claude_api_key_masked",
+            "claude_api_key_configured",
+            "grok_api_key_masked",
+            "grok_api_key_configured",
+            "deepseek_base_url",
+            "default_model",
+            "create_model",
+            "generate_model",
+            "chat_model",
+            "refine_model",
+            "knowledge_model",
+            "model_catalog",
+            "ui_locale"
+          ]
+        },
+        {
+          "name": "SaveSettingsInput",
+          "startLine": 112,
+          "endLine": 139,
+          "methods": [],
+          "properties": [
+            "deepseek_api_key",
+            "chatgpt_api_key",
+            "gemini_api_key",
+            "claude_api_key",
+            "grok_api_key",
+            "deepseek_base_url",
+            "default_model",
+            "create_model",
+            "generate_model",
+            "chat_model",
+            "refine_model",
+            "knowledge_model",
+            "ui_locale"
+          ]
+        },
+        {
+          "name": "KnowledgeBook",
+          "startLine": 142,
+          "endLine": 153,
+          "methods": [],
+          "properties": [
+            "id",
+            "title",
+            "author",
+            "genres",
+            "source_path",
+            "extract_prompt",
+            "created_at",
+            "chunk_count",
+            "archived"
+          ]
+        },
+        {
+          "name": "KnowledgeChunk",
+          "startLine": 156,
+          "endLine": 159,
+          "methods": [],
+          "properties": [
+            "idx",
+            "content"
+          ]
+        },
+        {
+          "name": "NovelProject",
+          "startLine": 162,
+          "endLine": 182,
+          "methods": [],
+          "properties": [
+            "id",
+            "title",
+            "synopsis",
+            "cover_path",
+            "knowledge_ids",
+            "knowledge_strategy",
+            "archived",
+            "word_count_min",
+            "word_count_max",
+            "chapter_count",
+            "created_at",
+            "updated_at"
+          ]
+        },
+        {
+          "name": "CreateNovelInput",
+          "startLine": 196,
+          "endLine": 203,
+          "methods": [],
+          "properties": [
+            "title",
+            "synopsis",
+            "knowledge_ids",
+            "knowledge_strategy"
+          ]
+        },
+        {
+          "name": "ChatTurn",
+          "startLine": 207,
+          "endLine": 210,
+          "methods": [],
+          "properties": [
+            "role",
+            "content"
+          ]
+        },
+        {
+          "name": "NovelCreateChatInput",
+          "startLine": 214,
+          "endLine": 219,
+          "methods": [],
+          "properties": [
+            "messages",
+            "force_create"
+          ]
+        },
+        {
+          "name": "NovelCreateChatResult",
+          "startLine": 222,
+          "endLine": 226,
+          "methods": [],
+          "properties": [
+            "reply",
+            "used_mock",
+            "novel"
+          ]
+        },
+        {
+          "name": "NodeKind",
+          "startLine": 230,
+          "endLine": 236,
+          "methods": [],
+          "properties": [
+            "Novel",
+            "Chapter",
+            "Character",
+            "SidePlot",
+            "Knowledge"
+          ]
+        },
+        {
+          "name": "TreeNode",
+          "startLine": 239,
+          "endLine": 266,
+          "methods": [],
+          "properties": [
+            "id",
+            "kind",
+            "label",
+            "outline",
+            "character",
+            "knowledge",
+            "linked_character_ids",
+            "linked_side_plot_ids",
+            "linked_knowledge_ids",
+            "position",
+            "word_count",
+            "word_count_min",
+            "word_count_max",
+            "chapter_count"
+          ]
+        },
+        {
+          "name": "NodePosition",
+          "startLine": 269,
+          "endLine": 272,
+          "methods": [],
+          "properties": [
+            "x",
+            "y"
+          ]
+        },
+        {
+          "name": "CharacterCard",
+          "startLine": 275,
+          "endLine": 282,
+          "methods": [],
+          "properties": [
+            "role",
+            "personality",
+            "motto",
+            "gender",
+            "style",
+            "alignment"
+          ]
+        },
+        {
+          "name": "KnowledgeCardPayload",
+          "startLine": 286,
+          "endLine": 294,
+          "methods": [],
+          "properties": [
+            "book_ids",
+            "extract_prompt",
+            "extracted"
+          ]
+        },
+        {
+          "name": "TreeEdge",
+          "startLine": 297,
+          "endLine": 309,
+          "methods": [],
+          "properties": [
+            "id",
+            "source",
+            "target",
+            "kind",
+            "source_handle",
+            "target_handle",
+            "label"
+          ]
+        },
+        {
+          "name": "NovelTree",
+          "startLine": 312,
+          "endLine": 316,
+          "methods": [],
+          "properties": [
+            "novel_id",
+            "nodes",
+            "edges"
+          ]
+        },
+        {
+          "name": "ChatMessage",
+          "startLine": 319,
+          "endLine": 325,
+          "methods": [],
+          "properties": [
+            "id",
+            "novel_id",
+            "role",
+            "content",
+            "created_at"
+          ]
+        },
+        {
+          "name": "GenerateResult",
+          "startLine": 328,
+          "endLine": 332,
+          "methods": [],
+          "properties": [
+            "content",
+            "used_mock",
+            "message"
+          ]
+        },
+        {
+          "name": "CardChatResult",
+          "startLine": 335,
+          "endLine": 338,
+          "methods": [],
+          "properties": [
+            "reply",
+            "tree"
+          ]
+        },
+        {
+          "name": "TokenUsageHourRow",
+          "startLine": 341,
+          "endLine": 347,
+          "methods": [],
+          "properties": [
+            "hour",
+            "model",
+            "prompt_tokens",
+            "completion_tokens",
+            "total_tokens"
+          ]
+        },
+        {
+          "name": "TokenUsageNovelRow",
+          "startLine": 350,
+          "endLine": 355,
+          "methods": [],
+          "properties": [
+            "novel_id",
+            "title",
+            "day_tokens",
+            "total_tokens"
+          ]
+        },
+        {
+          "name": "TokenUsageDay",
+          "startLine": 358,
+          "endLine": 363,
+          "methods": [],
+          "properties": [
+            "date",
+            "rows",
+            "models",
+            "novels"
+          ]
+        },
+        {
+          "name": "TokenUsageModelRow",
+          "startLine": 366,
+          "endLine": 369,
+          "methods": [],
+          "properties": [
+            "model",
+            "total_tokens"
+          ]
+        },
+        {
+          "name": "TokenUsageMonth",
+          "startLine": 372,
+          "endLine": 377,
+          "methods": [],
+          "properties": [
+            "month",
+            "total_tokens",
+            "models"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "AppSettings",
+          "line": 4,
+          "isDefault": false
+        },
+        {
+          "name": "ModelCatalog",
+          "line": 23,
+          "isDefault": false
+        },
+        {
+          "name": "all_ids",
+          "line": 39,
+          "isDefault": false
+        },
+        {
+          "name": "seed",
+          "line": 50,
+          "isDefault": false
+        },
+        {
+          "name": "SettingsView",
+          "line": 88,
+          "isDefault": false
+        },
+        {
+          "name": "SaveSettingsInput",
+          "line": 112,
+          "isDefault": false
+        },
+        {
+          "name": "KnowledgeBook",
+          "line": 142,
+          "isDefault": false
+        },
+        {
+          "name": "KnowledgeChunk",
+          "line": 156,
+          "isDefault": false
+        },
+        {
+          "name": "NovelProject",
+          "line": 162,
+          "isDefault": false
+        },
+        {
+          "name": "CreateNovelInput",
+          "line": 196,
+          "isDefault": false
+        },
+        {
+          "name": "ChatTurn",
+          "line": 207,
+          "isDefault": false
+        },
+        {
+          "name": "NovelCreateChatInput",
+          "line": 214,
+          "isDefault": false
+        },
+        {
+          "name": "NovelCreateChatResult",
+          "line": 222,
+          "isDefault": false
+        },
+        {
+          "name": "NodeKind",
+          "line": 230,
+          "isDefault": false
+        },
+        {
+          "name": "TreeNode",
+          "line": 239,
+          "isDefault": false
+        },
+        {
+          "name": "NodePosition",
+          "line": 269,
+          "isDefault": false
+        },
+        {
+          "name": "CharacterCard",
+          "line": 275,
+          "isDefault": false
+        },
+        {
+          "name": "KnowledgeCardPayload",
+          "line": 286,
+          "isDefault": false
+        },
+        {
+          "name": "TreeEdge",
+          "line": 297,
+          "isDefault": false
+        },
+        {
+          "name": "NovelTree",
+          "line": 312,
+          "isDefault": false
+        },
+        {
+          "name": "ChatMessage",
+          "line": 319,
+          "isDefault": false
+        },
+        {
+          "name": "GenerateResult",
+          "line": 328,
+          "isDefault": false
+        },
+        {
+          "name": "CardChatResult",
+          "line": 335,
+          "isDefault": false
+        },
+        {
+          "name": "TokenUsageHourRow",
+          "line": 341,
+          "isDefault": false
+        },
+        {
+          "name": "TokenUsageNovelRow",
+          "line": 350,
+          "isDefault": false
+        },
+        {
+          "name": "TokenUsageDay",
+          "line": 358,
+          "isDefault": false
+        },
+        {
+          "name": "TokenUsageModelRow",
+          "line": 366,
+          "isDefault": false
+        },
+        {
+          "name": "TokenUsageMonth",
+          "line": 372,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "all_ids",
+          "callee": "Vec::new",
+          "lineNumber": 40
+        },
+        {
+          "caller": "all_ids",
+          "callee": "ids.extend",
+          "lineNumber": 41
+        },
+        {
+          "caller": "all_ids",
+          "callee": "self.deepseek.iter().cloned",
+          "lineNumber": 41
+        },
+        {
+          "caller": "all_ids",
+          "callee": "self.deepseek.iter",
+          "lineNumber": 41
+        },
+        {
+          "caller": "all_ids",
+          "callee": "ids.extend",
+          "lineNumber": 42
+        },
+        {
+          "caller": "all_ids",
+          "callee": "self.gemini.iter().cloned",
+          "lineNumber": 42
+        },
+        {
+          "caller": "all_ids",
+          "callee": "self.gemini.iter",
+          "lineNumber": 42
+        },
+        {
+          "caller": "all_ids",
+          "callee": "ids.extend",
+          "lineNumber": 43
+        },
+        {
+          "caller": "all_ids",
+          "callee": "self.claude.iter().cloned",
+          "lineNumber": 43
+        },
+        {
+          "caller": "all_ids",
+          "callee": "self.claude.iter",
+          "lineNumber": 43
+        },
+        {
+          "caller": "all_ids",
+          "callee": "ids.extend",
+          "lineNumber": 44
+        },
+        {
+          "caller": "all_ids",
+          "callee": "self.grok.iter().cloned",
+          "lineNumber": 44
+        },
+        {
+          "caller": "all_ids",
+          "callee": "self.grok.iter",
+          "lineNumber": 44
+        },
+        {
+          "caller": "all_ids",
+          "callee": "ids.sort",
+          "lineNumber": 45
+        },
+        {
+          "caller": "all_ids",
+          "callee": "ids.dedup",
+          "lineNumber": 46
+        },
+        {
+          "caller": "seed",
+          "callee": "String::new",
+          "lineNumber": 61
+        },
+        {
+          "caller": "seed",
+          "callee": "Default::default",
+          "lineNumber": 62
+        },
+        {
+          "caller": "default",
+          "callee": "String::new",
+          "lineNumber": 70
+        },
+        {
+          "caller": "default",
+          "callee": "String::new",
+          "lineNumber": 71
+        },
+        {
+          "caller": "default",
+          "callee": "String::new",
+          "lineNumber": 72
+        },
+        {
+          "caller": "default",
+          "callee": "String::new",
+          "lineNumber": 73
+        },
+        {
+          "caller": "default",
+          "callee": "String::new",
+          "lineNumber": 74
+        },
+        {
+          "caller": "default",
+          "callee": "\"https://api.deepseek.com\".into",
+          "lineNumber": 75
+        },
+        {
+          "caller": "default",
+          "callee": "\"deepseek-chat\".into",
+          "lineNumber": 76
+        },
+        {
+          "caller": "default",
+          "callee": "\"deepseek-v4-flash\".into",
+          "lineNumber": 77
+        },
+        {
+          "caller": "default",
+          "callee": "\"deepseek-v4-flash\".into",
+          "lineNumber": 78
+        },
+        {
+          "caller": "default",
+          "callee": "\"deepseek-v4-flash\".into",
+          "lineNumber": 79
+        },
+        {
+          "caller": "default",
+          "callee": "\"deepseek-reasoner\".into",
+          "lineNumber": 80
+        },
+        {
+          "caller": "default",
+          "callee": "\"deepseek-v4-flash\".into",
+          "lineNumber": 81
+        },
+        {
+          "caller": "default",
+          "callee": "\"system\".into",
+          "lineNumber": 82
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 28,
+        "functionCount": 6,
+        "classCount": 26
+      }
+    },
+    {
+      "path": "src-tauri/src/sample.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 235,
+      "nonEmptyLines": 229,
+      "functions": [
+        {
+          "name": "ensure_sample",
+          "startLine": 8,
+          "endLine": 37,
+          "params": [
+            "db"
+          ]
+        },
+        {
+          "name": "sample_tree",
+          "startLine": 39,
+          "endLine": 235,
+          "params": [
+            "novel_id"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "ensure_sample",
+          "line": 8,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "ensure_sample",
+          "callee": "db.list_novels()?.is_empty",
+          "lineNumber": 9
+        },
+        {
+          "caller": "ensure_sample",
+          "callee": "db.list_novels",
+          "lineNumber": 9
+        },
+        {
+          "caller": "ensure_sample",
+          "callee": "Ok",
+          "lineNumber": 10
+        },
+        {
+          "caller": "ensure_sample",
+          "callee": "\"sample-demo-novel\".to_string",
+          "lineNumber": 13
+        },
+        {
+          "caller": "ensure_sample",
+          "callee": "Utc::now().to_rfc3339",
+          "lineNumber": 14
+        },
+        {
+          "caller": "ensure_sample",
+          "callee": "Utc::now",
+          "lineNumber": 14
+        },
+        {
+          "caller": "ensure_sample",
+          "callee": "id.clone",
+          "lineNumber": 16
+        },
+        {
+          "caller": "ensure_sample",
+          "callee": "\"雾港回声（示例）\".into",
+          "lineNumber": 17
+        },
+        {
+          "caller": "ensure_sample",
+          "callee": "\"一座被潮汐淹没的港口，少年带着旧地图寻找失踪的灯塔看守人。\".into",
+          "lineNumber": 18
+        },
+        {
+          "caller": "ensure_sample",
+          "callee": "\"参考知识库中的叙事节奏与人物出场节点。\".into",
+          "lineNumber": 21
+        },
+        {
+          "caller": "ensure_sample",
+          "callee": "now.clone",
+          "lineNumber": 26
+        },
+        {
+          "caller": "ensure_sample",
+          "callee": "db.upsert_novel",
+          "lineNumber": 29
+        },
+        {
+          "caller": "ensure_sample",
+          "callee": "serde_json::to_string_pretty",
+          "lineNumber": 31
+        },
+        {
+          "caller": "ensure_sample",
+          "callee": "fs::write",
+          "lineNumber": 32
+        },
+        {
+          "caller": "ensure_sample",
+          "callee": "novel_meta_path",
+          "lineNumber": 32
+        },
+        {
+          "caller": "ensure_sample",
+          "callee": "sample_tree",
+          "lineNumber": 34
+        },
+        {
+          "caller": "ensure_sample",
+          "callee": "fs::write",
+          "lineNumber": 35
+        },
+        {
+          "caller": "ensure_sample",
+          "callee": "novel_tree_path",
+          "lineNumber": 35
+        },
+        {
+          "caller": "ensure_sample",
+          "callee": "serde_json::to_string_pretty",
+          "lineNumber": 35
+        },
+        {
+          "caller": "ensure_sample",
+          "callee": "Ok",
+          "lineNumber": 36
+        },
+        {
+          "caller": "sample_tree",
+          "callee": "novel_id.into",
+          "lineNumber": 49
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 1,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    }
+  ]
+}

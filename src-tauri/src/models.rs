@@ -1,13 +1,62 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompatProvider {
+    pub id: String,
+    pub label: String,
+    /// currently only "openai"
+    pub protocol: String,
+    pub base_url: String,
+    pub api_key: String,
+    #[serde(default)]
+    pub models: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompatProviderView {
+    pub id: String,
+    pub label: String,
+    pub protocol: String,
+    pub base_url: String,
+    pub api_key_masked: String,
+    pub api_key_configured: bool,
+    pub models: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveCompatProviderInput {
+    pub id: String,
+    pub label: String,
+    pub protocol: String,
+    pub base_url: String,
+    /// empty / null / masked → keep existing key on update
+    #[serde(default)]
+    pub api_key: Option<String>,
+    #[serde(default)]
+    pub models: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppSettings {
+    /// OpenAI-compatible endpoints (DeepSeek / Kimi / custom). Primary LLM path.
+    #[serde(default)]
+    pub compat_providers: Vec<CompatProvider>,
+    /// Legacy keys — migration only; LLM routes via compat_providers.
+    #[serde(default)]
     pub deepseek_api_key: String,
+    #[serde(default)]
     pub chatgpt_api_key: String,
     pub gemini_api_key: String,
     pub claude_api_key: String,
+    #[serde(default)]
     pub grok_api_key: String,
+    #[serde(default)]
+    pub kimi_api_key: String,
+    #[serde(default)]
     pub deepseek_base_url: String,
+    #[serde(default)]
+    pub kimi_base_url: String,
     /// llm::complete 未指定模型时的回退
     pub default_model: String,
     pub create_model: String,
@@ -17,6 +66,55 @@ pub struct AppSettings {
     pub knowledge_model: String,
     /// UI 语言：system | en | zh-CN | zh-TW | ja | de | fr
     pub ui_locale: String,
+    /// MCP Streamable HTTP 端口
+    #[serde(default = "default_mcp_port")]
+    pub mcp_port: u16,
+    /// 是否随应用启动 MCP 服务
+    #[serde(default = "default_true")]
+    pub mcp_enabled: bool,
+    /// 是否允许局域网访问 MCP（监听 0.0.0.0）
+    #[serde(default)]
+    pub mcp_lan: bool,
+}
+
+fn default_mcp_port() -> u16 {
+    17832
+}
+
+fn default_true() -> bool {
+    true
+}
+
+impl AppSettings {
+    pub fn any_compat_key(&self) -> bool {
+        self.compat_providers
+            .iter()
+            .any(|p| !p.api_key.trim().is_empty())
+    }
+
+    pub fn all_compat_model_ids(&self) -> Vec<String> {
+        let mut ids = Vec::new();
+        for p in &self.compat_providers {
+            ids.extend(p.models.iter().cloned());
+        }
+        ids.sort();
+        ids.dedup();
+        ids
+    }
+
+    pub fn resolve_compat<'a>(&'a self, model: &str) -> Option<&'a CompatProvider> {
+        let m = model.trim();
+        if let Some(p) = self
+            .compat_providers
+            .iter()
+            .find(|p| !p.api_key.trim().is_empty() && p.models.iter().any(|x| x == m))
+        {
+            return Some(p);
+        }
+        self.compat_providers
+            .iter()
+            .find(|p| !p.api_key.trim().is_empty())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -30,6 +128,11 @@ pub struct ModelCatalog {
     #[serde(default)]
     pub grok: Vec<String>,
     #[serde(default)]
+    pub kimi: Vec<String>,
+    /// Flattened ids from all compat providers (for task dropdowns).
+    #[serde(default)]
+    pub compat: Vec<String>,
+    #[serde(default)]
     pub updated_at: String,
     #[serde(default)]
     pub errors: std::collections::HashMap<String, String>,
@@ -38,10 +141,12 @@ pub struct ModelCatalog {
 impl ModelCatalog {
     pub fn all_ids(&self) -> Vec<String> {
         let mut ids = Vec::new();
+        ids.extend(self.compat.iter().cloned());
         ids.extend(self.deepseek.iter().cloned());
         ids.extend(self.gemini.iter().cloned());
         ids.extend(self.claude.iter().cloned());
         ids.extend(self.grok.iter().cloned());
+        ids.extend(self.kimi.iter().cloned());
         ids.sort();
         ids.dedup();
         ids
@@ -49,15 +154,12 @@ impl ModelCatalog {
 
     pub fn seed() -> Self {
         Self {
-            deepseek: vec![
-                "deepseek-v4-flash".into(),
-                "deepseek-v4-pro".into(),
-                "deepseek-chat".into(),
-                "deepseek-reasoner".into(),
-            ],
+            deepseek: vec![],
             gemini: vec![],
             claude: vec![],
             grok: vec![],
+            kimi: vec![],
+            compat: vec![],
             updated_at: String::new(),
             errors: Default::default(),
         }
@@ -67,12 +169,15 @@ impl ModelCatalog {
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
+            compat_providers: vec![],
             deepseek_api_key: String::new(),
             chatgpt_api_key: String::new(),
             gemini_api_key: String::new(),
             claude_api_key: String::new(),
             grok_api_key: String::new(),
+            kimi_api_key: String::new(),
             deepseek_base_url: "https://api.deepseek.com".into(),
+            kimi_base_url: "https://api.moonshot.ai".into(),
             default_model: "deepseek-chat".into(),
             create_model: "deepseek-v4-flash".into(),
             generate_model: "deepseek-v4-flash".into(),
@@ -80,23 +185,20 @@ impl Default for AppSettings {
             refine_model: "deepseek-reasoner".into(),
             knowledge_model: "deepseek-v4-flash".into(),
             ui_locale: "system".into(),
+            mcp_port: default_mcp_port(),
+            mcp_enabled: true,
+            mcp_lan: false,
         }
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SettingsView {
-    pub deepseek_api_key_masked: String,
-    pub deepseek_api_key_configured: bool,
-    pub chatgpt_api_key_masked: String,
-    pub chatgpt_api_key_configured: bool,
+    pub compat_providers: Vec<CompatProviderView>,
     pub gemini_api_key_masked: String,
     pub gemini_api_key_configured: bool,
     pub claude_api_key_masked: String,
     pub claude_api_key_configured: bool,
-    pub grok_api_key_masked: String,
-    pub grok_api_key_configured: bool,
-    pub deepseek_base_url: String,
     pub default_model: String,
     pub create_model: String,
     pub generate_model: String,
@@ -105,23 +207,20 @@ pub struct SettingsView {
     pub knowledge_model: String,
     pub model_catalog: ModelCatalog,
     pub ui_locale: String,
+    pub mcp_port: u16,
+    pub mcp_enabled: bool,
+    pub mcp_lan: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SaveSettingsInput {
-    #[serde(default, alias = "deepseek_api_key")]
-    pub deepseek_api_key: Option<String>,
-    #[serde(default, alias = "chatgpt_api_key")]
-    pub chatgpt_api_key: Option<String>,
+    #[serde(default, alias = "compat_providers")]
+    pub compat_providers: Option<Vec<SaveCompatProviderInput>>,
     #[serde(default, alias = "gemini_api_key")]
     pub gemini_api_key: Option<String>,
     #[serde(default, alias = "claude_api_key")]
     pub claude_api_key: Option<String>,
-    #[serde(default, alias = "grok_api_key")]
-    pub grok_api_key: Option<String>,
-    #[serde(default, alias = "deepseek_base_url")]
-    pub deepseek_base_url: Option<String>,
     #[serde(default, alias = "default_model")]
     pub default_model: Option<String>,
     #[serde(default, alias = "create_model")]
@@ -136,6 +235,12 @@ pub struct SaveSettingsInput {
     pub knowledge_model: Option<String>,
     #[serde(default, alias = "ui_locale")]
     pub ui_locale: Option<String>,
+    #[serde(default, alias = "mcp_port")]
+    pub mcp_port: Option<u16>,
+    #[serde(default, alias = "mcp_enabled")]
+    pub mcp_enabled: Option<bool>,
+    #[serde(default, alias = "mcp_lan")]
+    pub mcp_lan: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -164,8 +269,12 @@ pub struct NovelProject {
     pub title: String,
     pub synopsis: String,
     pub cover_path: Option<String>,
+    /// 遗留字段：不再作为小说设定源（写作只看树上知识卡）。
     pub knowledge_ids: Vec<String>,
     pub knowledge_strategy: String,
+    /// 遗留字段：不再注入写作。
+    #[serde(default = "default_canon_mode")]
+    pub canon_mode: String,
     #[serde(default)]
     pub archived: bool,
     /// 每章目标字数下限
@@ -179,6 +288,10 @@ pub struct NovelProject {
     pub chapter_count: u32,
     pub created_at: String,
     pub updated_at: String,
+}
+
+fn default_canon_mode() -> String {
+    "reference".into()
 }
 
 fn default_word_min() -> u32 {
@@ -216,6 +329,9 @@ pub struct NovelCreateChatInput {
     /// 用户点「生成并进入工作台」时为 true，强制收束并建书
     #[serde(default)]
     pub force_create: bool,
+    /// 面板所选模型；空则用 settings.create_model
+    #[serde(default)]
+    pub model: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -225,10 +341,12 @@ pub struct NovelCreateChatResult {
     pub novel: Option<NovelProject>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum NodeKind {
     Novel,
+    /// 可选分卷：挂在根下，章节可挂在分卷下
+    Volume,
     Chapter,
     Character,
     SidePlot,
@@ -245,6 +363,9 @@ pub struct TreeNode {
     /// 知识卡载荷（仅 kind=knowledge）
     #[serde(default)]
     pub knowledge: Option<KnowledgeCardPayload>,
+    /// 剧情卡状态（仅 kind=side_plot；缺省=进行中且未吸收）
+    #[serde(default)]
+    pub side_plot: Option<SidePlotMeta>,
     pub linked_character_ids: Vec<String>,
     pub linked_side_plot_ids: Vec<String>,
     /// 本章/根节点挂载的知识卡 id
@@ -265,7 +386,60 @@ pub struct TreeNode {
     pub chapter_count: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// 剧情卡元数据：跨章整理用状态；已吸收的章内卡保留回查但不注入生成。
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SidePlotMeta {
+    /// `active` | `resolved` | `deferred`；空串视为 active
+    #[serde(default)]
+    pub status: String,
+    /// 已被「整理剧情」吸收进根跨章卡
+    #[serde(default)]
+    pub absorbed: bool,
+}
+
+impl SidePlotMeta {
+    pub fn active() -> Self {
+        Self {
+            status: "active".into(),
+            absorbed: false,
+        }
+    }
+
+    pub fn is_injectable(&self) -> bool {
+        if self.absorbed {
+            return false;
+        }
+        let s = self.status.trim();
+        s.is_empty() || s.eq_ignore_ascii_case("active")
+    }
+}
+
+#[cfg(test)]
+mod side_plot_meta_tests {
+    use super::SidePlotMeta;
+
+    #[test]
+    fn injectable_rules() {
+        assert!(SidePlotMeta::active().is_injectable());
+        assert!(SidePlotMeta {
+            status: String::new(),
+            absorbed: false
+        }
+        .is_injectable());
+        assert!(!SidePlotMeta {
+            status: "resolved".into(),
+            absorbed: false
+        }
+        .is_injectable());
+        assert!(!SidePlotMeta {
+            status: "active".into(),
+            absorbed: true
+        }
+        .is_injectable());
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct NodePosition {
     pub x: f64,
     pub y: f64,
@@ -281,7 +455,7 @@ pub struct CharacterCard {
     pub alignment: String,
 }
 
-/// 树上的知识卡：选中若干知识库 + 提取需求 → AI 写出可参考特征。
+/// 树上的知识卡：勾选公共库后，完整导入或 AI 提炼后写入 `extracted`。
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct KnowledgeCardPayload {
     #[serde(default)]
@@ -291,6 +465,26 @@ pub struct KnowledgeCardPayload {
     /// AI 提取后的主要特征（写作时注入）
     #[serde(default)]
     pub extracted: String,
+    /// 遗留：旧「同步设定卡」标记；写作不再按此注入公共库。
+    #[serde(default)]
+    pub from_canon: bool,
+}
+
+/// 跨小说共用的知识卡目录（无版本号；挂到树上时复制一份）。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PublicKnowledgeCard {
+    pub id: String,
+    pub title: String,
+    #[serde(default)]
+    pub book_ids: Vec<String>,
+    #[serde(default)]
+    pub extract_prompt: String,
+    #[serde(default)]
+    pub extracted: String,
+    pub created_at: String,
+    pub updated_at: String,
+    #[serde(default)]
+    pub archived: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -313,15 +507,6 @@ pub struct NovelTree {
     pub novel_id: String,
     pub nodes: Vec<TreeNode>,
     pub edges: Vec<TreeEdge>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChatMessage {
-    pub id: String,
-    pub novel_id: String,
-    pub role: String,
-    pub content: String,
-    pub created_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -353,12 +538,6 @@ pub struct ChapterMemoryGroup {
     pub node_id: String,
     pub label: String,
     pub items: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CardChatResult {
-    pub reply: String,
-    pub tree: NovelTree,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
