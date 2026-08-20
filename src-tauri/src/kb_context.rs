@@ -1,25 +1,22 @@
 //! Context budgets + knowledge retrieval for writing/outline prompts.
-//! Keyword always works; embeddings via OpenAI-compat when a provider key exists.
+//! Keyword always works; knowledge embeddings via local MiniLM
+//! (`paraphrase-multilingual-MiniLM-L12-v2` / fastembed).
 use crate::chapter_memory;
 use crate::db::Db;
-use crate::models::AppSettings;
 use anyhow::{anyhow, Result};
-use serde::Deserialize;
+use once_cell::sync::Lazy;
+use parking_lot::Mutex;
 
 /// Per knowledge-card extract cap (chars).
 pub const KNOWLEDGE_CARD_EXTRACT_CAP: usize = 500;
 /// Root-linked knowledge cards total budget.
 pub const ROOT_KNOWLEDGE_TOTAL_CAP: usize = 2000;
-/// from_canon setting card cap.
-pub const FROM_CANON_CARD_CAP: usize = 800;
-/// Canon retrieval: top-k chunks.
+/// Knowledge retrieval: top-k chunks (`search_knowledge`).
 pub const CANON_RETRIEVE_K: usize = 5;
 /// Recall pool before rule rerank (also at least `k * 4`).
 pub const CANON_RECALL_N: usize = 20;
-/// Canon retrieval: chars per chunk.
+/// Knowledge retrieval: chars per chunk.
 pub const CANON_CHUNK_CAP: usize = 400;
-/// Hard cap for entire canon block.
-pub const CANON_BLOCK_CAP: usize = 3000;
 /// Chapter memory facts injected into refine/outline.
 pub const MEMORY_RETRIEVE_K: usize = 6;
 pub const MEMORY_FACT_CAP: usize = 300;
@@ -123,6 +120,48 @@ pub fn retrieve_knowledge(
     }
 
     retrieve_knowledge_from_rows(&rows, query, k, chunk_cap, Some(&recall_bonus))
+}
+
+/// Concatenate public-library chunks for a knowledge card “full import”.
+/// Prefers analysis / TOC chunks; stops at `max_chars`.
+pub fn gather_knowledge_corpus(
+    db: &Db,
+    book_ids: &[String],
+    max_chars: usize,
+) -> Result<String> {
+    let mut out = String::new();
+    for bid in book_ids {
+        let book = db
+            .get_knowledge(bid)
+            .map_err(|e| anyhow!("{e}"))?
+            .ok_or_else(|| anyhow!("知识库不存在: {bid}"))?;
+        if book.archived {
+            continue;
+        }
+        let chunks = db
+            .list_knowledge_chunks(bid)
+            .map_err(|e| anyhow!("{e}"))?;
+        out.push_str(&format!("### 《{}》· {}\n", book.title, book.author));
+        let mut ordered = chunks;
+        ordered.sort_by_key(|c| {
+            let p = if c.content.contains("【知识库分析】") {
+                0
+            } else if c.content.contains("【目录】") {
+                1
+            } else {
+                2
+            };
+            (p, c.idx)
+        });
+        for c in ordered.into_iter().take(24) {
+            let piece = format!("{}\n\n", c.content);
+            if out.chars().count() + piece.chars().count() > max_chars {
+                return Ok(out);
+            }
+            out.push_str(&piece);
+        }
+    }
+    Ok(out)
 }
 
 fn recall_pool_size(k: usize) -> usize {
@@ -273,104 +312,307 @@ fn cosine(a: &[f32], b: &[f32]) -> f32 {
     }
 }
 
-/// Sync embed for retrieve path (spawn_blocking not needed — small query).
-fn embed_query_blocking(db: &Db, query: &str) -> Result<Option<Vec<f32>>> {
-    let settings = db.get_settings()?;
-    let rt = tokio::runtime::Handle::try_current();
-    match rt {
-        Ok(handle) => {
-            // We're likely already on async runtime inside tauri; block_in_place
-            tokio::task::block_in_place(|| {
-                handle.block_on(async { embed_texts(&settings, &[query.to_string()]).await })
-            })
-            .map(|v| v.into_iter().next())
-        }
-        Err(_) => {
-            let rt = tokio::runtime::Runtime::new()?;
-            rt.block_on(async { embed_texts(&settings, &[query.to_string()]).await })
-                .map(|v| v.into_iter().next())
-        }
+/// Sync embed for retrieve path.
+fn embed_query_blocking(_db: &Db, query: &str) -> Result<Option<Vec<f32>>> {
+    let q = query.to_string();
+    let vectors = embed_texts_blocking(&[q], None)?;
+    Ok(vectors.into_iter().next())
+}
+
+static LOCAL_EMBEDDER: Lazy<Mutex<Option<fastembed::TextEmbedding>>> =
+    Lazy::new(|| Mutex::new(None));
+
+fn emit_kb_model_progress(app: Option<&tauri::AppHandle>, payload: serde_json::Value) {
+    if let Some(app) = app {
+        use tauri::Emitter;
+        let _ = app.emit("knowledge-model-progress", payload);
     }
 }
 
-fn embeddings_url(base: &str) -> String {
-    let b = base.trim_end_matches('/');
-    if b.ends_with("/v1") {
-        format!("{b}/embeddings")
+/// HF hubs that serve full files without requiring Content-Range (hf-hub Range GET breaks on many mirrors/CDNs).
+fn hf_base_urls() -> Vec<String> {
+    let mut out = Vec::new();
+    if let Ok(ep) = std::env::var("HF_ENDPOINT") {
+        let ep = ep.trim().trim_end_matches('/').to_string();
+        if !ep.is_empty() {
+            out.push(ep);
+        }
+    }
+    for b in ["https://huggingface.co", "https://hf-mirror.com"] {
+        if !out.iter().any(|x| x == b) {
+            out.push(b.to_string());
+        }
+    }
+    out
+}
+
+const MINILM_REPO: &str = "Xenova/paraphrase-multilingual-MiniLM-L12-v2";
+const MINILM_FILES: &[&str] = &[
+    "onnx/model.onnx",
+    "tokenizer.json",
+    "config.json",
+    "special_tokens_map.json",
+    "tokenizer_config.json",
+];
+
+/// Approximate share of total download (onnx dominates).
+fn minilm_file_weight(rel: &str) -> f64 {
+    if rel.ends_with("model.onnx") {
+        0.90
     } else {
-        format!("{b}/v1/embeddings")
+        0.10 / (MINILM_FILES.len().saturating_sub(1).max(1) as f64)
     }
 }
 
-/// OpenAI-compat embeddings; uses first compat provider with a key.
-pub async fn embed_texts(settings: &AppSettings, texts: &[String]) -> Result<Vec<Vec<f32>>> {
-    let p = settings
-        .compat_providers
-        .iter()
-        .find(|p| !p.api_key.trim().is_empty() && p.protocol == "openai")
-        .ok_or_else(|| anyhow!("no openai compat provider for embeddings"))?;
+fn minilm_model_dir() -> std::path::PathBuf {
+    let p = crate::paths::embed_models_dir().join("paraphrase-multilingual-MiniLM-L12-v2");
+    std::fs::create_dir_all(&p).ok();
+    p
+}
+
+fn download_url_to_file(
+    url: &str,
+    dest: &std::path::Path,
+    mut on_bytes: impl FnMut(u64, Option<u64>),
+) -> Result<()> {
+    use std::io::Read;
+    if let Some(parent) = dest.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let tmp = dest.with_extension("download");
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(600))
+        .redirect(reqwest::redirect::Policy::limited(10))
+        .build()
+        .map_err(|e| anyhow!("http client: {e}"))?;
+    // Full GET only — no Range header (avoids "Header Content-Range is missing").
+    let mut resp = client
+        .get(url)
+        .send()
+        .map_err(|e| anyhow!("GET {url}: {e}"))?
+        .error_for_status()
+        .map_err(|e| anyhow!("GET {url}: {e}"))?;
+    let total = resp.content_length();
+    let mut file = std::fs::File::create(&tmp).map_err(|e| anyhow!("create {tmp:?}: {e}"))?;
+    let mut buf = [0u8; 64 * 1024];
+    let mut done = 0u64;
+    let mut last_emit = 0u64;
+    on_bytes(0, total);
+    loop {
+        let n = resp
+            .read(&mut buf)
+            .map_err(|e| anyhow!("read body: {e}"))?;
+        if n == 0 {
+            break;
+        }
+        use std::io::Write;
+        file.write_all(&buf[..n])
+            .map_err(|e| anyhow!("write {tmp:?}: {e}"))?;
+        done += n as u64;
+        let step = total.map(|t| (t / 50).max(256 * 1024)).unwrap_or(512 * 1024);
+        if done - last_emit >= step || total == Some(done) {
+            last_emit = done;
+            on_bytes(done, total);
+        }
+    }
+    on_bytes(done, total.or(Some(done)));
+    file.sync_all().ok();
+    drop(file);
+    std::fs::rename(&tmp, dest).map_err(|e| anyhow!("rename to {dest:?}: {e}"))?;
+    Ok(())
+}
+
+fn ensure_minilm_file(
+    rel: &str,
+    app: Option<&tauri::AppHandle>,
+    file_index: usize,
+    weight_before: f64,
+    weight: f64,
+) -> Result<std::path::PathBuf> {
+    let dest = minilm_model_dir().join(rel);
+    let file_total = MINILM_FILES.len();
+    if dest.is_file() {
+        let len = dest.metadata().map(|m| m.len()).unwrap_or(0);
+        if len > 0 {
+            emit_kb_model_progress(
+                app,
+                serde_json::json!({
+                    "phase": "download",
+                    "file": rel,
+                    "fileIndex": file_index,
+                    "fileTotal": file_total,
+                    "bytesDownloaded": len,
+                    "bytesTotal": len,
+                    "percent": ((weight_before + weight) * 90.0).round() as u32,
+                }),
+            );
+            return Ok(dest);
+        }
+    }
+    let mut last = None;
+    for base in hf_base_urls() {
+        let url = format!("{base}/{MINILM_REPO}/resolve/main/{rel}");
+        let app_ref = app;
+        match download_url_to_file(&url, &dest, |done, total| {
+            let frac = match total {
+                Some(t) if t > 0 => (done as f64 / t as f64).clamp(0.0, 1.0),
+                _ => 0.0,
+            };
+            let percent = ((weight_before + weight * frac) * 90.0).round() as u32;
+            emit_kb_model_progress(
+                app_ref,
+                serde_json::json!({
+                    "phase": "download",
+                    "file": rel,
+                    "fileIndex": file_index,
+                    "fileTotal": file_total,
+                    "bytesDownloaded": done,
+                    "bytesTotal": total,
+                    "percent": percent.min(90),
+                }),
+            );
+        }) {
+            Ok(()) => return Ok(dest),
+            Err(e) => {
+                let _ = std::fs::remove_file(dest.with_extension("download"));
+                last = Some(e);
+            }
+        }
+    }
+    Err(last.unwrap_or_else(|| anyhow!("无法下载 {rel}")))
+}
+
+fn load_local_minilm(app: Option<&tauri::AppHandle>) -> Result<fastembed::TextEmbedding> {
+    let mut weight_before = 0.0;
+    for (i, rel) in MINILM_FILES.iter().enumerate() {
+        let w = minilm_file_weight(rel);
+        ensure_minilm_file(rel, app, i + 1, weight_before, w)?;
+        weight_before += w;
+    }
+    emit_kb_model_progress(
+        app,
+        serde_json::json!({
+            "phase": "load",
+            "file": "onnx/model.onnx",
+            "fileIndex": MINILM_FILES.len(),
+            "fileTotal": MINILM_FILES.len(),
+            "percent": 92,
+        }),
+    );
+    let dir = minilm_model_dir();
+    let onnx =
+        std::fs::read(dir.join("onnx/model.onnx")).map_err(|e| anyhow!("read onnx: {e}"))?;
+    let tokenizer_files = fastembed::TokenizerFiles {
+        tokenizer_file: std::fs::read(dir.join("tokenizer.json"))
+            .map_err(|e| anyhow!("read tokenizer.json: {e}"))?,
+        config_file: std::fs::read(dir.join("config.json"))
+            .map_err(|e| anyhow!("read config.json: {e}"))?,
+        special_tokens_map_file: std::fs::read(dir.join("special_tokens_map.json"))
+            .map_err(|e| anyhow!("read special_tokens_map.json: {e}"))?,
+        tokenizer_config_file: std::fs::read(dir.join("tokenizer_config.json"))
+            .map_err(|e| anyhow!("read tokenizer_config.json: {e}"))?,
+    };
+    let model = fastembed::UserDefinedEmbeddingModel::new(onnx, tokenizer_files)
+        .with_pooling(fastembed::Pooling::Mean);
+    let emb = fastembed::TextEmbedding::try_new_from_user_defined(
+        model,
+        fastembed::InitOptionsUserDefined::new(),
+    )
+    .map_err(|e| anyhow!("load MiniLM onnx: {e}"))?;
+    emit_kb_model_progress(
+        app,
+        serde_json::json!({
+            "phase": "ready",
+            "percent": 95,
+        }),
+    );
+    Ok(emb)
+}
+
+fn with_local_embedder<R>(
+    app: Option<&tauri::AppHandle>,
+    f: impl FnOnce(&mut fastembed::TextEmbedding) -> Result<R>,
+) -> Result<R> {
+    let mut guard = LOCAL_EMBEDDER.lock();
+    if guard.is_none() {
+        // 自管下载到 app data（整文件 GET），绕过 hf-hub 的 Range/Content-Range 问题
+        let model = load_local_minilm(app).map_err(|e| {
+            anyhow!(
+                "init local MiniLM: {e}\n\
+                 模型会缓存到 {:?}。可设置 HF_ENDPOINT（如 https://hf-mirror.com）后重试。",
+                minilm_model_dir()
+            )
+        })?;
+        *guard = Some(model);
+    }
+    f(guard.as_mut().expect("embedder just initialized"))
+}
+
+fn embed_texts_blocking(
+    texts: &[String],
+    app: Option<&tauri::AppHandle>,
+) -> Result<Vec<Vec<f32>>> {
     if texts.is_empty() {
         return Ok(vec![]);
     }
-    #[derive(Deserialize)]
-    struct EmbResp {
-        data: Vec<EmbItem>,
-    }
-    #[derive(Deserialize)]
-    struct EmbItem {
-        embedding: Vec<f32>,
-        index: usize,
-    }
-    // Common OpenAI-compat embedding model ids; providers may alias.
-    let model = "text-embedding-3-small";
-    let body = serde_json::json!({
-        "model": model,
-        "input": texts,
-    });
-    let client = reqwest::Client::new();
-    let resp = client
-        .post(embeddings_url(&p.base_url))
-        .bearer_auth(&p.api_key)
-        .json(&body)
-        .send()
-        .await?;
-    if !resp.status().is_success() {
-        let status = resp.status();
-        let text = resp.text().await.unwrap_or_default();
-        return Err(anyhow!("embeddings {status}: {text}"));
-    }
-    let parsed: EmbResp = resp.json().await?;
-    let mut out = vec![Vec::new(); texts.len()];
-    for item in parsed.data {
-        if item.index < out.len() {
-            out[item.index] = item.embedding;
-        }
-    }
-    if out.iter().any(|v| v.is_empty()) {
-        return Err(anyhow!("incomplete embedding response"));
-    }
-    Ok(out)
+    let docs = texts.to_vec();
+    with_local_embedder(app, |model| {
+        model
+            .embed(docs, None)
+            .map_err(|e| anyhow!("local embed: {e}"))
+    })
 }
 
-/// Index all chunks for a book (best-effort).
-pub async fn index_book_embeddings(db: &Db, settings: &AppSettings, book_id: &str) -> Result<usize> {
+/// Local MiniLM embeddings (paraphrase-multilingual-MiniLM-L12-v2).
+pub async fn embed_texts(
+    texts: &[String],
+    app: Option<tauri::AppHandle>,
+) -> Result<Vec<Vec<f32>>> {
+    let texts = texts.to_vec();
+    tokio::task::spawn_blocking(move || embed_texts_blocking(&texts, app.as_ref()))
+        .await
+        .map_err(|e| anyhow!("embed join: {e}"))?
+}
+
+/// Index all chunks for a book with local MiniLM.
+pub async fn index_book_embeddings(
+    db: &Db,
+    book_id: &str,
+    app: Option<tauri::AppHandle>,
+) -> Result<usize> {
     let chunks = db.list_knowledge_chunks(book_id)?;
     if chunks.is_empty() {
         return Ok(0);
     }
-    // Batch to avoid huge payloads
+    let total = chunks.len();
     let mut n = 0;
     for batch in chunks.chunks(16) {
         let texts: Vec<String> = batch.iter().map(|c| c.content.clone()).collect();
-        let vectors = match embed_texts(settings, &texts).await {
-            Ok(v) => v,
-            Err(_) => return Ok(n),
-        };
+        let vectors = embed_texts(&texts, app.clone()).await?;
         for (c, vec) in batch.iter().zip(vectors.into_iter()) {
             db.upsert_knowledge_embedding(book_id, c.idx as i64, &vec)?;
             n += 1;
         }
+        let percent = 95 + ((n as f64 / total as f64) * 5.0).round() as u32;
+        emit_kb_model_progress(
+            app.as_ref(),
+            serde_json::json!({
+                "phase": "embed",
+                "done": n,
+                "total": total,
+                "percent": percent.min(100),
+            }),
+        );
     }
+    emit_kb_model_progress(
+        app.as_ref(),
+        serde_json::json!({
+            "phase": "done",
+            "done": n,
+            "total": total,
+            "percent": 100,
+        }),
+    );
     Ok(n)
 }
 

@@ -35,6 +35,23 @@ export type SettingsView = {
   knowledge_model: string;
   model_catalog: ModelCatalog;
   ui_locale: string;
+  mcp_port: number;
+  mcp_enabled: boolean;
+  mcp_lan: boolean;
+};
+
+export type McpStatus = {
+  running: boolean;
+  port: number;
+  endpoint: string;
+  lan_enabled: boolean;
+  lan_endpoint: string | null;
+  error: string | null;
+};
+
+export type SkillSlashHint = {
+  cmd: string;
+  hint: string;
 };
 
 export type SkillPreviewItem = {
@@ -45,10 +62,14 @@ export type SkillPreviewItem = {
   tags: string[];
   hint: string | null;
   body_preview: string;
+  builtin?: boolean;
+  slash_hints?: SkillSlashHint[];
 };
 
 export type SkillsPreview = {
   root: string;
+  bundled?: string;
+  user?: string;
   exists: boolean;
   skills: SkillPreviewItem[];
 };
@@ -110,6 +131,17 @@ export type KnowledgeCardPayload = {
   from_canon?: boolean;
 };
 
+export type PublicKnowledgeCard = {
+  id: string;
+  title: string;
+  book_ids: string[];
+  extract_prompt: string;
+  extracted: string;
+  created_at: string;
+  updated_at: string;
+  archived: boolean;
+};
+
 export type SidePlotMeta = {
   /** active | resolved | deferred */
   status: string;
@@ -118,7 +150,7 @@ export type SidePlotMeta = {
 
 export type TreeNode = {
   id: string;
-  kind: "novel" | "chapter" | "character" | "side_plot" | "knowledge";
+  kind: "novel" | "volume" | "chapter" | "character" | "side_plot" | "knowledge";
   label: string;
   outline: string;
   character: CharacterCard | null;
@@ -151,11 +183,8 @@ export type NovelTree = {
   edges: TreeEdge[];
 };
 
-export type ChatMessage = {
+export type GlobalChatMessage = {
   id: string;
-  novel_id: string;
-  /** 空 = 根创作 Chat；非空 = 卡片 Chat */
-  node_id?: string;
   role: string;
   content: string;
   created_at: string;
@@ -171,11 +200,6 @@ export type ChapterMemoryGroup = {
   node_id: string;
   label: string;
   items: string[];
-};
-
-export type CardChatResult = {
-  reply: string;
-  tree: NovelTree;
 };
 
 export type TokenUsageHourRow = {
@@ -233,15 +257,9 @@ export type NovelCreateChatResult = {
   novel: NovelProject | null;
 };
 
-export type KnowledgeExtractChatResult = {
-  reply: string;
-  used_mock: boolean;
-  extract_prompt: string | null;
-};
-
-/** 知识卡：按所选知识库与提取需求提炼特征并写回树节点 */
-export function extractKnowledgeCard(novelId: string, nodeId: string) {
-  return invoke<NovelTree>("extract_knowledge_card", { novelId, nodeId });
+/** 知识卡：把所选公共库正文完整导入到 extracted */
+export function fillKnowledgeCard(novelId: string, nodeId: string) {
+  return invoke<NovelTree>("fill_knowledge_card", { novelId, nodeId });
 }
 
 export const api = {
@@ -269,6 +287,9 @@ export const api = {
     refine_model?: string | null;
     knowledge_model?: string | null;
     ui_locale?: string | null;
+    mcp_port?: number | null;
+    mcp_enabled?: boolean | null;
+    mcp_lan?: boolean | null;
   }) =>
     invoke<SettingsView>("save_settings", {
       input: {
@@ -291,8 +312,15 @@ export const api = {
         refineModel: input.refine_model ?? null,
         knowledgeModel: input.knowledge_model ?? null,
         uiLocale: input.ui_locale ?? null,
+        mcpPort: input.mcp_port ?? null,
+        mcpEnabled: input.mcp_enabled ?? null,
+        mcpLan: input.mcp_lan ?? null,
       },
     }),
+  getMcpStatus: () => invoke<McpStatus>("get_mcp_status"),
+  restartMcpServer: () => invoke<McpStatus>("restart_mcp_server"),
+  setWorkspaceSelection: (novelId: string | null, nodeId: string | null) =>
+    invoke<void>("set_workspace_selection", { novelId, nodeId }),
   listGenres: () => invoke<string[]>("list_genres"),
   listKnowledge: () => invoke<KnowledgeBook[]>("list_knowledge_bases"),
   renameKnowledge: (id: string, title: string) =>
@@ -316,19 +344,14 @@ export const api = {
   archiveKnowledge: (id: string, archived: boolean) =>
     invoke<KnowledgeBook>("archive_knowledge", { id, archived }),
   deleteKnowledge: (id: string) => invoke<void>("delete_knowledge", { id }),
-  importKnowledge: (path: string, extract_prompt: string, genres: string[]) =>
-    invoke<KnowledgeBook>("import_knowledge_text", { path, extractPrompt: extract_prompt, genres }),
-  importKnowledgeUrl: (url: string, extract_prompt: string, genres: string[]) =>
-    invoke<KnowledgeBook>("import_knowledge_url", { url, extractPrompt: extract_prompt, genres }),
-  knowledgeExtractChat: (messages: ChatTurn[], fromUrl = false, model?: string | null) =>
-    invoke<KnowledgeExtractChatResult>("knowledge_extract_chat", {
-      input: { messages, fromUrl, model: model?.trim() || null },
-    }),
-  reextractKnowledge: (id: string, path?: string | null, extract_prompt?: string | null) =>
+  importKnowledge: (path: string, genres: string[]) =>
+    invoke<KnowledgeBook>("import_knowledge_text", { path, genres }),
+  importKnowledgeUrl: (url: string, genres: string[]) =>
+    invoke<KnowledgeBook>("import_knowledge_url", { url, genres }),
+  reextractKnowledge: (id: string, path?: string | null) =>
     invoke<KnowledgeBook>("reextract_knowledge", {
       id,
       path: path ?? null,
-      extractPrompt: extract_prompt ?? null,
     }),
   knowledgeIndexStatus: (bookId: string) =>
     invoke<{ bookId: string; chunkCount: number; embeddingCount: number }>(
@@ -354,20 +377,6 @@ export const api = {
       wordCountMax: word_count_max,
       chapterCount: chapter_count,
     }),
-  updateNovelCanon: (
-    novelId: string,
-    knowledge_ids: string[],
-    canon_mode: string,
-    knowledge_strategy?: string | null,
-  ) =>
-    invoke<NovelProject>("update_novel_canon", {
-      novelId,
-      knowledgeIds: knowledge_ids,
-      canonMode: canon_mode,
-      knowledgeStrategy: knowledge_strategy ?? null,
-    }),
-  syncCanonSettings: (novelId: string) =>
-    invoke<GenerateResult>("sync_canon_settings", { novelId }),
   archiveNovel: (id: string, archived: boolean) =>
     invoke<NovelProject>("archive_novel", { id, archived }),
   deleteNovel: (id: string) => invoke<void>("delete_novel", { id }),
@@ -398,6 +407,19 @@ export const api = {
   /** 手动保存章节正文；返回字数。空内容清空文件 */
   saveChapter: (novelId: string, nodeId: string, content: string) =>
     invoke<number>("save_chapter", { novelId, nodeId, content }),
+  /** 按修改意见改写单段正文；模型同全局 Chat（chat_model） */
+  rewriteChapterParagraph: (
+    novelId: string,
+    paragraph: string,
+    instruction: string,
+    model?: string | null,
+  ) =>
+    invoke<string>("rewrite_chapter_paragraph", {
+      novelId,
+      paragraph,
+      instruction,
+      model: model?.trim() || null,
+    }),
   getChapterMemory: (novelId: string, nodeId: string) =>
     invoke<string[]>("get_chapter_memory", { novelId, nodeId }),
   listAllChapterMemory: (novelId: string) =>
@@ -509,25 +531,34 @@ export const api = {
   /** 根节点：生成第 1–count 章章节卡（同号覆盖） */
   generateChapterCards: (novelId: string, count: number, userBrief: string) =>
     invoke<GenerateResult>("generate_chapter_cards", { novelId, count, userBrief }),
-  listChat: (novelId: string) => invoke<ChatMessage[]>("list_chat_messages", { novelId }),
-  listCardChat: (novelId: string, nodeId: string) =>
-    invoke<ChatMessage[]>("list_card_chat_messages", { novelId, nodeId }),
-  chatSend: (novelId: string, content: string, model?: string | null) =>
-    invoke<ChatMessage[]>("chat_send", {
-      novelId,
-      content,
-      model: model?.trim() || null,
-    }),
-  /** 终止进行中的 chat（开书 `__create__`、知识库提取 `__knowledge_extract__`） */
+  /** 终止进行中的 chat（开书 `__create__` 等） */
   chatCancel: (novelId: string) => invoke<void>("chat_cancel", { novelId }),
-  cardChatSend: (novelId: string, nodeId: string, content: string, model?: string | null) =>
-    invoke<CardChatResult>("card_chat_send", {
-      novelId,
-      nodeId,
-      content,
-      model: model?.trim() || null,
+  fillKnowledgeCard,
+  listPublicKnowledgeCards: () => invoke<PublicKnowledgeCard[]>("list_public_knowledge_cards"),
+  upsertPublicKnowledgeCard: (input: {
+    id?: string | null;
+    title: string;
+    book_ids: string[];
+    extract_prompt: string;
+    extracted: string;
+  }) =>
+    invoke<PublicKnowledgeCard>("upsert_public_knowledge_card", {
+      id: input.id ?? null,
+      title: input.title,
+      bookIds: input.book_ids,
+      extractPrompt: input.extract_prompt,
+      extracted: input.extracted,
     }),
-  extractKnowledgeCard,
+  archivePublicKnowledgeCard: (id: string, archived: boolean) =>
+    invoke<PublicKnowledgeCard>("archive_public_knowledge_card", { id, archived }),
+  deletePublicKnowledgeCard: (id: string) =>
+    invoke<void>("delete_public_knowledge_card", { id }),
+  addPublicKnowledgeCard: (novelId: string, publicId: string, hostNodeId?: string | null) =>
+    invoke<NovelTree>("add_public_knowledge_card", {
+      novelId,
+      publicId,
+      hostNodeId: hostNodeId ?? null,
+    }),
   generateCoverPrompt: (novelId: string) =>
     invoke<string>("generate_cover_prompt", { novelId }),
   pickCover: () => invoke<string | null>("pick_cover"),
@@ -541,4 +572,23 @@ export const api = {
   getTokenUsage: (date: string) => invoke<TokenUsageDay>("get_token_usage", { date }),
   getTokenUsageMonth: (month: string) =>
     invoke<TokenUsageMonth>("get_token_usage_month", { month }),
+  globalChatList: (novelId?: string | null) =>
+    invoke<GlobalChatMessage[]>("global_chat_list", { novelId: novelId ?? null }),
+  globalChatSend: (args: {
+    content: string;
+    routeName?: string | null;
+    path?: string | null;
+    novelId?: string | null;
+    model?: string | null;
+  }) =>
+    invoke<GlobalChatMessage[]>("global_chat_send", {
+      content: args.content,
+      routeName: args.routeName ?? null,
+      path: args.path ?? null,
+      novelId: args.novelId ?? null,
+      model: args.model?.trim() || null,
+    }),
+  globalChatClear: (novelId?: string | null) =>
+    invoke<void>("global_chat_clear", { novelId: novelId ?? null }),
+  globalChatCancel: () => invoke<void>("global_chat_cancel"),
 };

@@ -51,6 +51,7 @@ function defaultNodeH(kind: string): number {
   if (kind === "knowledge") return 88;
   if (kind === "side_plot") return 72;
   if (kind === "novel") return 100;
+  if (kind === "volume") return 88;
   return 64;
 }
 
@@ -92,29 +93,6 @@ function gridSpan(count: number, dy: number, maxCol: number): number {
   if (count <= 0) return 0;
   const rows = Math.min(count, maxCol);
   return rows * dy;
-}
-
-/** 侧卡块高度（不改 position）：按实测/估高叠满 maxCol 列 */
-function sideStackSpan(
-  list: LayoutNode[],
-  maxCol: number,
-  sizes?: Map<string, LayoutSize>,
-): number {
-  if (!list.length) return 0;
-  const nextY: number[] = [];
-  const counts: number[] = [];
-  let maxBottom = 0;
-  for (const n of list) {
-    let col = 0;
-    while ((counts[col] ?? 0) >= maxCol) col++;
-    const y = nextY[col] ?? 0;
-    const h = nodeH(n, sizes);
-    const bottom = y + h;
-    nextY[col] = bottom + SIDE_GAP;
-    counts[col] = (counts[col] ?? 0) + 1;
-    maxBottom = Math.max(maxBottom, bottom);
-  }
-  return maxBottom;
 }
 
 /**
@@ -179,7 +157,7 @@ function plotOverlaps(ax: number, ay: number, bx: number, by: number): boolean {
   return Math.abs(ax - bx) < PLOT_DX * 0.9 && Math.abs(ay - by) < PLOT_DY * 0.9;
 }
 
-type HostKind = "novel" | "chapter" | "side_plot";
+type HostKind = "novel" | "volume" | "chapter" | "side_plot";
 
 function resolveHosts(
   nodes: LayoutNode[],
@@ -195,7 +173,13 @@ function resolveHosts(
     const h = byId.get(hostId);
     const c = byId.get(cardId);
     if (!h || !c || c.kind !== cardKind) return;
-    if (h.kind !== "novel" && h.kind !== "chapter" && h.kind !== "side_plot") return;
+    if (
+      h.kind !== "novel" &&
+      h.kind !== "volume" &&
+      h.kind !== "chapter" &&
+      h.kind !== "side_plot"
+    )
+      return;
     const prev = host.get(cardId);
     if (!prev) {
       host.set(cardId, hostId);
@@ -204,7 +188,7 @@ function resolveHosts(
     const rank = (id: string) => {
       const n = byId.get(id)!;
       const k = n.kind as HostKind;
-      const kr = k === "chapter" ? 0 : k === "novel" ? 1 : 2;
+      const kr = k === "chapter" ? 0 : k === "volume" ? 1 : k === "novel" ? 2 : 3;
       return [kr, n.position.y, n.position.x, id] as const;
     };
     const a = rank(prev);
@@ -275,8 +259,8 @@ function collectPlotHosts(
     const s = byId.get(e.source);
     const t = byId.get(e.target);
     if (!s || !t) continue;
-    const sHost = s.kind === "chapter" || s.kind === "novel";
-    const tHost = t.kind === "chapter" || t.kind === "novel";
+    const sHost = s.kind === "chapter" || s.kind === "novel" || s.kind === "volume";
+    const tHost = t.kind === "chapter" || t.kind === "novel" || t.kind === "volume";
     if (sHost && t.kind === "side_plot") add(t.id, s.id);
     else if (tHost && s.kind === "side_plot") add(s.id, t.id);
   }
@@ -371,9 +355,154 @@ function placeMultiChapterPlots(
   }
 }
 
+/** 剧情卡按宿主 linked_side_plot_ids 顺序（0 最上）；未入数组的排在后 */
+function sortPlotsForHost(host: LayoutNode, plots: LayoutNode[]): LayoutNode[] {
+  const order = host.linked_side_plot_ids ?? [];
+  const idx = new Map(order.map((id, i) => [id, i]));
+  return [...plots].sort((a, b) => {
+    const ia = idx.has(a.id) ? idx.get(a.id)! : order.length;
+    const ib = idx.has(b.id) ? idx.get(b.id)! : order.length;
+    if (ia !== ib) return ia - ib;
+    return byY(a, b) || a.id.localeCompare(b.id);
+  });
+}
+
+/** 主轴边：排除人物/剧情/知识卡边 */
+function isSpineEdge(kind: string): boolean {
+  return kind !== "character" && kind !== "side_plot" && kind !== "knowledge";
+}
+
+function spineNeighbors(
+  id: string,
+  edges: LayoutEdge[],
+  want: Set<string>,
+): string[] {
+  const out: string[] = [];
+  for (const e of edges) {
+    if (!isSpineEdge(e.kind)) continue;
+    const other = e.source === id ? e.target : e.target === id ? e.source : null;
+    if (other && want.has(other) && !out.includes(other)) out.push(other);
+  }
+  return out;
+}
+
+/** 分卷顺序：从根挂出的卷出发，沿卷↔卷链走；剩余按 y */
+function orderVolumes(
+  root: LayoutNode | undefined,
+  volumes: LayoutNode[],
+  edges: LayoutEdge[],
+  byId: Map<string, LayoutNode>,
+): LayoutNode[] {
+  if (!volumes.length) return [];
+  const volIds = new Set(volumes.map((v) => v.id));
+  const ordered: LayoutNode[] = [];
+  const seen = new Set<string>();
+
+  const walk = (vid: string) => {
+    if (seen.has(vid)) return;
+    seen.add(vid);
+    const v = byId.get(vid);
+    if (v) ordered.push(v);
+    const next = spineNeighbors(vid, edges, volIds)
+      .filter((id) => !seen.has(id))
+      .sort((a, b) => byY(byId.get(a)!, byId.get(b)!));
+    for (const n of next) walk(n);
+  };
+
+  const fromRoot: string[] = [];
+  if (root) {
+    for (const id of spineNeighbors(root.id, edges, volIds)) fromRoot.push(id);
+    fromRoot.sort((a, b) => byY(byId.get(a)!, byId.get(b)!));
+  }
+  for (const id of fromRoot) walk(id);
+  for (const v of [...volumes].sort(byY)) walk(v.id);
+  return ordered;
+}
+
+/** 一组章节：按章↔章链拓扑，否则按 y */
+function orderChapterGroup(
+  chapters: LayoutNode[],
+  edges: LayoutEdge[],
+  byId: Map<string, LayoutNode>,
+): LayoutNode[] {
+  if (chapters.length <= 1) return chapters;
+  const ids = new Set(chapters.map((c) => c.id));
+  const succ = new Map<string, string[]>();
+  const predCount = new Map<string, number>();
+  for (const c of chapters) predCount.set(c.id, 0);
+  for (const e of edges) {
+    if (!isSpineEdge(e.kind)) continue;
+    if (!ids.has(e.source) || !ids.has(e.target)) continue;
+    // 约定 source→target 为上游→下游；颠倒边也尽量成链
+    const a = e.source;
+    const b = e.target;
+    const list = succ.get(a) ?? [];
+    if (!list.includes(b)) {
+      list.push(b);
+      succ.set(a, list);
+      predCount.set(b, (predCount.get(b) ?? 0) + 1);
+    }
+  }
+  const starts = chapters
+    .filter((c) => (predCount.get(c.id) ?? 0) === 0)
+    .sort(byY);
+  const ordered: LayoutNode[] = [];
+  const seen = new Set<string>();
+  const walk = (id: string) => {
+    if (seen.has(id)) return;
+    seen.add(id);
+    const n = byId.get(id);
+    if (n) ordered.push(n);
+    const next = (succ.get(id) ?? [])
+      .filter((x) => !seen.has(x))
+      .sort((a, b) => byY(byId.get(a)!, byId.get(b)!));
+    for (const x of next) walk(x);
+  };
+  for (const s of starts) walk(s.id);
+  for (const c of [...chapters].sort(byY)) walk(c.id);
+  return ordered;
+}
+
 /**
- * 四带：知识（更左）| 人物 | 根+章节 | 剧情。
- * 主轴（根与章节）按 y 排序一列排布；无链接卡片时竖向贴近，有链接则按侧块高度拉开。
+ * 主轴：根 →（分卷 → 该卷下章节）* → 无分卷章节。
+ * 卷与卷按连线成链；卷下章节聚在该卷之后。
+ */
+function buildSpine(
+  nodes: LayoutNode[],
+  edges: LayoutEdge[],
+): LayoutNode[] {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const root = nodes.find((n) => n.kind === "novel");
+  const volumes = nodes.filter((n) => n.kind === "volume");
+  const chapters = nodes.filter((n) => n.kind === "chapter");
+  const volOrder = orderVolumes(root, volumes, edges, byId);
+
+  const underVol = new Map<string, LayoutNode[]>();
+  const freeChapters: LayoutNode[] = [];
+  for (const ch of chapters) {
+    const vid = chapterParentVolumeId(ch.id, nodes, edges);
+    if (vid && volOrder.some((v) => v.id === vid)) {
+      const list = underVol.get(vid) ?? [];
+      list.push(ch);
+      underVol.set(vid, list);
+    } else {
+      freeChapters.push(ch);
+    }
+  }
+
+  const spine: LayoutNode[] = [];
+  if (root) spine.push(root);
+  for (const vol of volOrder) {
+    spine.push(vol);
+    spine.push(...orderChapterGroup(underVol.get(vol.id) ?? [], edges, byId));
+  }
+  spine.push(...orderChapterGroup(freeChapters, edges, byId));
+  return spine;
+}
+
+/**
+ * 四带：知识（更左）| 人物 | 根+分卷+章节 | 剧情。
+ * 主轴按分卷结构排布（见 buildSpine）；无链接卡片时竖向贴近，有链接则按侧块高度拉开。
  * @param sizes Vue Flow `dimensions`，人物卡尤需真实高度以免重叠
  */
 export function applyAutoLayout(
@@ -382,10 +511,7 @@ export function applyAutoLayout(
   sizes?: Map<string, LayoutSize>,
 ): void {
   const byId = new Map(nodes.map((n) => [n.id, n]));
-  const root = nodes.find((n) => n.kind === "novel");
-  const chapters = nodes.filter((n) => n.kind === "chapter");
-  // 根与章节同一主轴，按当前 y 排序（根也当章节卡处理）
-  const spine = [...(root ? [root] : []), ...chapters].sort(byY);
+  const spine = buildSpine(nodes, edges);
   const plotHosts = collectPlotHosts(spine, edges, byId);
 
   // 人物宿主解析：多宿主剧情取最早一宿主作 primary
@@ -447,7 +573,8 @@ export function applyAutoLayout(
   let y = TOP;
   for (const host of spine) {
     host.position = { x: MAIN_X, y };
-    const plots = (plotsByHost.get(host.id) ?? []).sort(byY);
+    const plots = sortPlotsForHost(host, plotsByHost.get(host.id) ?? []);
+    plotsByHost.set(host.id, plots);
     const chars = charsByHost.get(host.id) ?? [];
     const knows = knowsByHost.get(host.id) ?? [];
     placeGrid(plots, PLOT_X, y, PLOT_DX, PLOT_DY, MAX_PLOT_COL, 1);
@@ -488,6 +615,176 @@ export function applyAutoLayout(
   if (orphanKnows.length) {
     placeKnowLeftOfChars(orphanKnows.sort(byY), orphanChars, y, sizes);
   }
+}
+
+/** listed 顺序优先，再并入与 host 相连、同 kind 且尚未列入的节点 */
+export function unionLinkedIds(
+  nodes: LayoutNode[],
+  edges: LayoutEdge[],
+  hostId: string,
+  listed: string[],
+  kind: string,
+): string[] {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const ids = [...listed];
+  for (const e of edges) {
+    if (e.source !== hostId && e.target !== hostId) continue;
+    const other = e.source === hostId ? e.target : e.source;
+    const n = byId.get(other);
+    if (n?.kind === kind && !ids.includes(other)) ids.push(other);
+  }
+  return ids;
+}
+
+export function rootLinkedPlotIds(nodes: LayoutNode[], edges: LayoutEdge[]): string[] {
+  const root = nodes.find((n) => n.kind === "novel");
+  if (!root) return [];
+  return unionLinkedIds(nodes, edges, root.id, root.linked_side_plot_ids ?? [], "side_plot");
+}
+
+export function rootLinkedKnowledgeIds(nodes: LayoutNode[], edges: LayoutEdge[]): string[] {
+  const root = nodes.find((n) => n.kind === "novel");
+  if (!root) return [];
+  return unionLinkedIds(nodes, edges, root.id, root.linked_knowledge_ids ?? [], "knowledge");
+}
+
+/** 沿 spine 找父分卷：与分卷任意相连即认；同层优先 Volume；边方向兼容 */
+export function chapterParentVolumeId(
+  chapterId: string,
+  nodes: LayoutNode[],
+  edges: LayoutEdge[],
+): string | null {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  let cur = chapterId;
+  const seen = new Set<string>();
+  while (!seen.has(cur)) {
+    seen.add(cur);
+    let volume: string | null = null;
+    let chapterParent: string | null = null;
+    let hitNovel = false;
+    for (const e of edges) {
+      if (e.kind === "character" || e.kind === "side_plot" || e.kind === "knowledge") continue;
+      const other = e.target === cur ? e.source : e.source === cur ? e.target : null;
+      if (!other) continue;
+      const n = byId.get(other);
+      if (!n) continue;
+      if (n.kind === "volume" && !volume) volume = n.id;
+      else if (n.kind === "novel") hitNovel = true;
+      else if (n.kind === "chapter" && !chapterParent) chapterParent = other;
+    }
+    if (volume) return volume;
+    if (chapterParent) {
+      cur = chapterParent;
+      continue;
+    }
+    if (hitNovel) return null;
+    return null;
+  }
+  return null;
+}
+
+function hostLinked(
+  hostId: string,
+  nodes: LayoutNode[],
+  edges: LayoutEdge[],
+  field: "linked_side_plot_ids" | "linked_knowledge_ids" | "linked_character_ids",
+  kind: string,
+): string[] {
+  const host = nodes.find((n) => n.id === hostId);
+  return unionLinkedIds(nodes, edges, hostId, host?.[field] ?? [], kind);
+}
+
+export function chapterInheritedPlotIds(
+  chapterId: string,
+  nodes: LayoutNode[],
+  edges: LayoutEdge[],
+): string[] {
+  const ids = [...rootLinkedPlotIds(nodes, edges)];
+  const vid = chapterParentVolumeId(chapterId, nodes, edges);
+  if (vid) {
+    for (const pid of hostLinked(vid, nodes, edges, "linked_side_plot_ids", "side_plot")) {
+      if (!ids.includes(pid)) ids.push(pid);
+    }
+  }
+  return ids;
+}
+
+export function chapterInheritedKnowledgeIds(
+  chapterId: string,
+  nodes: LayoutNode[],
+  edges: LayoutEdge[],
+): string[] {
+  const ids = [...rootLinkedKnowledgeIds(nodes, edges)];
+  const vid = chapterParentVolumeId(chapterId, nodes, edges);
+  if (vid) {
+    for (const kid of hostLinked(vid, nodes, edges, "linked_knowledge_ids", "knowledge")) {
+      if (!ids.includes(kid)) ids.push(kid);
+    }
+  }
+  return ids;
+}
+
+/** 章节本机剧情（不含根/分卷继承） */
+export function chapterLocalPlotIds(
+  chapterId: string,
+  nodes: LayoutNode[],
+  edges: LayoutEdge[],
+): string[] {
+  const inherited = new Set(chapterInheritedPlotIds(chapterId, nodes, edges));
+  const ch = nodes.find((n) => n.id === chapterId);
+  const ids = (ch?.linked_side_plot_ids ?? []).filter((id) => !inherited.has(id));
+  for (const e of edges) {
+    if (e.source !== chapterId && e.target !== chapterId) continue;
+    const other = e.source === chapterId ? e.target : e.source;
+    if (inherited.has(other)) continue;
+    const n = nodes.find((x) => x.id === other);
+    if (n?.kind === "side_plot" && !ids.includes(other)) ids.push(other);
+  }
+  return ids;
+}
+
+/** 章节有效知识：本章 + 根/分卷继承 */
+export function chapterEffectiveKnowledgeIds(
+  chapterId: string,
+  nodes: LayoutNode[],
+  edges: LayoutEdge[],
+): string[] {
+  const ch = nodes.find((n) => n.id === chapterId);
+  const ids = unionLinkedIds(
+    nodes,
+    edges,
+    chapterId,
+    ch?.linked_knowledge_ids ?? [],
+    "knowledge",
+  );
+  for (const kid of chapterInheritedKnowledgeIds(chapterId, nodes, edges)) {
+    if (!ids.includes(kid)) ids.push(kid);
+  }
+  return ids;
+}
+
+/** 分卷本机剧情（不含根） */
+export function volumeLocalPlotIds(
+  volumeId: string,
+  nodes: LayoutNode[],
+  edges: LayoutEdge[],
+): string[] {
+  const rootSet = new Set(rootLinkedPlotIds(nodes, edges));
+  return hostLinked(volumeId, nodes, edges, "linked_side_plot_ids", "side_plot").filter(
+    (id) => !rootSet.has(id),
+  );
+}
+
+export function volumeEffectiveKnowledgeIds(
+  volumeId: string,
+  nodes: LayoutNode[],
+  edges: LayoutEdge[],
+): string[] {
+  const ids = hostLinked(volumeId, nodes, edges, "linked_knowledge_ids", "knowledge");
+  for (const kid of rootLinkedKnowledgeIds(nodes, edges)) {
+    if (!ids.includes(kid)) ids.push(kid);
+  }
+  return ids;
 }
 
 export const __layoutConsts = {

@@ -14,12 +14,11 @@ use chrono::{Local, Timelike, Utc};
 use std::fs;
 use std::path::Path;
 use std::sync::atomic::AtomicBool;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tauri::{Emitter, State};
 use tauri_plugin_dialog::DialogExt;
 
 const CREATE_CHAT_CANCEL_KEY: &str = "__create__";
-const KNOWLEDGE_EXTRACT_CHAT_CANCEL_KEY: &str = "__knowledge_extract__";
 
 struct ClearChatCancel<'a> {
     state: &'a AppState,
@@ -147,18 +146,6 @@ async fn enrich_user_with_urls(text: &str) -> String {
     with_fetched_url_context(text, &fetched)
 }
 
-async fn enrich_user_with_urls_progress(
-    app: &tauri::AppHandle,
-    novel_id: &str,
-    text: &str,
-) -> String {
-    if crate::knowledge::extract_http_urls(text).is_empty() {
-        return text.to_string();
-    }
-    emit_chat_progress(app, novel_id, "fetch_web");
-    enrich_user_with_urls(text).await
-}
-
 fn mask_key(key: &str) -> String {
     let chars: Vec<char> = key.chars().collect();
     if chars.len() <= 8 {
@@ -192,6 +179,11 @@ fn task_model(preferred: &str, fallback: &str) -> String {
     } else {
         p.to_string()
     }
+}
+
+/// 全应用共用：Chat 面板所选模型（`chat_model`），空则 `default_model`。
+fn llm_model(settings: &AppSettings) -> String {
+    task_model(&settings.chat_model, &settings.default_model)
 }
 
 /// Chat 面板覆盖：非空则写入本轮 settings 对应字段，供下游 task_model 使用。
@@ -237,6 +229,13 @@ pub fn get_settings(state: State<'_, AppState>) -> Result<SettingsView, String> 
         knowledge_model: s.knowledge_model,
         model_catalog: catalog,
         ui_locale: s.ui_locale,
+        mcp_port: if s.mcp_port == 0 {
+            crate::mcp::DEFAULT_MCP_PORT
+        } else {
+            s.mcp_port
+        },
+        mcp_enabled: s.mcp_enabled,
+        mcp_lan: s.mcp_lan,
     })
 }
 
@@ -300,8 +299,78 @@ pub fn save_settings(
             s.ui_locale = t.to_string();
         }
     }
+    let mut mcp_changed = false;
+    if let Some(p) = input.mcp_port {
+        let p = if (1024..=65535).contains(&p) {
+            p
+        } else {
+            crate::mcp::DEFAULT_MCP_PORT
+        };
+        if s.mcp_port != p {
+            s.mcp_port = p;
+            mcp_changed = true;
+        }
+    }
+    if let Some(en) = input.mcp_enabled {
+        if s.mcp_enabled != en {
+            s.mcp_enabled = en;
+            mcp_changed = true;
+        }
+    }
+    if let Some(lan) = input.mcp_lan {
+        if s.mcp_lan != lan {
+            s.mcp_lan = lan;
+            mcp_changed = true;
+        }
+    }
     state.db.save_settings(&s).map_err(|e| e.to_string())?;
+    if mcp_changed {
+        restart_mcp_from_state(&state);
+    }
     get_settings(state)
+}
+
+fn restart_mcp_from_state(state: &AppState) {
+    let s = state.db.get_settings().unwrap_or_default();
+    let ctx = crate::mcp::McpCtx {
+        db: state.db.clone(),
+        app: state.app_handle.clone(),
+        selection: state.mcp.selection.clone(),
+    };
+    crate::mcp::restart(
+        ctx,
+        state.mcp.clone(),
+        s.mcp_enabled,
+        s.mcp_port,
+        s.mcp_lan,
+    );
+}
+
+#[tauri::command]
+pub fn set_workspace_selection(
+    state: State<'_, AppState>,
+    novel_id: Option<String>,
+    node_id: Option<String>,
+) {
+    let n = novel_id.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    let id = node_id.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    match (n, id) {
+        (Some(novel_id), Some(node_id)) => state.mcp.set_workspace_selection(novel_id, node_id),
+        _ => state.mcp.clear_workspace_selection(),
+    }
+}
+
+#[tauri::command]
+pub fn get_mcp_status(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let s = state.db.get_settings().map_err(|e| e.to_string())?;
+    Ok(state.mcp.status_json(s.mcp_lan))
+}
+
+#[tauri::command]
+pub fn restart_mcp_server(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    restart_mcp_from_state(&state);
+    let s = state.db.get_settings().map_err(|e| e.to_string())?;
+    Ok(state.mcp.status_json(s.mcp_lan))
 }
 
 #[tauri::command]
@@ -447,197 +516,105 @@ pub async fn delete_knowledge(state: State<'_, AppState>, id: String) -> Result<
 }
 
 #[tauri::command]
-pub async fn knowledge_extract_chat(
-    state: State<'_, AppState>,
-    input: KnowledgeExtractChatInput,
-) -> Result<KnowledgeExtractChatResult, String> {
-    let mut settings = state.db.get_settings().map_err(|e| e.to_string())?;
-    apply_chat_model_override(&mut settings.knowledge_model, input.model.as_deref());
-    let user_bits: Vec<&str> = input
-        .messages
-        .iter()
-        .filter(|m| m.role == "user")
-        .map(|m| m.content.as_str())
-        .collect();
-    let loc = PromptLocale::for_interaction(&settings.ui_locale, &user_bits);
-    let transcript = input
-        .messages
-        .iter()
-        .map(|m| format!("{}: {}", m.role, m.content))
-        .collect::<Vec<_>>()
-        .join("\n");
-    let system = prompts::knowledge_extract_chat_system(loc, input.from_url);
-    let mut user = if transcript.is_empty() {
-        prompts::knowledge_extract_chat_welcome(loc, input.from_url).to_string()
-    } else {
-        transcript
-    };
-    user = enrich_user_with_urls(&user).await;
-    if let Some((_name, injected)) = crate::skills::maybe_inject_skill(&user) {
-        user = injected;
-    }
-
-    let model = task_model(&settings.knowledge_model, &settings.default_model);
-    let cancel = state.arm_chat_cancel(KNOWLEDGE_EXTRACT_CHAT_CANCEL_KEY);
-    let _clear = ClearChatCancel {
-        state: &*state,
-        key: KNOWLEDGE_EXTRACT_CHAT_CANCEL_KEY.into(),
-    };
-    let (reply, used_mock) = llm_complete(
-        None,
-        &state,
-        &settings,
-        &system,
-        &user,
-        Some(&model),
-        None,
-        Some(cancel),
-    )
-    .await?;
-
-    let extract_prompt = extract_json_objects(&reply).into_iter().find_map(|v| {
-        v.get("extract_prompt")
-            .and_then(|x| x.as_str())
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .map(|s| s.to_string())
-    });
-
-    Ok(KnowledgeExtractChatResult {
-        reply,
-        used_mock,
-        extract_prompt,
-    })
-}
-
-#[tauri::command]
 pub async fn import_knowledge_text(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     path: String,
-    extract_prompt: String,
     genres: Vec<String>,
 ) -> Result<KnowledgeBook, String> {
     let src = load_source(&path).map_err(|e| e.to_string())?;
-    ingest_knowledge_source(&state, src, path, extract_prompt, genres, false).await
+    ingest_knowledge_source(Some(&app), &state.db, src, path, genres, None).await
 }
 
 #[tauri::command]
 pub async fn import_knowledge_url(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     url: String,
-    extract_prompt: String,
     genres: Vec<String>,
 ) -> Result<KnowledgeBook, String> {
     let src = load_source_from_url(&url).await.map_err(|e| e.to_string())?;
-    ingest_knowledge_source(&state, src, url, extract_prompt, genres, true).await
+    ingest_knowledge_source(Some(&app), &state.db, src, url, genres, None).await
 }
 
-/// LLM analysis + chunk build. Returns (title, author, genres, prompt, chunks).
-async fn analyze_knowledge_source(
-    state: &State<'_, AppState>,
-    src: &mut crate::knowledge::ParsedSource,
-    extract_prompt: String,
-    genres: Vec<String>,
-    from_url: bool,
-) -> Result<(String, String, Vec<String>, String, Vec<String>), String> {
-    let mut title = src.title.clone();
-    let mut author = src.author.clone();
-
-    let settings = state.db.get_settings().map_err(|e| e.to_string())?;
-    let toc = src.toc_lines();
-    let samples = src.style_samples(900, 12_000);
-    let loc = PromptLocale::for_interaction(
-        &settings.ui_locale,
-        &[&extract_prompt, &title, &author, &toc, &samples],
-    );
-
-    let known_genres = collect_known_genres(state);
-    let known_joined = known_genres.join("、");
-
-    let mut analysis: Option<String> = None;
-    let mut auto_genres: Vec<String> = src.subjects.clone();
-    let prompt = if extract_prompt.trim().is_empty() {
-        if from_url {
-            prompts::default_knowledge_url_prompt(loc)
-        } else {
-            prompts::default_knowledge_book_prompt(loc)
+fn merge_knowledge_genres(user: Vec<String>, from_src: Vec<String>) -> Vec<String> {
+    let mut out = Vec::new();
+    for g in user.into_iter().chain(from_src) {
+        let g = g.trim().to_string();
+        if g.is_empty() {
+            continue;
         }
-        .to_string()
-    } else {
-        extract_prompt
-    };
-
-    if settings.any_compat_key()
-        || !settings.gemini_api_key.trim().is_empty()
-        || !settings.claude_api_key.trim().is_empty()
-    {
-        let model = task_model(&settings.knowledge_model, &settings.default_model);
-        let sys = if from_url {
-            prompts::knowledge_url_extract_system(loc)
-        } else {
-            prompts::knowledge_extract_system(loc)
-        };
-        let user = prompts::knowledge_extract_user(
-            loc,
-            &prompt,
-            &title,
-            &author,
-            &toc,
-            &samples,
-            &known_joined,
-        );
-        if let Ok((out, _)) =
-            llm_complete(None, state, &settings, sys, &user, Some(&model), None, None).await
-        {
-            prompts::apply_analysis_meta(&out, &mut title, &mut author);
-            auto_genres.extend(prompts::extract_genres_from_analysis(&out));
-            analysis = Some(out);
+        if !out.iter().any(|x| x == &g) {
+            out.push(g);
         }
     }
-
-    let genres = prompts::merge_genre_tags(genres, auto_genres, &known_genres);
-    src.title = title.clone();
-    src.author = author.clone();
-    let chunks = build_knowledge_chunks(src, analysis.as_deref());
-    Ok((title, author, genres, prompt, chunks))
+    out
 }
 
-async fn ingest_knowledge_source(
-    state: &State<'_, AppState>,
-    mut src: crate::knowledge::ParsedSource,
-    source_path: String,
-    extract_prompt: String,
+/// 无 AI：解析元数据 + 1000/20 分块。
+fn prepare_knowledge_ingest(
+    src: &crate::knowledge::ParsedSource,
     genres: Vec<String>,
-    from_url: bool,
+) -> (String, String, Vec<String>, Vec<String>) {
+    let title = src.title.trim().to_string();
+    let author = src.author.trim().to_string();
+    let genres = merge_knowledge_genres(genres, src.subjects.clone());
+    let chunks = build_knowledge_chunks(src);
+    (title, author, genres, chunks)
+}
+
+pub(crate) async fn ingest_knowledge_source(
+    app: Option<&tauri::AppHandle>,
+    db: &crate::db::Db,
+    src: crate::knowledge::ParsedSource,
+    source_path: String,
+    genres: Vec<String>,
+    title_override: Option<String>,
 ) -> Result<KnowledgeBook, String> {
-    let (title, author, genres, prompt, chunks) =
-        analyze_knowledge_source(state, &mut src, extract_prompt, genres, from_url).await?;
+    let (title, author, genres, chunks) = prepare_knowledge_ingest(&src, genres);
+    if chunks.is_empty() {
+        return Err("未能从源文件拆出内容分段".into());
+    }
+    let title = title_override
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty())
+        .unwrap_or(title);
     let book = KnowledgeBook {
         id: uuid::Uuid::new_v4().to_string(),
-        title,
-        author,
+        title: if title.is_empty() {
+            "未命名".into()
+        } else {
+            title
+        },
+        author: if author.is_empty() {
+            "未知作者".into()
+        } else {
+            author
+        },
         genres,
         source_path,
-        extract_prompt: prompt,
+        extract_prompt: String::new(),
         created_at: Utc::now().to_rfc3339(),
         chunk_count: chunks.len() as i64,
         archived: false,
     };
-    state
-        .db
-        .insert_knowledge(&book, &chunks)
+    db.insert_knowledge(&book, &chunks)
         .map_err(|e| e.to_string())?;
     let _ = upsert_chunks(&book.id, &chunks).await;
-    maybe_index_book_embeddings(state, &book.id).await;
+    maybe_index_book_embeddings(app, db, &book.id).await?;
     Ok(book)
 }
 
-async fn maybe_index_book_embeddings(state: &State<'_, AppState>, book_id: &str) {
-    let Ok(settings) = state.db.get_settings() else {
-        return;
-    };
-    let _ = state.db.delete_knowledge_embeddings(book_id);
-    let _ = crate::kb_context::index_book_embeddings(&state.db, &settings, book_id).await;
+async fn maybe_index_book_embeddings(
+    app: Option<&tauri::AppHandle>,
+    db: &crate::db::Db,
+    book_id: &str,
+) -> Result<(), String> {
+    let _ = db.delete_knowledge_embeddings(book_id);
+    crate::kb_context::index_book_embeddings(db, book_id, app.cloned())
+        .await
+        .map_err(|e| format!("本地向量索引失败: {e}"))?;
+    Ok(())
 }
 
 fn is_http_source(path: &str) -> bool {
@@ -648,10 +625,10 @@ fn is_http_source(path: &str) -> bool {
 /// Re-read source (file or URL) and replace stored knowledge chunks for an existing book.
 #[tauri::command]
 pub async fn reextract_knowledge(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     id: String,
     path: Option<String>,
-    extract_prompt: Option<String>,
 ) -> Result<KnowledgeBook, String> {
     let book = state
         .db
@@ -666,7 +643,7 @@ pub async fn reextract_knowledge(
         return Err("无源路径，请重新选择文件或填写网址".into());
     }
     let from_url = is_http_source(&source_path);
-    let mut src = if from_url {
+    let src = if from_url {
         load_source_from_url(&source_path)
             .await
             .map_err(|e| e.to_string())?
@@ -676,18 +653,10 @@ pub async fn reextract_knowledge(
         }
         load_source(&source_path).map_err(|e| e.to_string())?
     };
-    let focus = extract_prompt
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| book.extract_prompt.clone());
-    let (title, author, genres, prompt, chunks) = analyze_knowledge_source(
-        &state,
-        &mut src,
-        focus,
-        book.genres.clone(),
-        from_url,
-    )
-    .await?;
+    let (title, author, genres, chunks) = prepare_knowledge_ingest(&src, book.genres.clone());
+    if chunks.is_empty() {
+        return Err("未能从源文件拆出内容分段".into());
+    }
     let _ = crate::knowledge::delete_chunks(&id).await;
     state
         .db
@@ -697,12 +666,12 @@ pub async fn reextract_knowledge(
             &author,
             &genres,
             &source_path,
-            &prompt,
+            book.extract_prompt.as_str(),
             &chunks,
         )
         .map_err(|e| e.to_string())?;
     let _ = upsert_chunks(&id, &chunks).await;
-    maybe_index_book_embeddings(&state, &id).await;
+    maybe_index_book_embeddings(Some(&app), &state.db, &id).await?;
     state
         .db
         .get_knowledge(&id)
@@ -741,6 +710,7 @@ pub fn knowledge_index_status(
 
 #[tauri::command]
 pub async fn rebuild_knowledge_index(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     book_id: String,
 ) -> Result<KnowledgeIndexStatus, String> {
@@ -749,9 +719,8 @@ pub async fn rebuild_knowledge_index(
         .get_knowledge(&book_id)
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "知识库不存在".to_string())?;
-    let settings = state.db.get_settings().map_err(|e| e.to_string())?;
     let _ = state.db.delete_knowledge_embeddings(&book_id);
-    let n = crate::kb_context::index_book_embeddings(&state.db, &settings, &book_id)
+    let n = crate::kb_context::index_book_embeddings(&state.db, &book_id, Some(app))
         .await
         .map_err(|e| e.to_string())?;
     Ok(KnowledgeIndexStatus {
@@ -820,7 +789,7 @@ pub fn create_novel(
     input: CreateNovelInput,
 ) -> Result<NovelProject, String> {
     create_novel_with_tree(
-        &state,
+        &state.db,
         &input.title,
         &input.synopsis,
         &input.knowledge_ids,
@@ -1115,60 +1084,14 @@ pub fn update_novel_plan(
     Ok(novel)
 }
 
-/// 根节点：绑定公共知识库 + 严格/参考模式 + 可选策略文案。
-#[tauri::command]
-pub fn update_novel_canon(
-    state: State<'_, AppState>,
-    novel_id: String,
-    knowledge_ids: Vec<String>,
-    canon_mode: String,
-    knowledge_strategy: Option<String>,
-) -> Result<NovelProject, String> {
-    let mut novel = state
-        .db
-        .get_novel(&novel_id)
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "小说不存在".to_string())?;
-    let mut ids = knowledge_ids;
-    ids.retain(|id| !id.trim().is_empty());
-    ids.sort();
-    ids.dedup();
-    // Drop unknown / archived
-    ids.retain(|id| {
-        state
-            .db
-            .get_knowledge(id)
-            .ok()
-            .flatten()
-            .map(|b| !b.archived)
-            .unwrap_or(false)
-    });
-    novel.knowledge_ids = ids;
-    novel.canon_mode = if canon_mode.eq_ignore_ascii_case("strict") {
-        "strict".into()
-    } else {
-        "reference".into()
-    };
-    if let Some(s) = knowledge_strategy {
-        novel.knowledge_strategy = s;
-    }
-    novel.updated_at = Utc::now().to_rfc3339();
-    state.db.upsert_novel(&novel).map_err(|e| e.to_string())?;
-    let _ = fs::write(
-        novel_meta_path(&novel.id),
-        serde_json::to_string_pretty(&novel).unwrap_or_default(),
-    );
-    Ok(novel)
-}
-
 fn set_node_word_count(tree: &mut NovelTree, node_id: &str, words: u32) {
     if let Some(n) = tree.nodes.iter_mut().find(|n| n.id == node_id) {
         n.word_count = words;
     }
 }
 
-fn create_novel_with_tree(
-    state: &State<'_, AppState>,
+pub(crate) fn create_novel_with_tree(
+    db: &crate::db::Db,
     title: &str,
     synopsis: &str,
     knowledge_ids: &[String],
@@ -1193,11 +1116,7 @@ fn create_novel_with_tree(
         synopsis: synopsis.to_string(),
         cover_path: None,
         knowledge_ids: knowledge_ids.to_vec(),
-        knowledge_strategy: if knowledge_strategy.is_empty() {
-            "参考对话中确定的叙事与人物约束。".into()
-        } else {
-            knowledge_strategy.to_string()
-        },
+        knowledge_strategy: knowledge_strategy.to_string(),
         canon_mode: "reference".into(),
         archived: false,
         word_count_min: wmin,
@@ -1206,7 +1125,7 @@ fn create_novel_with_tree(
         created_at: now.clone(),
         updated_at: now,
     };
-    state.db.upsert_novel(&novel).map_err(|e| e.to_string())?;
+    db.upsert_novel(&novel).map_err(|e| e.to_string())?;
     fs::write(
         novel_meta_path(&id),
         serde_json::to_string_pretty(&novel).map_err(|e| e.to_string())?,
@@ -1319,11 +1238,13 @@ fn build_initial_tree(
         }
     }
 
-    NovelTree {
+    let mut tree = NovelTree {
         novel_id: novel_id.into(),
         nodes,
         edges,
-    }
+    };
+    crate::tree_layout::apply_auto_layout(&mut tree);
+    tree
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1548,7 +1469,7 @@ fn normalize_chapter_label(n: u32, label: &str) -> String {
     format!("第{n}章 · {t}")
 }
 
-fn last_chapter_anchor(tree: &NovelTree) -> (String, f64, f64) {
+pub(crate) fn last_chapter_anchor(tree: &NovelTree) -> (String, f64, f64) {
     let root = root_id(tree);
     let mut chapters: Vec<&TreeNode> = tree
         .nodes
@@ -1567,72 +1488,6 @@ fn last_chapter_anchor(tree: &NovelTree) -> (String, f64, f64) {
         (root, r.position.x, r.position.y)
     } else {
         (root, 280.0, 0.0)
-    }
-}
-
-/// 删除全部章节节点及其相关边（角色/剧情卡保留）。返回被删章节 id。
-fn clear_all_chapter_nodes(tree: &mut NovelTree) -> Vec<String> {
-    let old: Vec<String> = tree
-        .nodes
-        .iter()
-        .filter(|n| matches!(n.kind, NodeKind::Chapter))
-        .map(|n| n.id.clone())
-        .collect();
-    if old.is_empty() {
-        return old;
-    }
-    tree.nodes.retain(|n| !matches!(n.kind, NodeKind::Chapter));
-    tree.edges.retain(|e| {
-        e.kind != "chapter" && !old.iter().any(|id| e.source == *id || e.target == *id)
-    });
-    let alive: std::collections::HashSet<String> =
-        tree.nodes.iter().map(|n| n.id.clone()).collect();
-    for n in &mut tree.nodes {
-        n.linked_character_ids.retain(|id| alive.contains(id));
-        n.linked_side_plot_ids.retain(|id| alive.contains(id));
-        n.linked_knowledge_ids.retain(|id| alive.contains(id));
-    }
-    old
-}
-
-/// 清除章节正文文件 + SQLite/Lance 章节记忆（树节点已删时仍须调用）。
-fn purge_chapter_artifacts(state: &State<'_, AppState>, novel_id: &str, node_ids: &[String]) {
-    if node_ids.is_empty() {
-        return;
-    }
-    for node_id in node_ids {
-        let _ = fs::remove_file(chapter_path(novel_id, node_id));
-        let _ = state.db.delete_chapter_memory(novel_id, node_id);
-    }
-    let nid = novel_id.to_string();
-    let ids = node_ids.to_vec();
-    tauri::async_runtime::spawn(async move {
-        for id in ids {
-            let _ = chapter_memory::delete_lance(&nid, &id).await;
-        }
-    });
-}
-
-fn clear_all_side_plot_nodes(tree: &mut NovelTree) {
-    let old: Vec<String> = tree
-        .nodes
-        .iter()
-        .filter(|n| matches!(n.kind, NodeKind::SidePlot))
-        .map(|n| n.id.clone())
-        .collect();
-    if old.is_empty() {
-        return;
-    }
-    tree.nodes.retain(|n| !matches!(n.kind, NodeKind::SidePlot));
-    tree.edges.retain(|e| {
-        e.kind != "side_plot" && !old.iter().any(|id| e.source == *id || e.target == *id)
-    });
-    let alive: std::collections::HashSet<String> =
-        tree.nodes.iter().map(|n| n.id.clone()).collect();
-    for n in &mut tree.nodes {
-        n.linked_character_ids.retain(|id| alive.contains(id));
-        n.linked_side_plot_ids.retain(|id| alive.contains(id));
-        n.linked_knowledge_ids.retain(|id| alive.contains(id));
     }
 }
 
@@ -1729,88 +1584,6 @@ fn apply_chapter_outlines(
     }
 }
 
-fn add_plot_to_chapter(
-    tree: &mut NovelTree,
-    chapter_num: u32,
-    plot_text: &str,
-) -> Result<String, String> {
-    let existing = existing_chapter_nums(tree);
-    let chapter_id = existing
-        .get(&chapter_num)
-        .cloned()
-        .ok_or_else(|| format!("结构树上找不到第{chapter_num}章，请先生成章节卡。"))?;
-    let plot_text = plot_text.trim();
-    if plot_text.is_empty() {
-        return Err("剧情内容为空。".into());
-    }
-    let label: String = plot_text.chars().take(24).collect();
-    let label = if plot_text.chars().count() > 24 {
-        format!("{label}…")
-    } else {
-        label
-    };
-    let plots = tree
-        .nodes
-        .iter()
-        .filter(|n| matches!(n.kind, NodeKind::SidePlot))
-        .count();
-    let chapter_pos = tree
-        .nodes
-        .iter()
-        .find(|n| n.id == chapter_id)
-        .map(|n| n.position.clone())
-        .unwrap_or(NodePosition { x: 280.0, y: 140.0 });
-    let pid = uuid::Uuid::new_v4().to_string();
-    tree.nodes.push(TreeNode {
-        id: pid.clone(),
-        kind: NodeKind::SidePlot,
-        label,
-        outline: plot_text.to_string(),
-        character: None,
-        knowledge: None,
-        side_plot: Some(SidePlotMeta::active()),
-        linked_character_ids: vec![],
-        linked_side_plot_ids: vec![],
-        linked_knowledge_ids: vec![],
-        position: NodePosition {
-            x: chapter_pos.x + 280.0,
-            y: chapter_pos.y + plots as f64 * 24.0,
-        },
-        word_count: 0,
-        word_count_min: 0,
-        word_count_max: 0,
-        chapter_count: 0,
-    });
-    if let Some(ch) = tree.nodes.iter_mut().find(|n| n.id == chapter_id) {
-        ch.linked_side_plot_ids.push(pid.clone());
-    }
-    tree.edges.push(TreeEdge {
-        id: format!("e-{chapter_id}-{pid}"),
-        source: chapter_id,
-        target: pid,
-        kind: "side_plot".into(),
-        source_handle: Some("right".into()),
-        target_handle: Some("left".into()),
-        label: String::new(),
-    });
-    Ok(format!(
-        "已为第{chapter_num}章添加剧情卡，可继续追加更多剧情。"
-    ))
-}
-
-fn parse_resolve_mode(text: &str) -> Option<ChapterResolveMode> {
-    let lower = text.to_lowercase();
-    if text.contains("覆盖") || text.contains("替换") || lower.contains("overwrite") {
-        Some(ChapterResolveMode::Overwrite)
-    } else if text.contains("跳过") || text.contains("只补") || lower.contains("skip") {
-        Some(ChapterResolveMode::Skip)
-    } else if text.contains("强制") || text.contains("仍要追加") || lower.contains("force") {
-        Some(ChapterResolveMode::ForceAppend)
-    } else {
-        None
-    }
-}
-
 fn extract_small_chapter_nums(text: &str) -> Vec<u32> {
     let mut nums = Vec::new();
     let mut cur = String::new();
@@ -1836,220 +1609,6 @@ fn extract_small_chapter_nums(text: &str) -> Vec<u32> {
         }
     }
     nums
-}
-
-/// `/指令名 args` → 返回 args；按名称长度优先匹配。
-fn slash_args<'a>(text: &'a str, names: &[&str]) -> Option<&'a str> {
-    let t = text.trim();
-    let rest = t.strip_prefix('/')?;
-    let mut names: Vec<&str> = names.to_vec();
-    names.sort_by_key(|n| std::cmp::Reverse(n.len()));
-    for name in names {
-        if let Some(after) = rest.strip_prefix(name) {
-            if after.is_empty() || after.starts_with(char::is_whitespace) {
-                return Some(after.trim());
-            }
-        }
-    }
-    None
-}
-
-fn root_slash_help(zh: bool) -> String {
-    if zh {
-        "根节点指令（以 / 开头）：\n\
-         · `/章节卡 1-10` — 生成章节卡（同号已存在则覆盖重写，从指定起点章开始）\n\
-         · `/章节卡 覆盖 3-5` — 显式覆盖同号标题与大纲\n\
-         · `/章节卡 跳过 1-10` / `/章节卡 强制追加 1-10` — 跳过已有 / 强制再追加节点\n\
-         · `/刷新大纲 3` — 覆盖重写指定章标题与大纲（根 Chat 可改任意章；可换行写期望）\n\
-         · `/添加剧情 3 剧情内容`（也支持 `/添加剧情 第一章 …`）\n\
-         · `/剧情卡 3` 或 `/剧情卡 第一章` — 按该章大纲拆多张剧情卡并补人物\n\
-         · `/清空章节` — 删除全部章节节点\n\
-         · `/清空所有剧情` — 删除全部剧情卡（章节/角色保留）\n\
-         · `/skill-name …` 或 `@skill-name …` — 启用 ~/.agents/skills 中的 skill（输入 / 可补全；也可自动匹配）"
-            .into()
-    } else {
-        "Root slash commands:\n\
-         · `/chapters 1-10` — generate cards (overwrite same numbers if they exist; starts at the range start)\n\
-         · `/chapters overwrite 3-5` — explicit replace same-number titles/outlines\n\
-         · `/chapters skip|force 1-10` — skip existing / force-append nodes\n\
-         · `/refresh-outline 3` — overwrite that chapter’s title & outline (expectations below)\n\
-         · `/add-plot 3 plot text` — add one plot card to chapter 3\n\
-         · `/plots 3` — auto plot cards from chapter 3 outline + characters\n\
-         · `/clear-chapters` — delete all chapter nodes\n\
-         · `/clear-plots` — delete all plot cards (chapters/characters kept)\n\
-         · `/skill-name …` or `@skill-name …` — skill from ~/.agents/skills (type / to list; or auto-match)"
-            .into()
-    }
-}
-
-fn parse_clear_all_chapters(text: &str) -> bool {
-    slash_args(
-        text,
-        &[
-            "清空章节",
-            "清空所有章节",
-            "清空所有章节节点",
-            "clear-chapters",
-            "clear_chapters",
-        ],
-    )
-    .is_some()
-}
-
-fn parse_clear_all_plots(text: &str) -> bool {
-    slash_args(
-        text,
-        &[
-            "清空所有剧情",
-            "清空剧情",
-            "清空所有剧情卡",
-            "清空剧情卡",
-            "clear-plots",
-            "clear_plots",
-        ],
-    )
-    .is_some()
-}
-
-/// `/剧情卡 3` · `/剧情卡 第一章`
-fn parse_gen_plots_for_chapter(text: &str) -> Option<u32> {
-    let args = slash_args(text, &["生成剧情卡", "剧情卡", "plots", "gen-plots"])?;
-    parse_chapter_ref(args)
-}
-
-/// 章节卡 Chat：`/完善剧情`（当前章）；可选换行后自定义剧情要求
-fn parse_enrich_plots_command(text: &str) -> Option<String> {
-    slash_args(
-        text,
-        &["完善剧情", "生成剧情", "enrich-plots", "enrich_plots"],
-    )
-    .map(|s| s.to_string())
-}
-
-/// 章节卡 Chat：`/下一章` · `/下一章 3` · `/下一章 3\n\n{材料与期望}`
-fn parse_plan_next_command(text: &str) -> Option<(u32, String)> {
-    let args = slash_args(
-        text,
-        &[
-            "下一章",
-            "生成下一章",
-            "plan-next",
-            "next-chapter",
-            "next-chapters",
-        ],
-    )?;
-    let trimmed = args.trim();
-    if trimmed.is_empty() {
-        return Some((1, String::new()));
-    }
-    if let Some((head, rest)) = trimmed.split_once('\n') {
-        let n = head
-            .trim()
-            .parse::<u32>()
-            .unwrap_or(1)
-            .clamp(1, 12);
-        return Some((n, rest.trim().to_string()));
-    }
-    if let Ok(n) = trimmed.parse::<u32>() {
-        return Some((n.clamp(1, 12), String::new()));
-    }
-    Some((1, trimmed.to_string()))
-}
-
-/// 章节卡 Chat：`/预生成` · `/预生成\n\n{条件}`（默认不带历史记忆检索）
-fn parse_generate_body_command(text: &str) -> Option<String> {
-    slash_args(
-        text,
-        &[
-            "预生成",
-            "生成正文",
-            "重新生成",
-            "generate",
-            "pre-generate",
-            "regen",
-            "regenerate",
-        ],
-    )
-    .map(|s| s.to_string())
-}
-
-/// 章节卡 Chat：`/精修` · `/精修\n\n{条件}`（默认 memory + 前 10 章）
-fn parse_refine_body_command(text: &str) -> Option<String> {
-    slash_args(text, &["精修", "refine"]).map(|s| s.to_string())
-}
-
-/// 仅接受短章号 token（`3` / `三` / `第三章`），避免把期望散文里的「两年」「3天」误当成章号。
-fn parse_outline_chapter_token(tok: &str) -> Option<u32> {
-    let tok = tok.trim();
-    if tok.is_empty() || tok.chars().count() > 12 {
-        return None;
-    }
-    if let Some(n) = parse_chapter_num_token(tok) {
-        return Some(n);
-    }
-    chapter_number_from_label(tok)
-}
-
-fn chapter_slash_help(zh: bool) -> String {
-    if zh {
-        "章节卡 Chat 只对当前章有效：\n\
-         · `/完善剧情` — 按本章大纲补剧情卡\n\
-         · `/刷新本章大纲` — 覆盖重写本章标题与大纲（可换行写期望；勿写章号）\n\
-         · `/预生成` — 预生成本章正文\n\
-         · `/精修` — 精修本章正文\n\
-         改其他章 / 批量生成：请切到根节点 Chat（如 `/刷新大纲 3`、`/章节卡`）。"
-            .into()
-    } else {
-        "Chapter-card Chat only affects this chapter:\n\
-         · `/enrich-plots` — plot cards from this outline\n\
-         · `/refresh-this-outline` — overwrite this title & outline (expectations below; no chapter number)\n\
-         · `/generate` — pre-generate this body\n\
-         · `/refine` — refine this body\n\
-         Other chapters / batch: use root Chat (`/refresh-outline 3`, `/chapters`)."
-            .into()
-    }
-}
-
-/// 根 Chat：`/刷新大纲 3`；章节卡：`/刷新本章大纲`（兼容旧名 `/刷新大纲`）。
-/// 返回 `(章号, 期望)`；章号 `None` = 未指定。
-/// 章节卡禁止带章号（仅当前章）；根路径须带章号。
-fn parse_regen_outline_command(text: &str) -> Option<(Option<u32>, String)> {
-    let args = slash_args(
-        text,
-        &[
-            "刷新本章大纲",
-            "刷新大纲",
-            "重写大纲",
-            "refresh-this-outline",
-            "refresh-outline",
-            "regen-outline",
-        ],
-    )?;
-    let trimmed = args.trim();
-    if trimmed.is_empty() {
-        return Some((None, String::new()));
-    }
-    if let Some((head, rest)) = trimmed.split_once('\n') {
-        let head = head.trim();
-        let brief = rest.trim().to_string();
-        if head.is_empty() {
-            return Some((None, brief));
-        }
-        if let Some(n) = parse_outline_chapter_token(head) {
-            return Some((Some(n), brief));
-        }
-        // 首行不是章号 → 整段当期望（章节卡刷新当前章）
-        return Some((None, trimmed.to_string()));
-    }
-    // 同行：仅当首个空白分隔 token 是短章号时才拆出章号，其余全文为期望
-    let (first, rest) = match trimmed.split_once(char::is_whitespace) {
-        Some((a, b)) => (a, b.trim()),
-        None => (trimmed, ""),
-    };
-    if let Some(n) = parse_outline_chapter_token(first) {
-        return Some((Some(n), rest.to_string()));
-    }
-    Some((None, trimmed.to_string()))
 }
 
 /// 按章节大纲拆剧情卡并写入树；返回带落库说明的回复。
@@ -2113,7 +1672,7 @@ async fn enrich_plots_for_chapter_node(
     } else {
         emit_chat_progress(app, novel_id, "thinking");
     }
-    let chat_model = task_model(&settings.chat_model, &settings.default_model);
+    let chat_model = llm_model(&settings);
     let (_def_label, def_role, def_align) = prompts::default_new_character(loc);
     let num = chapter_num.unwrap_or_else(|| chapter_number_from_label(&chapter.label).unwrap_or(0));
     let system =
@@ -2155,6 +1714,7 @@ async fn enrich_plots_for_chapter_node(
         }
     }
     if added_plots > 0 {
+        crate::tree_layout::apply_auto_layout(tree);
         let _ = save_tree(tree.clone());
     }
     if !use_chapter_progress {
@@ -2372,91 +1932,6 @@ fn apply_plots_and_characters_for_chapter(
     (added_plots, added_chars)
 }
 
-fn strip_resolve_prefix(args: &str) -> &str {
-    let t = args.trim();
-    for p in [
-        "覆盖冲突",
-        "覆盖已有",
-        "覆盖",
-        "跳过已有",
-        "跳过冲突",
-        "跳过",
-        "强制追加",
-        "强制",
-        "只补缺",
-    ] {
-        if let Some(rest) = t.strip_prefix(p) {
-            return rest.trim();
-        }
-    }
-    let lower = t.to_lowercase();
-    for p in ["overwrite", "skip", "force"] {
-        if lower.starts_with(p) {
-            return t[p.len()..].trim();
-        }
-    }
-    t
-}
-
-/// 解析章号区间：第一到第十章 / 第1-10章 / 第 1-10 章 / 1-10 / 第一章-第十章
-fn parse_chapter_range(args: &str) -> Option<(u32, u32)> {
-    let raw = strip_resolve_prefix(args);
-    // 去掉空白，便于匹配「第 1-10 章」
-    let s: String = raw.chars().filter(|c| !c.is_whitespace()).collect();
-    if s.is_empty() {
-        return None;
-    }
-
-    let pair = |a: &str, b: &str| -> Option<(u32, u32)> {
-        let x = parse_chapter_ref(a)?;
-        let y = parse_chapter_ref(b)?;
-        let (lo, hi) = if x <= y { (x, y) } else { (y, x) };
-        if hi.saturating_sub(lo) > 200 {
-            return None;
-        }
-        Some((lo, hi))
-    };
-
-    // 第一到第十章 / 第一至第十章
-    for sep in ["到第", "至第"] {
-        if let Some(i) = s.find(sep) {
-            let left = &s[..i];
-            let right = format!("第{}", &s[i + sep.len()..]);
-            if let Some(r) = pair(left, &right) {
-                return Some(r);
-            }
-        }
-    }
-    // 第一到十章 / 一到十
-    for sep in ["到", "至"] {
-        if s.contains("到第") || s.contains("至第") {
-            break;
-        }
-        if let Some(i) = s.find(sep) {
-            if let Some(r) = pair(&s[..i], &s[i + sep.len()..]) {
-                return Some(r);
-            }
-        }
-    }
-    // 第1-10章 / 1-10 / 第一章-第十章
-    for sep in ["-", "–", "—", "~"] {
-        if let Some(i) = s.find(sep) {
-            if let Some(r) = pair(&s[..i], &s[i + sep.len()..]) {
-                return Some(r);
-            }
-        }
-    }
-    let lower = raw.to_lowercase();
-    if let Some(i) = lower.find(" to ") {
-        let left = raw[..i].trim();
-        let right = raw[i + 4..].trim();
-        if let Some(r) = pair(left, right) {
-            return Some(r);
-        }
-    }
-    None
-}
-
 /// LLM 生成章节卡大纲并写入结构树。返回 (模型原文, 是否已落盘应用)。
 /// 根设定 + 编号小于 `before_n` 的章节大纲与记忆（再拼期望占位）。
 fn assemble_outline_gen_brief(
@@ -2473,14 +1948,6 @@ fn assemble_outline_gen_brief(
 ) -> String {
     let mut root_ref = root_generate_reference(tree, &novel.synopsis, loc);
     root_ref.push_str(&root_linked_plots_and_knowledge(tree, loc));
-    let query = format!(
-        "{} {}\nchapters {from}-{to}",
-        novel.title, novel.synopsis
-    );
-    let canon = build_canon_context(state, novel, tree, &query, loc);
-    if !canon.trim().is_empty() {
-        root_ref.push_str(&canon);
-    }
     let chapters = sorted_chapter_nodes(tree);
     let prior: Vec<TreeNode> = chapters
         .into_iter()
@@ -2662,7 +2129,7 @@ async fn apply_llm_chapter_cards(
     // 追加到材料（如刷新大纲的本章链接卡）；在 merge 期望之前
     material_extra: Option<&str>,
 ) -> Result<(String, bool), String> {
-    let chat_model = task_model(&settings.chat_model, &settings.default_model);
+    let chat_model = llm_model(&settings);
     let replace = matches!(mode, ChapterResolveMode::Overwrite);
     let mut assembled = assemble_outline_gen_brief(
         state, novel, tree, novel_id, from, from, to, nums, loc, None,
@@ -2733,7 +2200,11 @@ async fn apply_llm_chapter_cards(
                 list
             };
             if !list.is_empty() {
+                let n0 = tree.nodes.len();
                 apply_chapter_outlines(tree, &list, mode);
+                if tree.nodes.len() > n0 {
+                    crate::tree_layout::apply_auto_layout(tree);
+                }
                 applied = true;
             }
             final_reply
@@ -2746,105 +2217,13 @@ async fn apply_llm_chapter_cards(
     Ok((out_reply, applied))
 }
 
-/// `/章节卡 1-10` · `/章节卡 第一到第十章` · `/章节卡 第 1-10 章`
-fn parse_gen_chapter_cards(text: &str) -> Option<(u32, u32, Option<ChapterResolveMode>)> {
-    let args = slash_args(text, &["生成章节卡", "章节卡", "chapters", "gen-chapters"])?;
-    let resolve = parse_resolve_mode(args);
-    if let Some((a, b)) = parse_chapter_range(args) {
-        return Some((a, b, resolve));
-    }
-    // 单章：/章节卡 3 · /章节卡 第一章
-    let single = strip_resolve_prefix(args);
-    if let Some(n) = parse_chapter_ref(single) {
-        return Some((n, n, resolve));
-    }
-    None
-}
-
-/// `/添加剧情 3 剧情正文` · `/添加剧情 第一章 剧情正文`
-fn parse_add_plot_command(text: &str) -> Option<(u32, String)> {
-    let args = slash_args(
-        text,
-        &["添加剧情", "增加剧情", "加剧情", "add-plot", "add_plot"],
-    )?;
-    let chapter = parse_chapter_ref(args)?;
-    // 去掉开头的章号引用，剩下为剧情正文
-    let rest = if let Some(i) = args.find('第') {
-        if let Some(j) = args[i..].find('章') {
-            let end = i + j + '章'.len_utf8();
-            args[end..].trim()
-        } else {
-            ""
-        }
-    } else {
-        // 阿拉伯数字或纯中文数字 token
-        let token = args.split_whitespace().next().unwrap_or("");
-        if token.is_empty() {
-            ""
-        } else if let Some(pos) = args.find(token) {
-            args[pos + token.len()..]
-                .trim()
-                .trim_start_matches(['章', '节', '：', ':', ' ', '，', ',', '\n'])
-        } else {
-            ""
-        }
-    };
-    let rest = rest.trim();
-    if rest.is_empty() {
-        return None;
-    }
-    Some((chapter, rest.to_string()))
-}
-
-async fn finish_chat_reply(
-    state: &State<'_, AppState>,
-    novel_id: &str,
-    reply: String,
-) -> Result<Vec<ChatMessage>, String> {
-    let assistant = ChatMessage {
-        id: uuid::Uuid::new_v4().to_string(),
-        novel_id: novel_id.to_string(),
-        node_id: String::new(),
-        role: "assistant".into(),
-        content: reply,
-        created_at: Utc::now().to_rfc3339(),
-    };
-    state
-        .db
-        .insert_chat(&assistant)
-        .map_err(|e| e.to_string())?;
-    state.db.list_chat(novel_id).map_err(|e| e.to_string())
-}
-
-fn finish_card_chat_reply(
-    state: &State<'_, AppState>,
-    novel_id: &str,
-    node_id: &str,
-    reply: String,
-    tree: NovelTree,
-) -> Result<CardChatResult, String> {
-    let assistant = ChatMessage {
-        id: uuid::Uuid::new_v4().to_string(),
-        novel_id: novel_id.to_string(),
-        node_id: node_id.to_string(),
-        role: "assistant".into(),
-        content: reply.clone(),
-        created_at: Utc::now().to_rfc3339(),
-    };
-    state
-        .db
-        .insert_chat(&assistant)
-        .map_err(|e| e.to_string())?;
-    Ok(CardChatResult { reply, tree })
-}
-
 #[tauri::command]
 pub async fn create_novel_chat(
     state: State<'_, AppState>,
     input: NovelCreateChatInput,
 ) -> Result<NovelCreateChatResult, String> {
     let mut settings = state.db.get_settings().map_err(|e| e.to_string())?;
-    apply_chat_model_override(&mut settings.create_model, input.model.as_deref());
+    apply_chat_model_override(&mut settings.chat_model, input.model.as_deref());
     let user_bits: Vec<&str> = input
         .messages
         .iter()
@@ -2868,7 +2247,7 @@ pub async fn create_novel_chat(
     };
     let user = enrich_user_with_urls(&user).await;
 
-    let model = task_model(&settings.create_model, &settings.default_model);
+    let model = llm_model(&settings);
 
     let cancel = state.arm_chat_cancel(CREATE_CHAT_CANCEL_KEY);
     let _clear = ClearChatCancel {
@@ -2922,7 +2301,7 @@ pub async fn create_novel_chat(
             })
             .unwrap_or(20);
         novel = Some(create_novel_with_tree(
-            &state,
+            &state.db,
             &title,
             &synopsis,
             &[],
@@ -2956,7 +2335,7 @@ pub async fn create_novel_chat(
             .find_map(|t| parse_chapter_count_from_text(t))
             .unwrap_or(20);
         novel = Some(create_novel_with_tree(
-            &state,
+            &state.db,
             &fallback_title,
             fallback_syn,
             &[],
@@ -3367,10 +2746,242 @@ fn extract_create_json(reply: &str) -> Option<serde_json::Value> {
     None
 }
 
+/// `link_to`：已有节点 id 原样返回；`root` / `novel` / 空串解析为小说根（根 id 不是字面 `"root"`）。
+pub(crate) fn resolve_link_host(tree: &NovelTree, spec: &str) -> Result<String, String> {
+    let t = spec.trim();
+    if tree.nodes.iter().any(|n| n.id == t) {
+        return Ok(t.to_string());
+    }
+    if t.is_empty() || t.eq_ignore_ascii_case("root") || t.eq_ignore_ascii_case("novel") {
+        return tree
+            .nodes
+            .iter()
+            .find(|n| matches!(n.kind, NodeKind::Novel))
+            .map(|n| n.id.clone())
+            .ok_or_else(|| "找不到小说根节点".into());
+    }
+    Err(format!("节点不存在: {t}"))
+}
+
+/// 公共知识卡挂到哪：章/根用自身；人物/剧情/知识卡用其宿主；否则小说根。
+pub(crate) fn knowledge_attach_host(tree: &NovelTree, selected_id: Option<&str>) -> Result<String, String> {
+    let root_id = tree
+        .nodes
+        .iter()
+        .find(|n| matches!(n.kind, NodeKind::Novel))
+        .map(|n| n.id.clone())
+        .ok_or_else(|| "找不到小说根节点".to_string())?;
+    let Some(id) = selected_id.map(str::trim).filter(|s| !s.is_empty()) else {
+        return Ok(root_id);
+    };
+    if id.eq_ignore_ascii_case("root") || id.eq_ignore_ascii_case("novel") {
+        return Ok(root_id);
+    }
+    let Some(n) = tree.nodes.iter().find(|n| n.id == id) else {
+        return Err(format!("节点不存在: {id}"));
+    };
+    let host = match n.kind {
+        NodeKind::Novel | NodeKind::Volume | NodeKind::Chapter => n.id.clone(),
+        NodeKind::SidePlot => tree
+            .nodes
+            .iter()
+            .find(|h| {
+                matches!(h.kind, NodeKind::Chapter | NodeKind::Novel | NodeKind::Volume)
+                    && h.linked_side_plot_ids.iter().any(|x| x == id)
+            })
+            .map(|h| h.id.clone())
+            .unwrap_or_else(|| root_id.clone()),
+        NodeKind::Knowledge => tree
+            .nodes
+            .iter()
+            .find(|h| h.linked_knowledge_ids.iter().any(|x| x == id))
+            .map(|h| h.id.clone())
+            .unwrap_or(root_id),
+        NodeKind::Character => tree
+            .nodes
+            .iter()
+            .find(|h| h.linked_character_ids.iter().any(|x| x == id))
+            .map(|h| h.id.clone())
+            .unwrap_or(root_id),
+    };
+    Ok(host)
+}
+
+pub fn upsert_public_knowledge_card_inner(
+    db: &Db,
+    id: Option<String>,
+    title: String,
+    book_ids: Vec<String>,
+    extract_prompt: String,
+    extracted: String,
+) -> Result<PublicKnowledgeCard, String> {
+    let title = title.trim().to_string();
+    if title.is_empty() {
+        return Err("标题不能为空".into());
+    }
+    let now = Utc::now().to_rfc3339();
+    let existing = id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .and_then(|id| db.get_public_knowledge_card(id).ok().flatten());
+    let card = PublicKnowledgeCard {
+        id: existing
+            .as_ref()
+            .map(|c| c.id.clone())
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
+        title,
+        book_ids,
+        extract_prompt,
+        extracted,
+        created_at: existing
+            .as_ref()
+            .map(|c| c.created_at.clone())
+            .unwrap_or_else(|| now.clone()),
+        updated_at: now,
+        archived: existing.as_ref().map(|c| c.archived).unwrap_or(false),
+    };
+    db.upsert_public_knowledge_card(&card)
+        .map_err(|e| e.to_string())?;
+    Ok(card)
+}
+
+pub fn add_public_knowledge_card_inner(
+    db: &Db,
+    novel_id: &str,
+    public_id: &str,
+    host_spec: Option<&str>,
+) -> Result<(NovelTree, String), String> {
+    let card = db
+        .get_public_knowledge_card(public_id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "公共知识卡不存在".to_string())?;
+    if card.archived {
+        return Err("该公共知识卡已归档".into());
+    }
+    let mut tree = get_tree(novel_id.to_string())?;
+    let host_id = knowledge_attach_host(&tree, host_spec)?;
+    let payload = KnowledgeCardPayload {
+        book_ids: card.book_ids,
+        extract_prompt: card.extract_prompt,
+        extracted: card.extracted.clone(),
+        from_canon: false,
+    };
+    let kid = format!("kb-{}", uuid::Uuid::new_v4());
+    let kn = tree
+        .nodes
+        .iter()
+        .filter(|n| matches!(n.kind, NodeKind::Knowledge))
+        .count();
+    tree.nodes.push(TreeNode {
+        id: kid.clone(),
+        kind: NodeKind::Knowledge,
+        label: card.title,
+        outline: payload.extracted.chars().take(200).collect(),
+        character: None,
+        knowledge: Some(payload),
+        side_plot: None,
+        linked_character_ids: vec![],
+        linked_side_plot_ids: vec![],
+        linked_knowledge_ids: vec![],
+        position: NodePosition {
+            x: 40.0,
+            y: 80.0 + kn as f64 * 140.0,
+        },
+        word_count: 0,
+        word_count_min: 0,
+        word_count_max: 0,
+        chapter_count: 0,
+    });
+    let exists = tree.edges.iter().any(|e| {
+        e.source == host_id && e.target == kid || e.source == kid && e.target == host_id
+    });
+    if !exists {
+        tree.edges.push(TreeEdge {
+            id: format!("e-{host_id}-{kid}"),
+            source: host_id.clone(),
+            target: kid.clone(),
+            kind: "knowledge".into(),
+            source_handle: Some("left".into()),
+            target_handle: Some("right".into()),
+            label: String::new(),
+        });
+    }
+    if let Some(host) = tree.nodes.iter_mut().find(|n| n.id == host_id) {
+        if !host.linked_knowledge_ids.iter().any(|x| x == &kid) {
+            host.linked_knowledge_ids.push(kid.clone());
+        }
+    }
+    crate::tree_layout::apply_auto_layout(&mut tree);
+    save_tree(tree.clone())?;
+    Ok((tree, kid))
+}
+
+/// 把指向不存在节点 `"root"` / `"novel"` 的边改挂到真正的小说根，并补 `linked_*`。
+pub(crate) fn repair_root_alias_links(tree: &mut NovelTree) -> bool {
+    let Some(root_id) = tree
+        .nodes
+        .iter()
+        .find(|n| matches!(n.kind, NodeKind::Novel))
+        .map(|n| n.id.clone())
+    else {
+        return false;
+    };
+    let node_ids: Vec<String> = tree.nodes.iter().map(|n| n.id.clone()).collect();
+    let mut changed = false;
+    for e in &mut tree.edges {
+        for end in [&mut e.source, &mut e.target] {
+            if *end == root_id {
+                continue;
+            }
+            let missing = !node_ids.iter().any(|id| id == end);
+            if missing && (end.eq_ignore_ascii_case("root") || end.eq_ignore_ascii_case("novel")) {
+                *end = root_id.clone();
+                changed = true;
+            }
+        }
+    }
+    if !changed {
+        return false;
+    }
+    let extras: Vec<(String, String)> = tree
+        .edges
+        .iter()
+        .filter_map(|e| {
+            let other = if e.source == root_id {
+                e.target.as_str()
+            } else if e.target == root_id {
+                e.source.as_str()
+            } else {
+                return None;
+            };
+            Some((e.kind.clone(), other.to_string()))
+        })
+        .collect();
+    if let Some(root) = tree.nodes.iter_mut().find(|n| n.id == root_id) {
+        for (kind, card) in extras {
+            let list = match kind.as_str() {
+                "knowledge" => &mut root.linked_knowledge_ids,
+                "character" => &mut root.linked_character_ids,
+                "side_plot" => &mut root.linked_side_plot_ids,
+                _ => continue,
+            };
+            if !list.iter().any(|id| id == &card) {
+                list.push(card);
+            }
+        }
+    }
+    true
+}
+
 #[tauri::command]
 pub fn get_tree(novel_id: String) -> Result<NovelTree, String> {
     let raw = fs::read_to_string(novel_tree_path(&novel_id)).map_err(|e| e.to_string())?;
-    serde_json::from_str(&raw).map_err(|e| e.to_string())
+    let mut tree: NovelTree = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
+    if repair_root_alias_links(&mut tree) {
+        let _ = save_tree(tree.clone());
+    }
+    Ok(tree)
 }
 
 #[tauri::command]
@@ -3389,6 +3000,14 @@ pub fn delete_tree_card(
     novel_id: String,
     node_id: String,
 ) -> Result<NovelTree, String> {
+    delete_tree_card_inner(&state.db, novel_id, node_id)
+}
+
+pub(crate) fn delete_tree_card_inner(
+    db: &crate::db::Db,
+    novel_id: String,
+    node_id: String,
+) -> Result<NovelTree, String> {
     let mut tree = get_tree(novel_id.clone())?;
     let kind = tree
         .nodes
@@ -3398,6 +3017,57 @@ pub fn delete_tree_card(
         .ok_or_else(|| "节点不存在".to_string())?;
     if matches!(kind, NodeKind::Novel) {
         return Err("根节点不能删除".into());
+    }
+
+    // 删分卷：卷下首章改挂到根（或分卷上游），不删章节正文
+    if matches!(kind, NodeKind::Volume) {
+        let root_id = tree
+            .nodes
+            .iter()
+            .find(|n| matches!(n.kind, NodeKind::Novel))
+            .map(|n| n.id.clone())
+            .ok_or_else(|| "根节点不存在".to_string())?;
+        let preds: Vec<(String, Option<String>, Option<String>)> = tree
+            .edges
+            .iter()
+            .filter(|e| {
+                (e.kind == "volume" || e.kind == "chapter") && e.target == node_id
+            })
+            .map(|e| (e.source.clone(), e.source_handle.clone(), e.target_handle.clone()))
+            .collect();
+        let attach_to = preds
+            .first()
+            .map(|(s, _, _)| s.clone())
+            .unwrap_or(root_id);
+        let attach_sh = preds
+            .first()
+            .and_then(|(_, sh, _)| sh.clone())
+            .or_else(|| Some("bottom".into()));
+        let children: Vec<(String, Option<String>)> = tree
+            .edges
+            .iter()
+            .filter(|e| e.kind == "chapter" && e.source == node_id)
+            .map(|e| (e.target.clone(), e.target_handle.clone()))
+            .collect();
+        for (child, th) in &children {
+            let exists = tree.edges.iter().any(|e| {
+                (e.kind == "chapter" || e.kind == "volume")
+                    && e.source == attach_to
+                    && e.target == *child
+            });
+            if exists {
+                continue;
+            }
+            tree.edges.push(TreeEdge {
+                id: format!("e-{attach_to}-{child}"),
+                source: attach_to.clone(),
+                target: child.clone(),
+                kind: "chapter".into(),
+                source_handle: attach_sh.clone(),
+                target_handle: th.clone().or_else(|| Some("top".into())),
+                label: String::new(),
+            });
+        }
     }
 
     // 删章节时把上下游剧情链接上，避免断链
@@ -3437,7 +3107,7 @@ pub fn delete_tree_card(
             }
         }
         let _ = fs::remove_file(chapter_path(&novel_id, &node_id));
-        let _ = state.db.delete_chapter_memory(&novel_id, &node_id);
+        let _ = db.delete_chapter_memory(&novel_id, &node_id);
         let nid = novel_id.clone();
         let cid = node_id.clone();
         tauri::async_runtime::spawn(async move {
@@ -3457,7 +3127,7 @@ pub fn delete_tree_card(
         n.linked_side_plot_ids.retain(|id| alive.contains(id));
         n.linked_knowledge_ids.retain(|id| alive.contains(id));
     }
-    let _ = state.db.delete_chat_for_node(&novel_id, &node_id);
+    let _ = db.delete_chat_for_node(&novel_id, &node_id);
     save_tree(tree.clone())?;
     Ok(tree)
 }
@@ -3612,12 +3282,15 @@ fn chapter_context(
     let mut char_ids: Vec<String> = node
         .map(|n| n.linked_character_ids.clone())
         .unwrap_or_default();
-    let mut plot_ids: Vec<String> = node
-        .map(|n| n.linked_side_plot_ids.clone())
-        .unwrap_or_default();
-    let mut knowledge_ids: Vec<String> = node
-        .map(|n| n.linked_knowledge_ids.clone())
-        .unwrap_or_default();
+    let mut plot_ids = crate::tree_links::chapter_local_plot_ids(tree, node_id);
+    let inherited_plots = crate::tree_links::chapter_inherited_plot_ids(tree, node_id);
+    let root_plot_ids = crate::tree_links::root_plot_ids(tree);
+    for pid in &inherited_plots {
+        if !plot_ids.iter().any(|id| id == pid) {
+            plot_ids.push(pid.clone());
+        }
+    }
+    let knowledge_ids = crate::tree_links::chapter_effective_knowledge_ids(tree, node_id);
 
     for e in &tree.edges {
         if e.source != node_id && e.target != node_id {
@@ -3631,55 +3304,32 @@ fn chapter_context(
         let Some(other) = tree.nodes.iter().find(|n| n.id == other_id) else {
             continue;
         };
-        match other.kind {
-            NodeKind::Character => {
-                if !char_ids.iter().any(|id| id == other_id) {
-                    char_ids.push(other_id.to_string());
-                }
-            }
-            NodeKind::SidePlot => {
-                if !plot_ids.iter().any(|id| id == other_id) {
-                    plot_ids.push(other_id.to_string());
-                }
-            }
-            NodeKind::Knowledge => {
-                if !knowledge_ids.iter().any(|id| id == other_id) {
-                    knowledge_ids.push(other_id.to_string());
-                }
-            }
-            _ => {}
+        if matches!(other.kind, NodeKind::Character)
+            && !char_ids.iter().any(|id| id == other_id)
+        {
+            char_ids.push(other_id.to_string());
         }
     }
 
-    // 根节点关联人物 / 剧情 / 知识卡：贯穿全书
-    let mut root_char_ids: Vec<String> = Vec::new();
-    let mut root_plot_ids: Vec<String> = Vec::new();
+    // 根 + 分卷关联人物
+    let mut root_char_ids: Vec<String> = crate::tree_links::root_character_ids(tree);
+    for cid in &root_char_ids {
+        if !char_ids.iter().any(|id| id == cid) {
+            char_ids.push(cid.clone());
+        }
+    }
+    if let Some(vid) = crate::tree_links::chapter_parent_volume_id(tree, node_id) {
+        for cid in crate::tree_links::volume_character_ids(tree, &vid) {
+            if !char_ids.iter().any(|id| id == &cid) {
+                char_ids.push(cid);
+            }
+        }
+    }
     if let Some(root) = tree
         .nodes
         .iter()
         .find(|n| matches!(n.kind, NodeKind::Novel))
     {
-        for cid in &root.linked_character_ids {
-            if !root_char_ids.iter().any(|id| id == cid) {
-                root_char_ids.push(cid.clone());
-            }
-            if !char_ids.iter().any(|id| id == cid) {
-                char_ids.push(cid.clone());
-            }
-        }
-        for pid in &root.linked_side_plot_ids {
-            if !root_plot_ids.iter().any(|id| id == pid) {
-                root_plot_ids.push(pid.clone());
-            }
-            if !plot_ids.iter().any(|id| id == pid) {
-                plot_ids.push(pid.clone());
-            }
-        }
-        for kid in &root.linked_knowledge_ids {
-            if !knowledge_ids.iter().any(|id| id == kid) {
-                knowledge_ids.push(kid.clone());
-            }
-        }
         for e in &tree.edges {
             if e.source != root.id && e.target != root.id {
                 continue;
@@ -3699,19 +3349,6 @@ fn chapter_context(
                 if !char_ids.iter().any(|id| id == other_id) {
                     char_ids.push(other_id.to_string());
                 }
-            }
-            if matches!(other.kind, NodeKind::SidePlot) {
-                if !root_plot_ids.iter().any(|id| id == other_id) {
-                    root_plot_ids.push(other_id.to_string());
-                }
-                if !plot_ids.iter().any(|id| id == other_id) {
-                    plot_ids.push(other_id.to_string());
-                }
-            }
-            if matches!(other.kind, NodeKind::Knowledge)
-                && !knowledge_ids.iter().any(|id| id == other_id)
-            {
-                knowledge_ids.push(other_id.to_string());
             }
         }
     }
@@ -3847,6 +3484,12 @@ fn chapter_context(
                 } else {
                     "｜book-wide · active"
                 }
+            } else if inherited_plots.iter().any(|r| r == id) {
+                if loc.is_zh() {
+                    "｜分卷剧情·进行中"
+                } else {
+                    "｜volume · active"
+                }
             } else {
                 ""
             };
@@ -3917,11 +3560,20 @@ fn chapter_context(
         if let Some(n) = tree.nodes.iter().find(|x| x.id == *id) {
             let k = n.knowledge.as_ref();
             let feat = k.map(|x| x.extracted.as_str()).unwrap_or("").trim();
-            if !feat.is_empty() {
-                kn_cards.push((n.label.clone(), feat.to_string()));
+            let body = if !feat.is_empty() {
+                feat.to_string()
             } else {
-                kn_cards.push((n.label.clone(), labels.empty_knowledge.to_string()));
-            }
+                let prompt = k.map(|x| x.extract_prompt.as_str()).unwrap_or("").trim();
+                let outline = n.outline.trim();
+                if !prompt.is_empty() {
+                    format!("{}：{prompt}", labels.empty_knowledge)
+                } else if !outline.is_empty() {
+                    outline.to_string()
+                } else {
+                    labels.empty_knowledge.to_string()
+                }
+            };
+            kn_cards.push((n.label.clone(), body));
         }
     }
     let knowledge = crate::kb_context::format_knowledge_cards_capped(
@@ -4083,7 +3735,7 @@ async fn extract_and_store_chapter_memory(
             "No chapter body to extract memory from".into()
         });
     }
-    let model = task_model(&settings.knowledge_model, &settings.default_model);
+    let model = llm_model(&settings);
     let system = prompts::extract_chapter_memory_system(loc);
     let user = prompts::extract_chapter_memory_user(
         loc,
@@ -4251,7 +3903,7 @@ pub async fn regenerate_chapter_memory(
     Ok(chunks)
 }
 
-/// 预生成硬验收：大纲节拍 + 本章/根节点剧情卡 + 本章焦点人物（不含仅挂在根上的路人）。
+/// 预生成硬验收：大纲节拍 + 本章/根/分卷剧情卡 + 本章焦点人物（不含仅挂在根上的路人）。
 fn collect_land_beats(tree: &NovelTree, novel_id: &str, node_id: &str) -> Vec<LandBeat> {
     let node = tree.nodes.iter().find(|n| n.id == node_id);
     let mut beats = Vec::new();
@@ -4267,9 +3919,13 @@ fn collect_land_beats(tree: &NovelTree, novel_id: &str, node_id: &str) -> Vec<La
         });
     }
 
-    let mut plot_ids: Vec<String> = node
-        .map(|n| n.linked_side_plot_ids.clone())
-        .unwrap_or_default();
+    // 本机 + 根∪分卷继承（与 chapter_context / 左栏一致；继承项不参与本章排序）
+    let mut plot_ids = crate::tree_links::chapter_local_plot_ids(tree, node_id);
+    for pid in crate::tree_links::chapter_inherited_plot_ids(tree, node_id) {
+        if !plot_ids.iter().any(|id| id == &pid) {
+            plot_ids.push(pid);
+        }
+    }
     let mut focus_chars: Vec<String> = node
         .map(|n| n.linked_character_ids.clone())
         .unwrap_or_default();
@@ -4285,42 +3941,9 @@ fn collect_land_beats(tree: &NovelTree, novel_id: &str, node_id: &str) -> Vec<La
         let Some(other) = tree.nodes.iter().find(|n| n.id == other_id) else {
             continue;
         };
-        match other.kind {
-            NodeKind::SidePlot if !plot_ids.iter().any(|id| id == other_id) => {
-                plot_ids.push(other_id.to_string());
-            }
-            NodeKind::Character if !focus_chars.iter().any(|id| id == other_id) => {
-                focus_chars.push(other_id.to_string());
-            }
-            _ => {}
-        }
-    }
-    if let Some(root) = tree
-        .nodes
-        .iter()
-        .find(|n| matches!(n.kind, NodeKind::Novel))
-    {
-        for pid in &root.linked_side_plot_ids {
-            if !plot_ids.iter().any(|id| id == pid) {
-                plot_ids.push(pid.clone());
-            }
-        }
-        for e in &tree.edges {
-            if e.source != root.id && e.target != root.id {
-                continue;
-            }
-            let other_id = if e.source == root.id {
-                e.target.as_str()
-            } else {
-                e.source.as_str()
-            };
-            if let Some(other) = tree.nodes.iter().find(|n| n.id == other_id) {
-                if matches!(other.kind, NodeKind::SidePlot)
-                    && !plot_ids.iter().any(|id| id == other_id)
-                {
-                    plot_ids.push(other_id.to_string());
-                }
-            }
+        if matches!(other.kind, NodeKind::Character) && !focus_chars.iter().any(|id| id == other_id)
+        {
+            focus_chars.push(other_id.to_string());
         }
     }
     for pid in &plot_ids {
@@ -4508,7 +4131,7 @@ pub async fn generate_chapter(
         state: &*state,
         key: novel_id.clone(),
     };
-    const TOTAL: u32 = 6;
+    const TOTAL: u32 = 5;
     emit_chapter_progress(&app, &novel_id, "context", 1, TOTAL);
 
     let tree = get_tree(novel_id.clone())?;
@@ -4518,8 +4141,8 @@ pub async fn generate_chapter(
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "小说不存在".to_string())?;
     let mut settings = state.db.get_settings().map_err(|e| e.to_string())?;
-    // Chat 面板所选模型；非空时覆盖本轮 generate_model。
-    apply_chat_model_override(&mut settings.generate_model, model.as_deref());
+    // Chat 面板所选模型；非空时覆盖本轮 chat_model。
+    apply_chat_model_override(&mut settings.chat_model, model.as_deref());
     let node = tree.nodes.iter().find(|n| n.id == node_id);
     let node_outline = node.map(|n| n.outline.as_str()).unwrap_or("");
     let node_label = node.map(|n| n.label.as_str()).unwrap_or("");
@@ -4559,23 +4182,18 @@ pub async fn generate_chapter(
         String::new()
     };
     let (wmin, wmax) = root_chapter_word_target(&tree, &novel);
-    let query = format!("{node_label}\n{node_outline}\n{user_brief}");
-    let canon_block = build_canon_context(&state, &novel, &tree, &query, loc);
     let system = prompts::generate_chapter_system(
         loc,
         &novel.title,
         &novel.synopsis,
-        &novel.knowledge_strategy,
         wmin,
         wmax,
         novel.chapter_count,
-        &novel.canon_mode,
     );
     let user = prompts::generate_chapter_user(
         loc,
         &root_ref,
         &prior_hist,
-        &canon_block,
         &chapter_info,
         &cards,
         &contract,
@@ -4583,7 +4201,7 @@ pub async fn generate_chapter(
         wmin,
         wmax,
     );
-    let model = task_model(&settings.generate_model, &settings.default_model);
+    let model = llm_model(&settings);
     emit_chapter_progress(&app, &novel_id, "writing", 2, TOTAL);
     let (mut content, used_mock) = llm_complete(
         Some(&app),
@@ -4598,7 +4216,7 @@ pub async fn generate_chapter(
     .await?;
 
     // 落地校验拆成子步骤进度，避免长时间停在「校验落地节拍」不知在干嘛。
-    // 字数只靠首轮 Prompt 交给 AI；落地/设定对齐轮不做字数验证。
+    // 字数只靠首轮 Prompt 交给 AI；落地轮不做字数验证。
     let mut repaired_n = 0usize;
     emit_chapter_progress(&app, &novel_id, "check_beats", 3, TOTAL);
     if !used_mock && !land_beats.is_empty() {
@@ -4634,46 +4252,7 @@ pub async fn generate_chapter(
         }
     }
 
-    // Phase 3: strict canon alignment when bound books present
-    let mut canon_repaired = 0usize;
-    if !used_mock && novel_canon_strict(&novel) && !canon_block.trim().is_empty() {
-        emit_chapter_progress(&app, &novel_id, "check_canon", 5, TOTAL);
-        let canon_beats = collect_canon_land_beats(&canon_block, node_outline);
-        let missing = chapter_constraints::missing_beats(&content, &canon_beats);
-        if !missing.is_empty() {
-            canon_repaired = missing.len();
-            emit_chapter_progress(&app, &novel_id, "repair_canon", 5, TOTAL);
-            let miss_txt = chapter_constraints::format_missing(loc.is_zh(), &missing);
-            // P3: only pass snippets that mention the missing terms (not full canon dump)
-            let slim_canon = canon_snippets_for_missing(&canon_block, &missing);
-            let rsys = prompts::repair_canon_system(loc);
-            let ruser = prompts::repair_canon_user(loc, &slim_canon, &miss_txt, &content);
-            match llm_complete(
-                Some(&app),
-                &state,
-                &settings,
-                &rsys,
-                &ruser,
-                Some(&model),
-                Some(&novel_id),
-                Some(cancel.clone()),
-            )
-            .await
-            {
-                Ok((fixed, mock2)) => {
-                    if !mock2 && fixed.trim().chars().count() > content.trim().chars().count() / 2 {
-                        content = fixed;
-                    } else {
-                        canon_repaired = 0;
-                    }
-                }
-                Err(e) if e == "cancelled" => return Err(e),
-                Err(_) => canon_repaired = 0,
-            }
-        }
-    }
-
-    emit_chapter_progress(&app, &novel_id, "saving", 6, TOTAL);
+    emit_chapter_progress(&app, &novel_id, "saving", 5, TOTAL);
     let words = count_words(&content);
     content.push_str(&prompts::generate_footer(loc, &node_id, &model));
     fs::write(chapter_path(&novel_id, &node_id), &content).map_err(|e| e.to_string())?;
@@ -4682,13 +4261,6 @@ pub async fn generate_chapter(
     let _ = save_tree(tree);
     // 预生成不抽取章节记忆；记忆仅手动抽取。
     let mut message = prompts::generate_done_msg(loc, &model, words, used_mock, repaired_n);
-    if canon_repaired > 0 {
-        if loc.is_zh() {
-            message.push_str(&format!(" 设定对齐补写 {canon_repaired} 项。"));
-        } else {
-            message.push_str(&format!(" Canon-aligned {canon_repaired} term(s)."));
-        }
-    }
     if !word_count_ok(words, wmin, wmax) {
         message.push_str(&prompts::word_count_off_note(loc, words, wmin, wmax));
     }
@@ -4730,8 +4302,8 @@ pub async fn refine_chapter(
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "小说不存在".to_string())?;
     let mut settings = state.db.get_settings().map_err(|e| e.to_string())?;
-    // Chat 面板所选模型；非空时覆盖本轮 refine_model。
-    apply_chat_model_override(&mut settings.refine_model, model.as_deref());
+    // Chat 面板所选模型；非空时覆盖本轮 chat_model。
+    apply_chat_model_override(&mut settings.chat_model, model.as_deref());
     let node = tree.nodes.iter().find(|n| n.id == node_id);
     let node_outline = node.map(|n| n.outline.as_str()).unwrap_or("");
     // 精修必须在当前已有正文上改；无正文则拒绝（勿当成预生成）。
@@ -4785,7 +4357,7 @@ pub async fn refine_chapter(
     }
 
     let (wmin, wmax) = root_chapter_word_target(&tree, &novel);
-    let refine_model = task_model(&settings.refine_model, &settings.default_model);
+    let refine_model = llm_model(&settings);
     let system = prompts::refine_chapter_system(
         loc,
         &novel.title,
@@ -4795,16 +4367,8 @@ pub async fn refine_chapter(
         full_body,
     );
     let brief = user_brief.unwrap_or_default();
-    let query = format!("{node_outline}\n{}", current.chars().take(800).collect::<String>());
-    let canon_block = build_canon_context(&state, &novel, &tree, &query, loc);
-    let strategy = if canon_block.trim().is_empty() {
-        novel.knowledge_strategy.clone()
-    } else {
-        format!("{}\n\n{canon_block}", novel.knowledge_strategy)
-    };
     let user = prompts::refine_chapter_user(
         loc,
-        &strategy,
         linked_n,
         &prev_text,
         &chapter_info,
@@ -4844,6 +4408,81 @@ pub async fn refine_chapter(
         used_mock,
         message,
     })
+}
+
+fn strip_outer_md_fence(s: &str) -> String {
+    let t = s.trim();
+    if !t.starts_with("```") {
+        return t.to_string();
+    }
+    let mut lines: Vec<&str> = t.lines().collect();
+    if lines.first().is_some_and(|l| l.starts_with("```")) {
+        lines.remove(0);
+    }
+    if lines.last().is_some_and(|l| l.trim() == "```") {
+        lines.pop();
+    }
+    lines.join("\n").trim().to_string()
+}
+
+/// 正文编辑区：按用户意见改写单段；模型同全局 Chat（`chat_model`）。
+#[tauri::command]
+pub async fn rewrite_chapter_paragraph(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    novel_id: String,
+    paragraph: String,
+    instruction: String,
+    model: Option<String>,
+) -> Result<String, String> {
+    let para = paragraph.trim();
+    let note = instruction.trim();
+    if para.is_empty() {
+        return Err("段落为空".into());
+    }
+    if note.is_empty() {
+        return Err("请填写修改意见".into());
+    }
+    let cancel = state.arm_chat_cancel(&novel_id);
+    let _clear = ClearChatCancel {
+        state: &*state,
+        key: novel_id.clone(),
+    };
+    let novel = state
+        .db
+        .get_novel(&novel_id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "小说不存在".to_string())?;
+    let mut settings = state.db.get_settings().map_err(|e| e.to_string())?;
+    apply_chat_model_override(&mut settings.chat_model, model.as_deref());
+    let chat_model = llm_model(&settings);
+    let loc = PromptLocale::for_interaction(
+        &settings.ui_locale,
+        &[novel.title.as_str(), novel.synopsis.as_str(), para, note],
+    );
+    let system = prompts::rewrite_paragraph_system(loc);
+    let user = prompts::rewrite_paragraph_user(loc, para, note);
+    let (content, _) = llm_complete_ex(
+        Some(&app),
+        &state,
+        &settings,
+        &system,
+        &user,
+        Some(&chat_model),
+        Some(novel_id.as_str()),
+        Some(cancel),
+        false,
+    )
+    .await?;
+    let out = strip_outer_md_fence(&content);
+    if out.is_empty() {
+        return Err(if loc.is_zh() {
+            "模型未返回有效段落".into()
+        } else {
+            "Model returned an empty paragraph".into()
+        });
+    }
+    Ok(out)
 }
 
 /// 解析根节点「生成章节卡」的编号范围。
@@ -5015,9 +4654,12 @@ fn chapter_bound_cards_for_outline(tree: &NovelTree, node_id: &str, loc: PromptL
     let mut char_ids: Vec<String> = node
         .map(|n| n.linked_character_ids.clone())
         .unwrap_or_default();
-    let mut plot_ids: Vec<String> = node
-        .map(|n| n.linked_side_plot_ids.clone())
-        .unwrap_or_default();
+    let mut plot_ids = crate::tree_links::chapter_local_plot_ids(tree, node_id);
+    for pid in crate::tree_links::chapter_inherited_plot_ids(tree, node_id) {
+        if !plot_ids.iter().any(|id| id == &pid) {
+            plot_ids.push(pid);
+        }
+    }
 
     for e in &tree.edges {
         if e.source != node_id && e.target != node_id {
@@ -5031,18 +4673,10 @@ fn chapter_bound_cards_for_outline(tree: &NovelTree, node_id: &str, loc: PromptL
         let Some(other) = tree.nodes.iter().find(|n| n.id == other_id) else {
             continue;
         };
-        match other.kind {
-            NodeKind::Character => {
-                if !char_ids.iter().any(|id| id == other_id) {
-                    char_ids.push(other_id.to_string());
-                }
-            }
-            NodeKind::SidePlot => {
-                if !plot_ids.iter().any(|id| id == other_id) {
-                    plot_ids.push(other_id.to_string());
-                }
-            }
-            _ => {}
+        if matches!(other.kind, NodeKind::Character)
+            && !char_ids.iter().any(|id| id == other_id)
+        {
+            char_ids.push(other_id.to_string());
         }
     }
 
@@ -5565,7 +5199,7 @@ pub async fn consolidate_plot_cards(
     }
 
     emit_chapter_progress(&app, &novel_id, "writing", 2, TOTAL);
-    let model = task_model(&settings.chat_model, &settings.default_model);
+    let model = llm_model(&settings);
     let sys = prompts::consolidate_plots_system(loc);
     let user = prompts::consolidate_plots_user(
         loc,
@@ -5758,6 +5392,9 @@ pub async fn consolidate_plot_cards(
     }
 
     emit_chapter_progress(&app, &novel_id, "saving", 3, TOTAL);
+    if created > 0 {
+        crate::tree_layout::apply_auto_layout(&mut tree);
+    }
     save_tree(tree)?;
     let message = if loc.is_zh() {
         format!("整理完成：更新 {updated} · 新建 {created} · 归档章内卡 {absorbed}。")
@@ -6083,7 +5720,7 @@ async fn run_plan_next_chapters(
         loc.is_zh(),
     );
 
-    let chat_model = task_model(&settings.chat_model, &settings.default_model);
+    let chat_model = llm_model(&settings);
     let system = prompts::plan_next_chapters_system(
         loc,
         &novel.title,
@@ -6099,7 +5736,6 @@ async fn run_plan_next_chapters(
         to,
         &nums,
         &consideration,
-        &novel.knowledge_strategy,
     );
     if use_chapter_progress {
         emit_chapter_progress(app, novel_id, "planning", 2, TOTAL);
@@ -6185,489 +5821,15 @@ pub async fn plan_next_chapters(
     })
 }
 
-#[tauri::command]
-pub fn list_chat_messages(
-    state: State<'_, AppState>,
-    novel_id: String,
-) -> Result<Vec<ChatMessage>, String> {
-    state.db.list_chat(&novel_id).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub fn list_card_chat_messages(
-    state: State<'_, AppState>,
-    novel_id: String,
-    node_id: String,
-) -> Result<Vec<ChatMessage>, String> {
-    state
-        .db
-        .list_chat_for_node(&novel_id, &node_id)
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub async fn chat_send(
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-    novel_id: String,
-    content: String,
-    model: Option<String>,
-) -> Result<Vec<ChatMessage>, String> {
-    let cancel = state.arm_chat_cancel(&novel_id);
-    let _clear = ClearChatCancel {
-        state: &*state,
-        key: novel_id.clone(),
-    };
-
-    let now = Utc::now().to_rfc3339();
-    let user_msg = ChatMessage {
-        id: uuid::Uuid::new_v4().to_string(),
-        novel_id: novel_id.clone(),
-        node_id: String::new(),
-        role: "user".into(),
-        content: content.clone(),
-        created_at: now.clone(),
-    };
-    state.db.insert_chat(&user_msg).map_err(|e| e.to_string())?;
-
-    emit_chat_progress(&app, &novel_id, "context");
-    let mut tree = get_tree(novel_id.clone())?;
-    let mut settings = state.db.get_settings().map_err(|e| e.to_string())?;
-    apply_chat_model_override(&mut settings.chat_model, model.as_deref());
-    let mut novel = state
-        .db
-        .get_novel(&novel_id)
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "小说不存在".to_string())?;
-    let loc = PromptLocale::for_interaction(
-        &settings.ui_locale,
-        &[
-            content.as_str(),
-            novel.title.as_str(),
-            novel.synopsis.as_str(),
-        ],
-    );
-
-    // —— 根 Chat 明确指令（确定性，优先于自由对话）——
-    if parse_clear_all_chapters(&content) {
-        emit_chat_progress(&app, &novel_id, "apply_outlines");
-        let removed = clear_all_chapter_nodes(&mut tree);
-        let n = removed.len();
-        let _ = save_tree(tree);
-        // 同步清掉正文文件与章节记忆，避免「节点没了记忆还在」
-        purge_chapter_artifacts(&state, &novel_id, &removed);
-        emit_chat_progress(&app, &novel_id, "saving");
-        let reply = if loc.is_zh() {
-            format!("已清空全部章节节点（共 {n} 个），并清除对应正文与章节记忆。角色卡与剧情卡仍保留。")
-        } else {
-            format!(
-                "Cleared all chapter nodes ({n}), including bodies and chapter memory. Character/plot cards kept."
-            )
-        };
-        return finish_chat_reply(&state, &novel_id, reply).await;
-    }
-    if parse_clear_all_plots(&content) {
-        emit_chat_progress(&app, &novel_id, "apply_outlines");
-        let n = tree
-            .nodes
-            .iter()
-            .filter(|x| matches!(x.kind, NodeKind::SidePlot))
-            .count();
-        clear_all_side_plot_nodes(&mut tree);
-        let _ = save_tree(tree);
-        emit_chat_progress(&app, &novel_id, "saving");
-        let reply = if loc.is_zh() {
-            format!("已清空全部剧情卡（共 {n} 张）。章节与角色卡仍保留。")
-        } else {
-            format!("Cleared all plot cards ({n}). Chapters and characters kept.")
-        };
-        return finish_chat_reply(&state, &novel_id, reply).await;
-    }
-
-    if let Some((ch, plot)) = parse_add_plot_command(&content) {
-        emit_chat_progress(&app, &novel_id, "apply_card");
-        let reply = match add_plot_to_chapter(&mut tree, ch, &plot) {
-            Ok(msg) => {
-                let _ = save_tree(tree);
-                msg
-            }
-            Err(e) => e,
-        };
-        emit_chat_progress(&app, &novel_id, "saving");
-        return finish_chat_reply(&state, &novel_id, reply).await;
-    }
-
-    if let Some(chapter_num) = parse_gen_plots_for_chapter(&content) {
-        let existing = existing_chapter_nums(&tree);
-        let Some(chapter_id) = existing.get(&chapter_num).cloned() else {
-            let reply = if loc.is_zh() {
-                format!("结构树上找不到第{chapter_num}章，请先生成章节卡。")
-            } else {
-                format!("Chapter {chapter_num} not found. Generate the chapter card first.")
-            };
-            return finish_chat_reply(&state, &novel_id, reply).await;
-        };
-        let reply = match enrich_plots_for_chapter_node(
-            &app,
-            &state,
-            &settings,
-            &novel,
-            &novel_id,
-            &mut tree,
-            &chapter_id,
-            Some(chapter_num),
-            loc,
-            Some(cancel.clone()),
-            None,
-            "",
-            false,
-        )
-        .await
-        {
-            Ok((r, _, _)) => r,
-            Err(e) => e,
-        };
-        return finish_chat_reply(&state, &novel_id, reply).await;
-    }
-
-    if let Some((chapter_num, brief)) = parse_regen_outline_command(&content) {
-        let Some(n) = chapter_num else {
-            let reply = if loc.is_zh() {
-                "请指定章节：`/刷新大纲 3` 或 `/刷新大纲 第三章`；可换行后写期望。".into()
-            } else {
-                "Specify a chapter: `/refresh-outline 3`; optional expectations on following lines."
-                    .into()
-            };
-            return finish_chat_reply(&state, &novel_id, reply).await;
-        };
-        let existing = existing_chapter_nums(&tree);
-        let Some(chapter_id) = existing.get(&n).cloned() else {
-            let reply = if loc.is_zh() {
-                format!("结构树上找不到第{n}章，请先生成章节卡。")
-            } else {
-                format!("Chapter {n} not found. Generate the chapter card first.")
-            };
-            return finish_chat_reply(&state, &novel_id, reply).await;
-        };
-        let reply = match run_regenerate_chapter_outline(
-            &app,
-            &state,
-            &settings,
-            &novel_id,
-            &chapter_id,
-            &brief,
-            cancel.clone(),
-            false,
-        )
-        .await
-        {
-            Ok(msg) => msg,
-            Err(e) => e,
-        };
-        return finish_chat_reply(&state, &novel_id, reply).await;
-    }
-
-    if let Some((from, to, resolve)) = parse_gen_chapter_cards(&content) {
-        let existing = existing_chapter_nums(&tree);
-        // 未指定模式：无冲突 → 追加；有同号 → 覆盖（从 from 起重写，与左侧「生成章节卡」一致）
-        let mode = resolve.unwrap_or(if (from..=to).any(|n| existing.contains_key(&n)) {
-            ChapterResolveMode::Overwrite
-        } else {
-            ChapterResolveMode::ForceAppend
-        });
-        let nums: Vec<u32> = match mode {
-            ChapterResolveMode::Skip => (from..=to).filter(|n| !existing.contains_key(n)).collect(),
-            ChapterResolveMode::Overwrite | ChapterResolveMode::ForceAppend => {
-                (from..=to).collect()
-            }
-        };
-        if nums.is_empty() {
-            let reply = if loc.is_zh() {
-                "指定范围内没有需要新生成的章节（均已存在且选择了跳过）。".into()
-            } else {
-                "Nothing to generate in that range (all skipped).".into()
-            };
-            return finish_chat_reply(&state, &novel_id, reply).await;
-        }
-        emit_chat_progress(&app, &novel_id, "thinking");
-        let (reply, applied) = apply_llm_chapter_cards(
-            &state,
-            &settings,
-            &novel,
-            &novel_id,
-            &mut tree,
-            from,
-            to,
-            &nums,
-            mode,
-            loc,
-            Some(cancel.clone()),
-            "",
-            None,
-        )
-        .await?;
-        if applied {
-            emit_chat_progress(&app, &novel_id, "apply_outlines");
-        }
-        emit_chat_progress(&app, &novel_id, "saving");
-        let mode_zh = match mode {
-            ChapterResolveMode::Overwrite => "覆盖标题与大纲",
-            ChapterResolveMode::Skip => "跳过已有",
-            ChapterResolveMode::ForceAppend => "追加",
-        };
-        let note = if applied {
-            if loc.is_zh() {
-                format!("\n\n（已按「{mode_zh}」写入第{from}–{to}章到结构树。）")
-            } else {
-                format!("\n\n(Applied chapters {from}–{to}, mode={mode_zh}.)")
-            }
-        } else if loc.is_zh() {
-            "\n\n（未解析到 outlines JSON，结构树未改动。请重试。）".into()
-        } else {
-            "\n\n(No outlines JSON found; tree unchanged.)".into()
-        };
-        return finish_chat_reply(&state, &novel_id, format!("{reply}{note}")).await;
-    }
-
-    // 以 / 开头但未识别 → 列出指令；`/skill-name` 除外（走 skill 注入）
-    if content.trim().starts_with('/') && !crate::skills::is_slash_skill_invoke(&content) {
-        emit_chat_progress(&app, &novel_id, "saving");
-        return finish_chat_reply(&state, &novel_id, root_slash_help(loc.is_zh())).await;
-    }
-
-    let has_chapters = tree
-        .nodes
-        .iter()
-        .any(|n| matches!(n.kind, NodeKind::Chapter));
-    let chapter_list = tree
-        .nodes
-        .iter()
-        .filter(|n| matches!(n.kind, NodeKind::Chapter))
-        .map(|n| format!("{}({})", n.label, n.id))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let root_outline = tree
-        .nodes
-        .iter()
-        .find(|n| matches!(n.kind, NodeKind::Novel))
-        .map(|n| n.outline.as_str())
-        .unwrap_or("");
-    let system = prompts::workspace_chat_system(
-        loc,
-        &novel.title,
-        &novel.synopsis,
-        root_outline,
-        has_chapters,
-        novel.word_count_min,
-        novel.word_count_max,
-        novel.chapter_count,
-        &chapter_list,
-    );
-
-    emit_chat_progress(&app, &novel_id, "thinking");
-    let chat_model = task_model(&settings.chat_model, &settings.default_model);
-    let mut llm_user = enrich_user_with_urls_progress(&app, &novel_id, &content).await;
-    if let Some((_skill_name, injected)) = crate::skills::maybe_inject_skill(&llm_user) {
-        emit_chat_progress(&app, &novel_id, "skill");
-        llm_user = injected;
-    }
-    emit_chapter_tokens(
-        &app,
-        &novel_id,
-        estimate_prompt_tokens(&system, &llm_user),
-        0,
-        false,
-    );
-    let tool_run = crate::chat_tools::run_with_tools(
-        &settings,
-        &state.db,
-        &novel_id,
-        &mut tree,
-        &system,
-        &llm_user,
-        Some(&chat_model),
-        Some(cancel.clone()),
-        |name| {
-            emit_chat_progress(&app, &novel_id, "tool");
-            let _ = name;
-        },
-    )
-    .await
-    .map_err(|e| {
-        let s = e.to_string();
-        if s.contains("cancelled") {
-            "cancelled".into()
-        } else {
-            s
-        }
-    })?;
-    emit_chapter_tokens(
-        &app,
-        &novel_id,
-        tool_run.completion.prompt_tokens,
-        tool_run.completion.completion_tokens,
-        true,
-    );
-    {
-        let now = Local::now();
-        let day = now.format("%Y-%m-%d").to_string();
-        let hour = now.hour() as u8;
-        let r = &tool_run.completion;
-        let _ = state.db.add_token_usage(
-            &day,
-            hour,
-            &r.model,
-            &novel_id,
-            r.prompt_tokens,
-            r.completion_tokens,
-            r.total_tokens,
-        );
-    }
-    let reply = tool_run.completion.content;
-    let (def_label, def_role, def_align) = prompts::default_new_character(loc);
-    let mut tree_dirty = tool_run.tree_dirty;
-
-    // 用户话里直接改字数 / 总章数 → 立刻落库（不依赖模型 JSON）
-    if let Some((wmin, wmax)) = parse_word_target_from_text(&content) {
-        emit_chat_progress(&app, &novel_id, "apply_card");
-        apply_novel_word_target(&state, &mut novel, &mut tree, wmin, wmax)?;
-        tree_dirty = true;
-    }
-    if let Some(n) = parse_chapter_count_from_text(&content) {
-        emit_chat_progress(&app, &novel_id, "apply_card");
-        apply_novel_chapter_count(&state, &mut novel, &mut tree, n)?;
-        tree_dirty = true;
-    }
-
-    for v in extract_json_objects(&reply) {
-        if let Some((wmin, wmax)) = word_target_from_json(&v) {
-            emit_chat_progress(&app, &novel_id, "apply_card");
-            apply_novel_word_target(&state, &mut novel, &mut tree, wmin, wmax)?;
-            tree_dirty = true;
-        }
-        if let Some(n) = chapter_count_from_json(&v) {
-            emit_chat_progress(&app, &novel_id, "apply_card");
-            apply_novel_chapter_count(&state, &mut novel, &mut tree, n)?;
-            tree_dirty = true;
-        }
-        if let Some(c) = v.get("character") {
-            emit_chat_progress(&app, &novel_id, "apply_character");
-            let cid = uuid::Uuid::new_v4().to_string();
-            let label = c
-                .get("label")
-                .and_then(|x| x.as_str())
-                .unwrap_or(def_label)
-                .to_string();
-            let y = tree
-                .nodes
-                .iter()
-                .map(|n| n.position.y)
-                .fold(0.0_f64, f64::max)
-                + 120.0;
-            tree.nodes.push(TreeNode {
-                id: cid.clone(),
-                kind: NodeKind::Character,
-                label,
-                outline: String::new(),
-                character: Some(CharacterCard {
-                    role: c
-                        .get("role")
-                        .and_then(|x| x.as_str())
-                        .unwrap_or(def_role)
-                        .into(),
-                    personality: c
-                        .get("personality")
-                        .and_then(|x| x.as_str())
-                        .unwrap_or("")
-                        .into(),
-                    motto: c.get("motto").and_then(|x| x.as_str()).unwrap_or("").into(),
-                    gender: c
-                        .get("gender")
-                        .and_then(|x| x.as_str())
-                        .unwrap_or("")
-                        .into(),
-                    style: c.get("style").and_then(|x| x.as_str()).unwrap_or("").into(),
-                    alignment: c
-                        .get("alignment")
-                        .and_then(|x| x.as_str())
-                        .unwrap_or(def_align)
-                        .into(),
-                }),
-                knowledge: None,
-                side_plot: None,
-                linked_character_ids: vec![],
-                linked_side_plot_ids: vec![],
-                linked_knowledge_ids: vec![],
-                position: NodePosition { x: 40.0, y },
-                word_count: 0,
-                word_count_min: 0,
-                word_count_max: 0,
-                chapter_count: 0,
-            });
-            let link = c
-                .get("link_chapter_id")
-                .and_then(|x| x.as_str())
-                .filter(|id| tree.nodes.iter().any(|n| n.id == *id))
-                .map(|s| s.to_string())
-                .or_else(|| {
-                    tree.nodes
-                        .iter()
-                        .find(|n| matches!(n.kind, NodeKind::Novel))
-                        .map(|n| n.id.clone())
-                });
-            if let Some(ch) = link {
-                if let Some(node) = tree.nodes.iter_mut().find(|n| n.id == ch) {
-                    node.linked_character_ids.push(cid.clone());
-                }
-                tree.edges.push(TreeEdge {
-                    id: format!("e-{ch}-{cid}"),
-                    source: ch,
-                    target: cid,
-                    kind: "character".into(),
-                    source_handle: Some("left".into()),
-                    target_handle: Some("right".into()),
-                    label: String::new(),
-                });
-            }
-            tree_dirty = true;
-        }
-        if let Some(outline) = v.get("root_outline").and_then(|x| x.as_str()) {
-            emit_chat_progress(&app, &novel_id, "apply_card");
-            if let Some(root) = tree
-                .nodes
-                .iter_mut()
-                .find(|n| matches!(n.kind, NodeKind::Novel))
-            {
-                root.outline = outline.to_string();
-                tree_dirty = true;
-            }
-        }
-        if let Some(list) = v.get("outlines").and_then(|x| x.as_array()) {
-            if !list.is_empty() {
-                emit_chat_progress(&app, &novel_id, "apply_outlines");
-                // Default: upsert by chapter number (regenerate replaces title+outline).
-                let mode = outline_mode_from_json(&v).unwrap_or(ChapterResolveMode::Overwrite);
-                apply_chapter_outlines(&mut tree, list, mode);
-                tree_dirty = true;
-            }
-        }
-    }
-    if tree_dirty {
-        let _ = save_tree(tree);
-    }
-
-    emit_chat_progress(&app, &novel_id, "saving");
-    finish_chat_reply(&state, &novel_id, reply).await
-}
-
-/// 按知识卡上的书目与提取需求，用 AI 提炼特征写回卡片。
-#[tauri::command]
-pub async fn extract_knowledge_card(
-    state: State<'_, AppState>,
-    novel_id: String,
-    node_id: String,
+/// 把知识卡关联公共库的正文写入 `extracted`（完整导入，有字数上限）。
+pub fn fill_knowledge_card_inner(
+    db: &Db,
+    novel_id: &str,
+    node_id: &str,
+    book_ids: Option<Vec<String>>,
+    max_chars: usize,
 ) -> Result<NovelTree, String> {
-    let mut tree = get_tree(novel_id.clone())?;
+    let mut tree = get_tree(novel_id.to_string())?;
     let idx = tree
         .nodes
         .iter()
@@ -6676,651 +5838,103 @@ pub async fn extract_knowledge_card(
     if !matches!(tree.nodes[idx].kind, NodeKind::Knowledge) {
         return Err("不是知识卡".into());
     }
-    let payload = tree.nodes[idx]
-        .knowledge
-        .clone()
-        .unwrap_or_default();
+    let mut payload = tree.nodes[idx].knowledge.clone().unwrap_or_default();
+    if let Some(ids) = book_ids {
+        payload.book_ids = ids;
+    }
     if payload.book_ids.is_empty() {
         return Err("请先选择至少一个知识库".into());
     }
-    let extract_prompt = payload.extract_prompt.trim();
-    if extract_prompt.is_empty() {
-        return Err("请先填写提取需求".into());
-    }
-
-    let settings = state.db.get_settings().map_err(|e| e.to_string())?;
-    let corpus = gather_knowledge_corpus(&state, &payload.book_ids, 14_000)?;
+    let corpus = crate::kb_context::gather_knowledge_corpus(db, &payload.book_ids, max_chars.max(200))
+        .map_err(|e| e.to_string())?;
     if corpus.trim().is_empty() {
-        return Err("所选知识库没有可用分段".into());
+        return Err("所选知识库没有可导入的分段（可先在知识库页重建索引）".into());
     }
-    let loc = PromptLocale::for_interaction(
-        &settings.ui_locale,
-        &[extract_prompt, corpus.as_str()],
-    );
-    let model = task_model(&settings.knowledge_model, &settings.default_model);
-    let sys = prompts::knowledge_card_extract_system(loc);
-    let user = prompts::knowledge_card_extract_user(loc, extract_prompt, &corpus);
-    let (out, _) = llm_complete(
-        None,
-        &state,
-        &settings,
-        sys,
-        &user,
-        Some(&model),
-        Some(&novel_id),
-        None,
-    )
-    .await?;
-
+    payload.extracted = corpus;
     let n = &mut tree.nodes[idx];
-    let mut k = n.knowledge.clone().unwrap_or_default();
-    k.extracted = out.trim().to_string();
-    // outline mirrors extracted for tree preview
-    n.outline = k.extracted.chars().take(200).collect();
-    n.knowledge = Some(k);
+    n.outline = payload.extracted.chars().take(200).collect();
+    n.knowledge = Some(payload);
     save_tree(tree.clone())?;
     Ok(tree)
 }
 
-/// 从绑定知识库同步设定知识卡到根节点（覆盖同书 from_canon 卡）。
 #[tauri::command]
-pub async fn sync_canon_settings(
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-    novel_id: String,
-) -> Result<GenerateResult, String> {
-    let cancel = state.arm_chat_cancel(&novel_id);
-    let _clear = ClearChatCancel {
-        state: &*state,
-        key: novel_id.clone(),
-    };
-    let novel = state
-        .db
-        .get_novel(&novel_id)
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "小说不存在".to_string())?;
-    let settings = state.db.get_settings().map_err(|e| e.to_string())?;
-    let loc = PromptLocale::for_interaction(
-        &settings.ui_locale,
-        &[novel.title.as_str(), novel.synopsis.as_str()],
-    );
-    if novel.knowledge_ids.is_empty() {
-        return Err(if loc.is_zh() {
-            "请先在根节点绑定至少一个公共知识库".into()
-        } else {
-            "Bind at least one knowledge book on the root first".into()
-        });
-    }
-
-    let mut tree = get_tree(novel_id.clone())?;
-    let root_id = tree
-        .nodes
-        .iter()
-        .find(|n| matches!(n.kind, NodeKind::Novel))
-        .map(|n| n.id.clone())
-        .ok_or_else(|| "缺少根节点".to_string())?;
-
-    let total = (novel.knowledge_ids.len() as u32).max(1);
-    let extract_prompt = prompts::canon_sync_extract_prompt(loc);
-    let model = task_model(&settings.knowledge_model, &settings.default_model);
-    let mut synced = 0usize;
-
-    for (i, bid) in novel.knowledge_ids.iter().enumerate() {
-        if cancel.load(std::sync::atomic::Ordering::Relaxed) {
-            return Err("cancelled".into());
-        }
-        emit_chapter_progress(&app, &novel_id, "context", (i as u32) + 1, total);
-        let book = state
-            .db
-            .get_knowledge(bid)
-            .map_err(|e| e.to_string())?
-            .ok_or_else(|| format!("知识库不存在: {bid}"))?;
-        if book.archived {
-            continue;
-        }
-        let corpus = gather_knowledge_corpus(&state, &[bid.clone()], 14_000)?;
-        if corpus.trim().is_empty() {
-            continue;
-        }
-        let sys = prompts::knowledge_card_extract_system(loc);
-        let user = prompts::knowledge_card_extract_user(loc, extract_prompt, &corpus);
-        let (out, _) = llm_complete(
-            Some(&app),
-            &state,
-            &settings,
-            sys,
-            &user,
-            Some(&model),
-            Some(&novel_id),
-            Some(cancel.clone()),
-        )
-        .await?;
-        let extracted = out.trim().to_string();
-        if extracted.is_empty() {
-            continue;
-        }
-
-        let label = if loc.is_zh() {
-            format!("设定 · {}", book.title)
-        } else {
-            format!("Setting · {}", book.title)
-        };
-
-        let existing = tree.nodes.iter().position(|n| {
-            matches!(n.kind, NodeKind::Knowledge)
-                && n.knowledge
-                    .as_ref()
-                    .map(|k| k.from_canon && k.book_ids.iter().any(|x| x == bid))
-                    .unwrap_or(false)
-        });
-
-        let node_id = if let Some(idx) = existing {
-            let n = &mut tree.nodes[idx];
-            n.label = label.clone();
-            n.outline = extracted.chars().take(200).collect();
-            n.knowledge = Some(KnowledgeCardPayload {
-                book_ids: vec![bid.clone()],
-                extract_prompt: extract_prompt.to_string(),
-                extracted: extracted.clone(),
-                from_canon: true,
-            });
-            n.id.clone()
-        } else {
-            let id = uuid::Uuid::new_v4().to_string();
-            let y = tree
-                .nodes
-                .iter()
-                .map(|n| n.position.y)
-                .fold(0.0_f64, f64::max)
-                + 100.0;
-            tree.nodes.push(TreeNode {
-                id: id.clone(),
-                kind: NodeKind::Knowledge,
-                label: label.clone(),
-                outline: extracted.chars().take(200).collect(),
-                character: None,
-                knowledge: Some(KnowledgeCardPayload {
-                    book_ids: vec![bid.clone()],
-                    extract_prompt: extract_prompt.to_string(),
-                    extracted: extracted.clone(),
-                    from_canon: true,
-                }),
-                side_plot: None,
-                linked_character_ids: vec![],
-                linked_side_plot_ids: vec![],
-                linked_knowledge_ids: vec![],
-                position: NodePosition { x: -220.0, y },
-                word_count: 0,
-                word_count_min: 0,
-                word_count_max: 0,
-                chapter_count: 0,
-            });
-            let edge_id = format!("e-canon-{id}");
-            if !tree.edges.iter().any(|e| e.id == edge_id) {
-                tree.edges.push(TreeEdge {
-                    id: edge_id,
-                    source: root_id.clone(),
-                    target: id.clone(),
-                    kind: "knowledge".into(),
-                    source_handle: Some("left".into()),
-                    target_handle: Some("right".into()),
-                    label: String::new(),
-                });
-            }
-            id
-        };
-
-        if let Some(root) = tree.nodes.iter_mut().find(|n| n.id == root_id) {
-            if !root.linked_knowledge_ids.iter().any(|x| x == &node_id) {
-                root.linked_knowledge_ids.push(node_id);
-            }
-        }
-        synced += 1;
-    }
-
-    emit_chapter_progress(&app, &novel_id, "saving", total, total);
-    save_tree(tree)?;
-    if synced == 0 {
-        return Err(if loc.is_zh() {
-            "未能从绑定知识库提取设定，请确认书目有分段数据。".into()
-        } else {
-            "Could not extract settings — ensure bound books have chunks.".into()
-        });
-    }
-    let message = if loc.is_zh() {
-        format!("已同步 {synced} 张设定知识卡到根节点。")
-    } else {
-        format!("Synced {synced} setting knowledge card(s) to the root.")
-    };
-    Ok(GenerateResult {
-        content: String::new(),
-        used_mock: false,
-        message,
-    })
-}
-
-fn gather_knowledge_corpus(
-    state: &State<'_, AppState>,
-    book_ids: &[String],
-    max_chars: usize,
-) -> Result<String, String> {
-    let mut out = String::new();
-    for bid in book_ids {
-        let book = state
-            .db
-            .get_knowledge(bid)
-            .map_err(|e| e.to_string())?
-            .ok_or_else(|| format!("知识库不存在: {bid}"))?;
-        if book.archived {
-            continue;
-        }
-        let chunks = state
-            .db
-            .list_knowledge_chunks(bid)
-            .map_err(|e| e.to_string())?;
-        out.push_str(&format!("### 《{}》· {}\n", book.title, book.author));
-        // Prefer analysis / toc chunks first
-        let mut ordered = chunks;
-        ordered.sort_by_key(|c| {
-            let p = if c.content.contains("【知识库分析】") {
-                0
-            } else if c.content.contains("【目录】") {
-                1
-            } else {
-                2
-            };
-            (p, c.idx)
-        });
-        for c in ordered.into_iter().take(24) {
-            let piece = format!("{}\n\n", c.content);
-            if out.chars().count() + piece.chars().count() > max_chars {
-                return Ok(out);
-            }
-            out.push_str(&piece);
-        }
-    }
-    Ok(out)
-}
-
-fn novel_canon_strict(novel: &NovelProject) -> bool {
-    novel.canon_mode.eq_ignore_ascii_case("strict")
-}
-
-/// Keep only canon fragments that mention the missing setting terms.
-fn canon_snippets_for_missing(canon_text: &str, missing: &[&LandBeat]) -> String {
-    if missing.is_empty() {
-        return String::new();
-    }
-    let terms: Vec<String> = missing
-        .iter()
-        .map(|b| b.title.to_lowercase())
-        .filter(|t| !t.is_empty())
-        .collect();
-    let mut kept = Vec::new();
-    for part in canon_text.split("\n\n---\n\n") {
-        let pl = part.to_lowercase();
-        if terms.iter().any(|t| pl.contains(t)) {
-            kept.push(part.trim());
-        }
-    }
-    if kept.is_empty() {
-        // fallback: short head of original block
-        return crate::kb_context::truncate_chars(canon_text, 1200);
-    }
-    let joined = kept.join("\n\n---\n\n");
-    crate::kb_context::truncate_chars(&joined, 2000)
-}
-
-/// 从绑定知识库按查询检索片段；并附根上 from_canon 知识卡摘要。
-fn build_canon_context(
-    state: &State<'_, AppState>,
-    novel: &NovelProject,
-    tree: &NovelTree,
-    query: &str,
-    loc: PromptLocale,
-) -> String {
-    if novel.knowledge_ids.is_empty() {
-        return String::new();
-    }
-    let strict = novel_canon_strict(novel);
-    let mut parts: Vec<String> = Vec::new();
-
-    if let Some(root) = tree.nodes.iter().find(|n| matches!(n.kind, NodeKind::Novel)) {
-        for kid in &root.linked_knowledge_ids {
-            if let Some(n) = tree.nodes.iter().find(|x| x.id == *kid) {
-                let Some(k) = n.knowledge.as_ref() else { continue };
-                if !k.from_canon {
-                    continue;
-                }
-                let feat = k.extracted.trim();
-                if feat.is_empty() {
-                    continue;
-                }
-                let snip = crate::kb_context::truncate_chars(feat, crate::kb_context::FROM_CANON_CARD_CAP);
-                if loc.is_zh() {
-                    parts.push(format!("【设定卡·{}】\n{snip}", n.label));
-                } else {
-                    parts.push(format!("[Setting card · {}]\n{snip}", n.label));
-                }
-            }
-        }
-    }
-
-    let hits = crate::kb_context::retrieve_knowledge(
-        &state.db,
-        &novel.knowledge_ids,
-        query,
-        crate::kb_context::CANON_RETRIEVE_K,
-        crate::kb_context::CANON_CHUNK_CAP,
-    );
-    for (sid, title, preview) in hits {
-        if loc.is_zh() {
-            parts.push(format!("【检索·《{title}》|{sid}】\n{preview}"));
-        } else {
-            parts.push(format!("[Retrieval · “{title}”|{sid}]\n{preview}"));
-        }
-    }
-
-    if parts.is_empty() {
-        return String::new();
-    }
-    let mut joined = parts.join("\n\n---\n\n");
-    if joined.chars().count() > crate::kb_context::CANON_BLOCK_CAP {
-        joined = crate::kb_context::truncate_chars(&joined, crate::kb_context::CANON_BLOCK_CAP);
-    }
-    prompts::format_canon_block(loc, strict, &joined)
-}
-
-/// 本章大纲涉及的设定关键词：若正文未覆盖则作为补写项（strict 用）。
-fn collect_canon_land_beats(canon_text: &str, outline: &str) -> Vec<LandBeat> {
-    let outline_l = outline.to_lowercase();
-    let terms = chapter_memory::query_terms(canon_text);
-    let mut beats = Vec::new();
-    for t in terms.into_iter().take(40) {
-        if t.chars().count() < 2 {
-            continue;
-        }
-        let tl = t.to_lowercase();
-        if !outline_l.contains(&tl) {
-            continue;
-        }
-        beats.push(LandBeat {
-            kind: "canon",
-            title: t.clone(),
-            text: t,
-        });
-        if beats.len() >= 12 {
-            break;
-        }
-    }
-    beats
-}
-
-#[tauri::command]
-pub async fn card_chat_send(
-    app: tauri::AppHandle,
+pub fn fill_knowledge_card(
     state: State<'_, AppState>,
     novel_id: String,
     node_id: String,
-    content: String,
-    model: Option<String>,
-) -> Result<CardChatResult, String> {
-    let cancel = state.arm_chat_cancel(&novel_id);
-    let _clear = ClearChatCancel {
-        state: &*state,
-        key: novel_id.clone(),
-    };
+) -> Result<NovelTree, String> {
+    fill_knowledge_card_inner(&state.db, &novel_id, &node_id, None, 14_000)
+}
 
-    emit_chat_progress(&app, &novel_id, "context");
-    let mut tree = get_tree(novel_id.clone())?;
-    let idx = tree
-        .nodes
-        .iter()
-        .position(|n| n.id == node_id)
-        .ok_or_else(|| "节点不存在".to_string())?;
-    let kind = tree.nodes[idx].kind.clone();
-    if matches!(kind, NodeKind::Novel) {
-        return Err("根节点请用创作 Chat".into());
-    }
-    if matches!(kind, NodeKind::Knowledge) {
-        return Err("知识卡请用「提取知识」按钮".into());
-    }
-
-    let now = Utc::now().to_rfc3339();
-    let user_msg = ChatMessage {
-        id: uuid::Uuid::new_v4().to_string(),
-        novel_id: novel_id.clone(),
-        node_id: node_id.clone(),
-        role: "user".into(),
-        content: content.clone(),
-        created_at: now,
-    };
-    state.db.insert_chat(&user_msg).map_err(|e| e.to_string())?;
-
-    let novel = state
+#[tauri::command]
+pub fn list_public_knowledge_cards(
+    state: State<'_, AppState>,
+) -> Result<Vec<PublicKnowledgeCard>, String> {
+    state
         .db
-        .get_novel(&novel_id)
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "小说不存在".to_string())?;
-    let mut settings = state.db.get_settings().map_err(|e| e.to_string())?;
-    apply_chat_model_override(&mut settings.chat_model, model.as_deref());
-    let node_label = tree.nodes[idx].label.clone();
-    let node_outline = tree.nodes[idx].outline.clone();
-    let loc = PromptLocale::for_interaction(
-        &settings.ui_locale,
-        &[
-            content.as_str(),
-            novel.title.as_str(),
-            node_label.as_str(),
-            node_outline.as_str(),
-        ],
-    );
-    if matches!(kind, NodeKind::Chapter) {
-        // 硬约束：章节卡 Chat 只对当前章有效（含拒绝生成后续章）
-        if parse_plan_next_command(&content).is_some()
-            || parse_gen_chapter_cards(&content).is_some()
-            || parse_clear_all_chapters(&content)
-            || parse_clear_all_plots(&content)
-            || parse_add_plot_command(&content).is_some()
-            || parse_gen_plots_for_chapter(&content).is_some()
-        {
-            return finish_card_chat_reply(
-                &state,
-                &novel_id,
-                &node_id,
-                chapter_slash_help(loc.is_zh()),
-                tree,
-            );
-        }
+        .list_public_knowledge_cards()
+        .map_err(|e| e.to_string())
+}
 
-        if let Some(notes) = parse_enrich_plots_command(&content) {
-            let reply = match enrich_plots_for_chapter_node(
-                &app,
-                &state,
-                &settings,
-                &novel,
-                &novel_id,
-                &mut tree,
-                &node_id,
-                chapter_number_from_label(&node_label),
-                loc,
-                Some(cancel.clone()),
-                None,
-                notes.trim(),
-                false,
-            )
-            .await
-            {
-                Ok((r, _, _)) => r,
-                Err(e) => e,
-            };
-            let tree = get_tree(novel_id.clone())?;
-            return finish_card_chat_reply(&state, &novel_id, &node_id, reply, tree);
-        }
-
-        if let Some((chapter_num, brief)) = parse_regen_outline_command(&content) {
-            // 章节卡：禁止带章号；一律刷新当前节点
-            if let Some(n) = chapter_num {
-                let reply = if loc.is_zh() {
-                    format!(
-                        "章节卡 Chat 只刷新本章大纲，不能指定第{n}章。\n\
-                         · 刷新本章：`/刷新本章大纲`（可换行写期望）\n\
-                         · 刷新其他章：切换到该章卡片，或在根节点 Chat 使用 `/刷新大纲 {n}`"
-                    )
-                } else {
-                    format!(
-                        "Chapter-card Chat only refreshes this chapter, not chapter {n}.\n\
-                         · This chapter: `/refresh-this-outline` (expectations below)\n\
-                         · Other chapters: open that card, or root Chat `/refresh-outline {n}`"
-                    )
-                };
-                return finish_card_chat_reply(&state, &novel_id, &node_id, reply, tree);
-            }
-            let reply = match run_regenerate_chapter_outline(
-                &app,
-                &state,
-                &settings,
-                &novel_id,
-                &node_id,
-                &brief,
-                cancel.clone(),
-                false,
-            )
-            .await
-            {
-                Ok(msg) => msg,
-                Err(e) => e,
-            };
-            let tree = get_tree(novel_id.clone())?;
-            return finish_card_chat_reply(&state, &novel_id, &node_id, reply, tree);
-        }
-
-        if let Some(brief) = parse_generate_body_command(&content) {
-            let r = generate_chapter(
-                app.clone(),
-                state.clone(),
-                novel_id.clone(),
-                node_id.clone(),
-                vec![],
-                brief,
-                model.clone(),
-            )
-            .await?;
-            let tree = get_tree(novel_id.clone())?;
-            return finish_card_chat_reply(&state, &novel_id, &node_id, r.message, tree);
-        }
-
-        if let Some(brief) = parse_refine_body_command(&content) {
-            let r = refine_chapter(
-                app.clone(),
-                state.clone(),
-                novel_id.clone(),
-                node_id.clone(),
-                10,
-                Some("memory".into()),
-                Some(brief),
-                model.clone(),
-            )
-            .await?;
-            let tree = get_tree(novel_id.clone())?;
-            return finish_card_chat_reply(&state, &novel_id, &node_id, r.message, tree);
-        }
-
-        if content.trim().starts_with('/') && !crate::skills::is_slash_skill_invoke(&content) {
-            return finish_card_chat_reply(
-                &state,
-                &novel_id,
-                &node_id,
-                chapter_slash_help(loc.is_zh()),
-                tree,
-            );
-        }
-    }
-
-    let kind_key = match kind {
-        NodeKind::Chapter => "chapter",
-        NodeKind::Character => "character",
-        NodeKind::SidePlot => "side_plot",
-        NodeKind::Novel | NodeKind::Knowledge => unreachable!(),
-    };
-    let system = prompts::card_chat_system(loc, kind_key, &novel.title, &node_label, &node_outline);
-
-    emit_chat_progress(&app, &novel_id, "thinking");
-    let chat_model = task_model(&settings.chat_model, &settings.default_model);
-    let mut llm_user = enrich_user_with_urls_progress(&app, &novel_id, &content).await;
-    if let Some((_skill_name, injected)) = crate::skills::maybe_inject_skill(&llm_user) {
-        emit_chat_progress(&app, &novel_id, "skill");
-        llm_user = injected;
-    }
-    let (reply, _) = llm_complete(
-        Some(&app),
-        &state,
-        &settings,
-        &system,
-        &llm_user,
-        Some(&chat_model),
-        Some(&novel_id),
-        Some(cancel),
+#[tauri::command]
+pub fn upsert_public_knowledge_card(
+    state: State<'_, AppState>,
+    id: Option<String>,
+    title: String,
+    book_ids: Vec<String>,
+    extract_prompt: String,
+    extracted: String,
+) -> Result<PublicKnowledgeCard, String> {
+    upsert_public_knowledge_card_inner(
+        &state.db,
+        id,
+        title,
+        book_ids,
+        extract_prompt,
+        extracted,
     )
-    .await?;
+}
 
-    if let Some(v) = first_json_with_any_key(&reply, &["label", "outline", "character"]) {
-        emit_chat_progress(&app, &novel_id, "apply_card");
-        let n = &mut tree.nodes[idx];
-        match kind {
-            NodeKind::Chapter | NodeKind::SidePlot => {
-                if let Some(label) = v.get("label").and_then(|x| x.as_str()) {
-                    if !label.is_empty() {
-                        n.label = label.to_string();
-                    }
-                }
-                if let Some(outline) = v.get("outline").and_then(|x| x.as_str()) {
-                    n.outline = outline.to_string();
-                }
-            }
-            NodeKind::Character => {
-                if let Some(c) = v.get("character") {
-                    if let Some(label) = c.get("label").and_then(|x| x.as_str()) {
-                        if !label.is_empty() {
-                            n.label = label.to_string();
-                        }
-                    }
-                    let mut card = n.character.clone().unwrap_or(CharacterCard {
-                        role: String::new(),
-                        personality: String::new(),
-                        motto: String::new(),
-                        gender: String::new(),
-                        style: String::new(),
-                        alignment: String::new(),
-                    });
-                    if let Some(s) = c.get("role").and_then(|x| x.as_str()) {
-                        card.role = s.into();
-                    }
-                    if let Some(s) = c.get("personality").and_then(|x| x.as_str()) {
-                        card.personality = s.into();
-                    }
-                    if let Some(s) = c.get("motto").and_then(|x| x.as_str()) {
-                        card.motto = s.into();
-                    }
-                    if let Some(s) = c.get("gender").and_then(|x| x.as_str()) {
-                        card.gender = s.into();
-                    }
-                    if let Some(s) = c.get("style").and_then(|x| x.as_str()) {
-                        card.style = s.into();
-                    }
-                    if let Some(s) = c.get("alignment").and_then(|x| x.as_str()) {
-                        card.alignment = s.into();
-                    }
-                    n.character = Some(card);
-                }
-            }
-            NodeKind::Novel | NodeKind::Knowledge => {}
-        }
-    }
+#[tauri::command]
+pub fn archive_public_knowledge_card(
+    state: State<'_, AppState>,
+    id: String,
+    archived: bool,
+) -> Result<PublicKnowledgeCard, String> {
+    state
+        .db
+        .set_public_knowledge_card_archived(&id, archived)
+        .map_err(|e| e.to_string())?;
+    state
+        .db
+        .get_public_knowledge_card(&id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "公共知识卡不存在".to_string())
+}
 
-    emit_chat_progress(&app, &novel_id, "saving");
-    save_tree(tree.clone())?;
-    finish_card_chat_reply(&state, &novel_id, &node_id, reply, tree)
+#[tauri::command]
+pub fn delete_public_knowledge_card(state: State<'_, AppState>, id: String) -> Result<(), String> {
+    state
+        .db
+        .delete_public_knowledge_card(&id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn add_public_knowledge_card(
+    state: State<'_, AppState>,
+    novel_id: String,
+    public_id: String,
+    host_node_id: Option<String>,
+) -> Result<NovelTree, String> {
+    add_public_knowledge_card_inner(
+        &state.db,
+        &novel_id,
+        &public_id,
+        host_node_id.as_deref(),
+    )
+    .map(|(tree, _)| tree)
 }
 
 /// 根据书名 / 简介 / 根大纲 / 挂载人物，生成英文文生图封面提示词。
@@ -7386,7 +6000,7 @@ pub async fn generate_cover_prompt(
     };
 
     let settings = state.db.get_settings().map_err(|e| e.to_string())?;
-    let model = task_model(&settings.create_model, &settings.default_model);
+    let model = llm_model(&settings);
     let sys = prompts::cover_t2i_prompt_system();
     let user = prompts::cover_t2i_prompt_user(&novel.title, &synopsis, &root_outline, &characters);
     let (out, _) = llm_complete(
@@ -7534,10 +6148,70 @@ pub fn get_token_usage_month(
 pub fn init_state() -> Result<AppState, String> {
     let db = Db::open().map_err(|e| e.to_string())?;
     crate::sample::ensure_sample(&db).map_err(|e| e.to_string())?;
+    let settings = db.get_settings().unwrap_or_default();
+    let port = if settings.mcp_port == 0 {
+        crate::mcp::DEFAULT_MCP_PORT
+    } else {
+        settings.mcp_port
+    };
     Ok(AppState {
         db: Arc::new(db),
         chat_cancel: Default::default(),
+        mcp: Arc::new(crate::mcp::McpRuntime::new(port)),
+        app_handle: Arc::new(Mutex::new(None)),
+        global_chat: Arc::new(crate::global_chat::GlobalChatRuntime::new()),
     })
+}
+
+#[tauri::command]
+pub fn global_chat_list(
+    state: State<'_, AppState>,
+    novel_id: Option<String>,
+) -> Result<Vec<crate::global_chat::GlobalChatMessage>, String> {
+    Ok(state.global_chat.list(novel_id.as_deref()))
+}
+
+#[tauri::command]
+pub async fn global_chat_send(
+    state: State<'_, AppState>,
+    content: String,
+    route_name: Option<String>,
+    path: Option<String>,
+    novel_id: Option<String>,
+    model: Option<String>,
+) -> Result<Vec<crate::global_chat::GlobalChatMessage>, String> {
+    let cancel = state.arm_chat_cancel(crate::global_chat::CANCEL_KEY);
+    let _clear = ClearChatCancel {
+        state: &*state,
+        key: crate::global_chat::CANCEL_KEY.to_string(),
+    };
+    crate::global_chat::send(
+        state.db.clone(),
+        state.mcp.clone(),
+        state.app_handle.clone(),
+        state.global_chat.clone(),
+        cancel,
+        crate::global_chat::GlobalChatSendInput {
+            content,
+            route_name,
+            path,
+            novel_id,
+            model,
+        },
+    )
+    .await
+}
+
+#[tauri::command]
+pub fn global_chat_clear(state: State<'_, AppState>, novel_id: Option<String>) -> Result<(), String> {
+    state.global_chat.clear(novel_id.as_deref());
+    Ok(())
+}
+
+#[tauri::command]
+pub fn global_chat_cancel(state: State<'_, AppState>) -> Result<(), String> {
+    state.request_chat_cancel(crate::global_chat::CANCEL_KEY);
+    Ok(())
 }
 
 #[tauri::command]
@@ -7702,91 +6376,12 @@ mod tests {
     }
 
     #[test]
-    fn parse_root_chat_commands() {
-        assert!(parse_clear_all_chapters("/清空章节"));
-        assert!(!parse_clear_all_chapters("清空所有章节节点"));
-        assert!(parse_clear_all_plots("/清空所有剧情"));
-        assert!(parse_clear_all_plots("/clear-plots"));
-        assert!(!parse_clear_all_plots("清空所有剧情"));
-        assert_eq!(parse_gen_chapter_cards("/章节卡 1-10"), Some((1, 10, None)));
-        assert_eq!(
-            parse_gen_chapter_cards("/章节卡 第 1-10 章"),
-            Some((1, 10, None))
-        );
-        assert_eq!(
-            parse_gen_chapter_cards("/章节卡 第1-10章"),
-            Some((1, 10, None))
-        );
-        assert_eq!(
-            parse_gen_chapter_cards("/章节卡 第一到第十章"),
-            Some((1, 10, None))
-        );
-        assert_eq!(
-            parse_gen_chapter_cards("/章节卡 第一章到第十二章"),
-            Some((1, 12, None))
-        );
-        assert_eq!(
-            parse_gen_chapter_cards("/章节卡 覆盖 3-5"),
-            Some((3, 5, Some(ChapterResolveMode::Overwrite)))
-        );
-        assert_eq!(
-            parse_add_plot_command("/添加剧情 3 主角发现密信"),
-            Some((3, "主角发现密信".into()))
-        );
-        assert_eq!(parse_gen_plots_for_chapter("/剧情卡 3"), Some(3));
-        assert_eq!(parse_gen_plots_for_chapter("/剧情卡 第一章"), Some(1));
-        assert_eq!(parse_gen_plots_for_chapter("/剧情卡 第十二章"), Some(12));
-        assert!(parse_enrich_plots_command("/完善剧情").is_some());
-        assert!(parse_enrich_plots_command("/enrich-plots").is_some());
-        assert!(parse_enrich_plots_command("/剧情卡 3").is_none());
-        assert_eq!(
-            parse_enrich_plots_command("/完善剧情\n\n要有反转").as_deref(),
-            Some("要有反转")
-        );
-        assert!(parse_generate_body_command("/预生成").is_some());
-        assert_eq!(
-            parse_generate_body_command("/generate\n\n偏对话").as_deref(),
-            Some("偏对话")
-        );
-        assert!(parse_refine_body_command("/精修").is_some());
-        assert!(parse_refine_body_command("/refine").is_some());
-        assert_eq!(
-            parse_regen_outline_command("/刷新本章大纲"),
-            Some((None, String::new()))
-        );
-        assert_eq!(
-            parse_regen_outline_command("/刷新大纲"),
-            Some((None, String::new()))
-        );
-        assert_eq!(
-            parse_regen_outline_command("/刷新大纲 3"),
-            Some((Some(3), String::new()))
-        );
-        assert_eq!(
-            parse_regen_outline_command("/refresh-outline 第三章\n\n加快节奏"),
-            Some((Some(3), "加快节奏".into()))
-        );
-        assert_eq!(
-            parse_regen_outline_command("/刷新本章大纲\n\n勿剧透"),
-            Some((None, "勿剧透".into()))
-        );
-        // 期望里含「两年」「3天」不得误解析为章号
-        let prose = "/刷新本章大纲 故事开始已经是游戏入侵两年以后，昏迷了3天";
-        let (n, brief) = parse_regen_outline_command(prose).expect("regen prose");
-        assert_eq!(n, None);
-        assert!(brief.contains("两年"));
-        assert!(brief.contains("3天"));
-        assert_eq!(
-            parse_regen_outline_command("/刷新大纲 3 加快节奏"),
-            Some((Some(3), "加快节奏".into()))
-        );
+    fn chapter_label_and_outline_helpers() {
         let coerced = coerce_outlines_to_single_num(
             vec![serde_json::json!({"n": 1, "label": "第一章 · x", "outline": "a"})],
             5,
         );
         assert_eq!(coerced[0].get("n").and_then(|x| x.as_u64()), Some(5));
-        assert_eq!(parse_gen_chapter_cards("/剧情卡 3"), None);
-        assert_eq!(parse_gen_chapter_cards("生成 1-10 章的章节卡"), None);
         assert_eq!(chapter_number_from_label("第一章 · 夜色"), Some(1));
         assert_eq!(chapter_number_from_label("第十二章"), Some(12));
         assert_eq!(chapter_number_from_label("第12章 · 夜色"), Some(12));
@@ -7838,11 +6433,93 @@ mod tests {
         assert_eq!(map.get(&1).map(String::as_str), Some("c1"));
         assert_eq!(map.get(&2).map(String::as_str), Some("c2"));
         assert_eq!(parse_chinese_numeral("二十一"), Some(21));
-        assert_eq!(
-            parse_add_plot_command("/添加剧情 第一章 主角发现密信"),
-            Some((1, "主角发现密信".into()))
-        );
+    }
+
+    fn tn(id: &str, kind: NodeKind) -> TreeNode {
+        TreeNode {
+            id: id.into(),
+            kind,
+            label: id.into(),
+            outline: String::new(),
+            character: None,
+            knowledge: None,
+            side_plot: None,
+            linked_character_ids: vec![],
+            linked_side_plot_ids: vec![],
+            linked_knowledge_ids: vec![],
+            position: NodePosition { x: 0.0, y: 0.0 },
+            word_count: 0,
+            word_count_min: 0,
+            word_count_max: 0,
+            chapter_count: 0,
+        }
+    }
+
+    #[test]
+    fn knowledge_attach_host_uses_chapter_or_parent() {
+        let mut tree = NovelTree {
+            novel_id: "n".into(),
+            nodes: vec![
+                tn("root", NodeKind::Novel),
+                tn("ch", NodeKind::Chapter),
+                tn("kb", NodeKind::Knowledge),
+            ],
+            edges: vec![],
+        };
+        tree.nodes[1].linked_knowledge_ids = vec!["kb".into()];
+        assert_eq!(knowledge_attach_host(&tree, None).unwrap(), "root");
+        assert_eq!(knowledge_attach_host(&tree, Some("ch")).unwrap(), "ch");
+        assert_eq!(knowledge_attach_host(&tree, Some("kb")).unwrap(), "ch");
+        assert_eq!(knowledge_attach_host(&tree, Some("root")).unwrap(), "root");
     }
 }
 
-}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

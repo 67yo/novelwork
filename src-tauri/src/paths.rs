@@ -19,6 +19,13 @@ pub fn lancedb_dir() -> PathBuf {
     p
 }
 
+/// Local ONNX embedding models (plain-file download cache; avoids hf-hub Range bugs).
+pub fn embed_models_dir() -> PathBuf {
+    let p = app_root().join("models");
+    fs::create_dir_all(&p).ok();
+    p
+}
+
 pub fn novels_dir() -> PathBuf {
     let p = app_root().join("novels");
     fs::create_dir_all(&p).ok();

@@ -66,6 +66,23 @@ pub struct AppSettings {
     pub knowledge_model: String,
     /// UI 语言：system | en | zh-CN | zh-TW | ja | de | fr
     pub ui_locale: String,
+    /// MCP Streamable HTTP 端口
+    #[serde(default = "default_mcp_port")]
+    pub mcp_port: u16,
+    /// 是否随应用启动 MCP 服务
+    #[serde(default = "default_true")]
+    pub mcp_enabled: bool,
+    /// 是否允许局域网访问 MCP（监听 0.0.0.0）
+    #[serde(default)]
+    pub mcp_lan: bool,
+}
+
+fn default_mcp_port() -> u16 {
+    17832
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl AppSettings {
@@ -168,6 +185,9 @@ impl Default for AppSettings {
             refine_model: "deepseek-reasoner".into(),
             knowledge_model: "deepseek-v4-flash".into(),
             ui_locale: "system".into(),
+            mcp_port: default_mcp_port(),
+            mcp_enabled: true,
+            mcp_lan: false,
         }
     }
 }
@@ -187,6 +207,9 @@ pub struct SettingsView {
     pub knowledge_model: String,
     pub model_catalog: ModelCatalog,
     pub ui_locale: String,
+    pub mcp_port: u16,
+    pub mcp_enabled: bool,
+    pub mcp_lan: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -212,6 +235,12 @@ pub struct SaveSettingsInput {
     pub knowledge_model: Option<String>,
     #[serde(default, alias = "ui_locale")]
     pub ui_locale: Option<String>,
+    #[serde(default, alias = "mcp_port")]
+    pub mcp_port: Option<u16>,
+    #[serde(default, alias = "mcp_enabled")]
+    pub mcp_enabled: Option<bool>,
+    #[serde(default, alias = "mcp_lan")]
+    pub mcp_lan: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -240,10 +269,10 @@ pub struct NovelProject {
     pub title: String,
     pub synopsis: String,
     pub cover_path: Option<String>,
-    /// 绑定的公共知识库（设定源）
+    /// 遗留字段：不再作为小说设定源（写作只看树上知识卡）。
     pub knowledge_ids: Vec<String>,
     pub knowledge_strategy: String,
-    /// `reference`（可参考）| `strict`（严格遵循，禁止发明冲突设定）
+    /// 遗留字段：不再注入写作。
     #[serde(default = "default_canon_mode")]
     pub canon_mode: String,
     #[serde(default)]
@@ -312,30 +341,12 @@ pub struct NovelCreateChatResult {
     pub novel: Option<NovelProject>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct KnowledgeExtractChatInput {
-    pub messages: Vec<ChatTurn>,
-    /// 网址导入 vs 本地文件，影响默认提取侧重点说明
-    #[serde(default)]
-    pub from_url: bool,
-    /// 面板所选模型；空则用 settings.knowledge_model
-    #[serde(default)]
-    pub model: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct KnowledgeExtractChatResult {
-    pub reply: String,
-    pub used_mock: bool,
-    /// 模型输出 JSON 中的提取需求；无则 null
-    pub extract_prompt: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum NodeKind {
     Novel,
+    /// 可选分卷：挂在根下，章节可挂在分卷下
+    Volume,
     Chapter,
     Character,
     SidePlot,
@@ -428,7 +439,7 @@ mod side_plot_meta_tests {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct NodePosition {
     pub x: f64,
     pub y: f64,
@@ -444,7 +455,7 @@ pub struct CharacterCard {
     pub alignment: String,
 }
 
-/// 树上的知识卡：选中若干知识库 + 提取需求 → AI 写出可参考特征。
+/// 树上的知识卡：勾选公共库后，完整导入或 AI 提炼后写入 `extracted`。
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct KnowledgeCardPayload {
     #[serde(default)]
@@ -454,9 +465,26 @@ pub struct KnowledgeCardPayload {
     /// AI 提取后的主要特征（写作时注入）
     #[serde(default)]
     pub extracted: String,
-    /// 由「同步设定卡」从绑定知识库生成
+    /// 遗留：旧「同步设定卡」标记；写作不再按此注入公共库。
     #[serde(default)]
     pub from_canon: bool,
+}
+
+/// 跨小说共用的知识卡目录（无版本号；挂到树上时复制一份）。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PublicKnowledgeCard {
+    pub id: String,
+    pub title: String,
+    #[serde(default)]
+    pub book_ids: Vec<String>,
+    #[serde(default)]
+    pub extract_prompt: String,
+    #[serde(default)]
+    pub extracted: String,
+    pub created_at: String,
+    pub updated_at: String,
+    #[serde(default)]
+    pub archived: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -479,18 +507,6 @@ pub struct NovelTree {
     pub novel_id: String,
     pub nodes: Vec<TreeNode>,
     pub edges: Vec<TreeEdge>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChatMessage {
-    pub id: String,
-    pub novel_id: String,
-    /// 空 = 根创作 Chat；非空 = 该卡片 Chat
-    #[serde(default)]
-    pub node_id: String,
-    pub role: String,
-    pub content: String,
-    pub created_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -522,12 +538,6 @@ pub struct ChapterMemoryGroup {
     pub node_id: String,
     pub label: String,
     pub items: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CardChatResult {
-    pub reply: String,
-    pub tree: NovelTree,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

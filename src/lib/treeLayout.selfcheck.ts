@@ -1,4 +1,10 @@
-import { applyAutoLayout, __layoutConsts as C } from "./treeLayout.ts";
+import {
+  applyAutoLayout,
+  chapterEffectiveKnowledgeIds,
+  chapterLocalPlotIds,
+  rootLinkedPlotIds,
+  __layoutConsts as C,
+} from "./treeLayout.ts";
 
 const nodes = [
   {
@@ -144,6 +150,150 @@ console.assert(Math.abs(get("pm").position.x - expectMultiX) < 1e-6);
   console.assert(d23 === d12);
   // 根也无链接 → 根到首章同样贴近
   console.assert(g("b1").position.y - g("br").position.y < C.MIN_CHAPTER_GAP);
+}
+
+// 剧情卡顺序跟章节 linked_side_plot_ids（与旧 y 无关）
+{
+  const ordered = [
+    {
+      id: "oc",
+      kind: "chapter",
+      position: { x: 0, y: 0 },
+      linked_side_plot_ids: ["ob", "oa"],
+    },
+    {
+      id: "oa",
+      kind: "side_plot",
+      position: { x: 0, y: 0 },
+      linked_side_plot_ids: [] as string[],
+    },
+    {
+      id: "ob",
+      kind: "side_plot",
+      position: { x: 0, y: 50 },
+      linked_side_plot_ids: [] as string[],
+    },
+  ];
+  applyAutoLayout(ordered, []);
+  const oa = ordered.find((n) => n.id === "oa")!;
+  const ob = ordered.find((n) => n.id === "ob")!;
+  const oc = ordered.find((n) => n.id === "oc")!;
+  console.assert(ob.position.y === oc.position.y, "order0 plot aligns with chapter");
+  console.assert(oa.position.y === ob.position.y + C.PLOT_DY, "order1 below order0");
+}
+
+{
+  const nodes = [
+    {
+      id: "root",
+      kind: "novel",
+      position: { x: 0, y: 0 },
+      linked_side_plot_ids: ["rp"],
+      linked_knowledge_ids: ["rk"],
+    },
+    {
+      id: "ch",
+      kind: "chapter",
+      position: { x: 0, y: 10 },
+      linked_side_plot_ids: ["rp", "cp"],
+      linked_knowledge_ids: ["ck"],
+    },
+    { id: "rp", kind: "side_plot", position: { x: 0, y: 0 } },
+    { id: "cp", kind: "side_plot", position: { x: 0, y: 1 } },
+    { id: "rk", kind: "knowledge", position: { x: 0, y: 0 } },
+    { id: "ck", kind: "knowledge", position: { x: 0, y: 1 } },
+  ];
+  console.assert(
+    JSON.stringify(rootLinkedPlotIds(nodes, [])) === JSON.stringify(["rp"]),
+    "root plots",
+  );
+  console.assert(
+    JSON.stringify(chapterLocalPlotIds("ch", nodes, [])) === JSON.stringify(["cp"]),
+    "chapter local plots exclude root",
+  );
+  console.assert(
+    JSON.stringify(chapterEffectiveKnowledgeIds("ch", nodes, [])) ===
+      JSON.stringify(["ck", "rk"]),
+    "chapter knowledge merges root",
+  );
+}
+
+{
+  const nodes = [
+    {
+      id: "root",
+      kind: "novel",
+      position: { x: 0, y: 0 },
+      linked_side_plot_ids: ["rp"],
+      linked_knowledge_ids: ["rk"],
+      linked_character_ids: [] as string[],
+    },
+    {
+      id: "vol",
+      kind: "volume",
+      position: { x: 0, y: 5 },
+      linked_side_plot_ids: ["vp"],
+      linked_knowledge_ids: ["vk"],
+      linked_character_ids: [] as string[],
+    },
+    {
+      id: "ch",
+      kind: "chapter",
+      position: { x: 0, y: 10 },
+      linked_side_plot_ids: ["cp"],
+      linked_knowledge_ids: ["ck"],
+      linked_character_ids: [] as string[],
+    },
+    { id: "rp", kind: "side_plot", position: { x: 0, y: 0 } },
+    { id: "vp", kind: "side_plot", position: { x: 0, y: 1 } },
+    { id: "cp", kind: "side_plot", position: { x: 0, y: 2 } },
+    { id: "rk", kind: "knowledge", position: { x: 0, y: 0 } },
+    { id: "vk", kind: "knowledge", position: { x: 0, y: 1 } },
+    { id: "ck", kind: "knowledge", position: { x: 0, y: 2 } },
+  ];
+  const edges = [
+    { id: "e1", source: "root", target: "vol", kind: "volume" },
+    { id: "e2", source: "vol", target: "ch", kind: "chapter" },
+  ];
+  applyAutoLayout(nodes, edges);
+  console.assert(nodes.find((n) => n.id === "vol")!.position.x === C.MAIN_X, "volume on spine");
+  console.assert(
+    JSON.stringify(chapterLocalPlotIds("ch", nodes, edges)) === JSON.stringify(["cp"]),
+    "volume inherit excluded from local plots",
+  );
+  console.assert(
+    JSON.stringify(chapterEffectiveKnowledgeIds("ch", nodes, edges)).includes("vk") &&
+      JSON.stringify(chapterEffectiveKnowledgeIds("ch", nodes, edges)).includes("rk"),
+    "chapter knowledge merges root+volume",
+  );
+}
+
+{
+  // 分卷主轴：root → vol1 → ch_a → ch_b → vol2 → ch_c（卷下章节聚在卷后，不被全局 y 打散）
+  const nodes = [
+    { id: "r", kind: "novel", position: { x: 0, y: 0 } },
+    { id: "v2", kind: "volume", position: { x: 0, y: 1 } }, // 故意 y 更靠上
+    { id: "v1", kind: "volume", position: { x: 0, y: 50 } },
+    { id: "cb", kind: "chapter", position: { x: 0, y: 2 } },
+    { id: "ca", kind: "chapter", position: { x: 0, y: 3 } },
+    { id: "cc", kind: "chapter", position: { x: 0, y: 4 } },
+  ];
+  const edges = [
+    { source: "r", target: "v1", kind: "volume" },
+    { source: "v1", target: "v2", kind: "volume" },
+    { source: "v1", target: "ca", kind: "chapter" },
+    { source: "ca", target: "cb", kind: "chapter" },
+    { source: "v2", target: "cc", kind: "chapter" },
+  ];
+  applyAutoLayout(nodes, edges);
+  const y = (id: string) => nodes.find((n) => n.id === id)!.position.y;
+  console.assert(y("r") < y("v1"), "root above vol1");
+  console.assert(y("v1") < y("ca"), "vol1 above its chapters");
+  console.assert(y("ca") < y("cb"), "chapter chain under vol1");
+  console.assert(y("cb") < y("v2"), "vol1 block finishes before vol2");
+  console.assert(y("v2") < y("cc"), "vol2 above its chapter");
+  // 即使 v2 初始 y 更小，结构序仍把 v1 放在 v2 前（从根挂出的链）
+  console.assert(y("v1") < y("v2"), "volume chain from root");
 }
 
 console.log("treeLayout.selfcheck ok");

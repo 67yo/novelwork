@@ -3,7 +3,7 @@ description: Keep UI i18n translations in sync when changing user-facing copy
 alwaysApply: true
 ---
 
-# i18n sync (Nove Work)
+# i18n sync (Novel Work)
 
 UI strings live in `src/i18n/messages.ts`. Supported locales: `en`, `zh-CN`, `zh-TW`, `ja`, `de`, `fr`. Preference `system` follows OS language.
 

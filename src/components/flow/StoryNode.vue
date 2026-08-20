@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, type Component } from "vue";
 import { Handle, Position, type NodeProps } from "@vue-flow/core";
-import { BookOpen, GitBranch, Library, User } from "@lucide/vue";
+import { BookOpen, GitBranch, Layers, Library, User } from "@lucide/vue";
 import type { TreeNode } from "@/lib/api";
 import { useI18n } from "@/i18n";
 
-/** 根节点可附带封面 URL（来自 NovelProject，不进树 JSON） */
-type StoryNodeData = TreeNode & { cover_url?: string };
+/** 根节点可附带封面 URL */
+type StoryNodeData = TreeNode & {
+  cover_url?: string;
+};
 
 const props = defineProps<NodeProps<StoryNodeData>>();
 const { t } = useI18n();
@@ -36,6 +38,8 @@ const kindIcon = computed((): { icon: Component; class: string } | null => {
   switch (kind.value) {
     case "chapter":
       return { icon: BookOpen, class: "text-muted-foreground" };
+    case "volume":
+      return { icon: Layers, class: "text-violet-700" };
     case "character":
       return { icon: User, class: "text-amber-700" };
     case "side_plot":
@@ -51,12 +55,16 @@ const shellClass = computed(() => {
   switch (kind.value) {
     case "novel":
       return "border-primary/40 bg-[oklch(0.92_0.04_155)]";
+    case "volume":
+      return "border-violet-700/35 bg-[oklch(0.96_0.03_300)] min-w-[180px]";
     case "character":
       return "border-amber-700/30 bg-[oklch(0.97_0.02_85)] min-w-[160px]";
     case "side_plot":
       return "border-sky-700/30 bg-[oklch(0.95_0.03_220)]";
     case "knowledge":
       return "border-teal-700/30 bg-[oklch(0.96_0.03_175)] min-w-[160px]";
+    case "chapter":
+      return "border-border bg-card min-w-[180px]";
     default:
       return "border-border bg-card";
   }
@@ -67,6 +75,7 @@ const glowTone = computed(() => {
   if (kind.value === "character") return "story-node-glow story-node-glow--amber";
   if (kind.value === "side_plot") return "story-node-glow story-node-glow--sky";
   if (kind.value === "knowledge") return "story-node-glow story-node-glow--teal";
+  if (kind.value === "volume") return "story-node-glow story-node-glow--violet";
   return "story-node-glow story-node-glow--primary";
 });
 
@@ -78,7 +87,7 @@ const sideHandleClass = computed(() => {
   return null;
 });
 const leftHandleClass = computed(
-  () => sideHandleClass.value ?? "!h-2.5 !w-2.5 !border-2 !border-amber-600 !bg-amber-500",
+  () => sideHandleClass.value ?? "!h-2.5 !w-2.5 !border-2 !border-rose-600 !bg-rose-500",
 );
 const rightHandleClass = computed(
   () => sideHandleClass.value ?? "!h-2.5 !w-2.5 !border-2 !border-sky-600 !bg-sky-500",
@@ -90,7 +99,7 @@ const rightHandleClass = computed(
     class="relative rounded-lg border px-3 py-2 text-xs shadow-sm"
     :class="[shellClass, glowTone]"
     :aria-selected="selected"
-    style="max-width: 200px"
+    :style="kind === 'chapter' || kind === 'volume' ? 'max-width: 220px' : 'max-width: 200px'"
   >
     <Handle
       id="top"
@@ -223,6 +232,31 @@ const rightHandleClass = computed(
       <p v-if="n?.outline" class="mt-1 line-clamp-2 text-[11px] text-muted-foreground">{{ n.outline }}</p>
     </template>
 
+    <template v-else-if="kind === 'volume'">
+      <div class="flex items-center gap-1.5 font-medium leading-tight">
+        <component v-if="kindIcon" :is="kindIcon.icon" class="h-3.5 w-3.5 shrink-0" :class="kindIcon.class" />
+        <span class="truncate">{{ n?.label }}</span>
+      </div>
+      <p class="mt-0.5 text-[10px] text-violet-800">{{ t("workspace.volumeBadge") }}</p>
+      <p v-if="n?.outline" class="mt-1 line-clamp-3 text-[11px] leading-snug text-muted-foreground">
+        {{ n.outline }}
+      </p>
+      <p v-else class="mt-1 text-[10px] text-muted-foreground/70">{{ t("workspace.noOutline") }}</p>
+    </template>
+
+    <!-- 章节卡：标题 / 字数 / 大纲（剧情排序在左侧编辑栏） -->
+    <template v-else-if="kind === 'chapter'">
+      <div class="flex items-center gap-1.5 font-medium leading-tight">
+        <component v-if="kindIcon" :is="kindIcon.icon" class="h-3.5 w-3.5 shrink-0" :class="kindIcon.class" />
+        <span class="truncate">{{ n?.label }}</span>
+      </div>
+      <p v-if="n?.word_count" class="mt-0.5 text-[10px] text-muted-foreground">{{ wordWritten }}</p>
+      <p v-if="n?.outline" class="mt-1 line-clamp-3 text-[11px] leading-snug text-muted-foreground">
+        {{ n.outline }}
+      </p>
+      <p v-else class="mt-1 text-[10px] text-muted-foreground/70">{{ t("workspace.noOutline") }}</p>
+    </template>
+
     <template v-else>
       <div class="flex items-center gap-1.5 font-medium leading-tight">
         <component v-if="kindIcon" :is="kindIcon.icon" class="h-3.5 w-3.5 shrink-0" :class="kindIcon.class" />
@@ -260,5 +294,9 @@ const rightHandleClass = computed(
 .story-node-glow--teal {
   --glow: 15 118 110;
   border-color: rgb(15 118 110 / 0.7);
+}
+.story-node-glow--violet {
+  --glow: 124 58 237;
+  border-color: rgb(124 58 237 / 0.7);
 }
 </style>

@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from "vue";
 import {
   api,
   type CompatProviderView,
-  type ModelCatalog,
+  type McpStatus,
   type SettingsView,
   type SkillMatchPreview,
   type SkillPreviewItem,
@@ -27,21 +27,19 @@ type DraftProvider = {
 
 const { t } = useI18n();
 const uiLocale = ref<LocalePreference>("system");
+const mcpPort = ref(17832);
+const mcpEnabled = ref(true);
+const mcpLan = ref(false);
+const mcpStatus = ref<McpStatus | null>(null);
+const mcpBusy = ref(false);
 const settings = ref<SettingsView | null>(null);
-const catalog = ref<ModelCatalog | null>(null);
 const providers = ref<DraftProvider[]>([]);
 const geminiKey = ref("");
 const claudeKey = ref("");
-const createModel = ref("deepseek-v4-flash");
-const generateModel = ref("deepseek-v4-flash");
-const chatModel = ref("deepseek-v4-flash");
-const refineModel = ref("deepseek-reasoner");
-const knowledgeModel = ref("deepseek-v4-flash");
 const show = ref<Record<string, boolean>>({});
 const msg = ref("");
 const err = ref("");
 const saving = ref(false);
-const catalogBusy = ref(false);
 const refreshBusyId = ref<string | null>(null);
 
 const adding = ref(false);
@@ -55,6 +53,8 @@ const addBusy = ref(false);
 const addErr = ref("");
 
 const skillsRoot = ref("");
+const skillsBundled = ref("");
+const skillsUser = ref("");
 const skillsExists = ref(false);
 const skills = ref<SkillPreviewItem[]>([]);
 const skillsBusy = ref(false);
@@ -77,54 +77,38 @@ function fromView(p: CompatProviderView): DraftProvider {
   };
 }
 
-const liveIds = computed(() => {
-  const ids = new Set<string>();
-  for (const p of providers.value) {
-    for (const m of p.models) ids.add(m);
-  }
-  const c = catalog.value;
-  if (c) {
-    for (const m of c.compat || []) ids.add(m);
-    for (const m of c.gemini || []) ids.add(m);
-    for (const m of c.claude || []) ids.add(m);
-  }
-  return ids;
-});
-
-function optionsFor(selected: string) {
-  const live = liveIds.value;
-  const ids = [...live].sort();
-  const rows = ids.map((id) => ({ id, label: id }));
-  if (selected && !live.has(selected)) {
-    rows.unshift({ id: selected, label: `${selected}${t("settings.deprecated")}` });
-  }
-  return rows;
-}
-
 async function load() {
   const s = await api.getSettings();
   settings.value = s;
-  catalog.value = s.model_catalog;
   providers.value = (s.compat_providers || []).map(fromView);
-  createModel.value = s.create_model || "deepseek-v4-flash";
-  generateModel.value = s.generate_model || "deepseek-v4-flash";
-  chatModel.value = s.chat_model || "deepseek-v4-flash";
-  refineModel.value = s.refine_model || "deepseek-reasoner";
-  knowledgeModel.value = s.knowledge_model || "deepseek-v4-flash";
   uiLocale.value = (s.ui_locale || "system") as LocalePreference;
+  mcpPort.value = s.mcp_port || 17832;
+  mcpEnabled.value = s.mcp_enabled !== false;
+  mcpLan.value = !!s.mcp_lan;
   setLocalePreference(uiLocale.value);
   geminiKey.value = "";
   claudeKey.value = "";
+  void refreshMcpStatus();
 }
 
-async function refreshCatalog() {
-  catalogBusy.value = true;
+async function refreshMcpStatus() {
   try {
-    catalog.value = await api.refreshModelCatalog();
+    mcpStatus.value = await api.getMcpStatus();
+  } catch {
+    mcpStatus.value = null;
+  }
+}
+
+async function restartMcp() {
+  mcpBusy.value = true;
+  err.value = "";
+  try {
+    mcpStatus.value = await api.restartMcpServer();
+    msg.value = t("mcp.saved");
   } catch (e) {
     err.value = String(e);
   } finally {
-    catalogBusy.value = false;
+    mcpBusy.value = false;
   }
 }
 
@@ -135,6 +119,8 @@ async function loadSkills() {
   try {
     const p = await api.listChatSkills();
     skillsRoot.value = p.root;
+    skillsBundled.value = p.bundled || "";
+    skillsUser.value = p.user || p.root || "";
     skillsExists.value = p.exists;
     skills.value = p.skills;
     if (expandedSkill.value && !p.skills.some((s) => s.name === expandedSkill.value)) {
@@ -178,7 +164,7 @@ function skillMatchText(m: SkillMatchPreview): string {
 
 onMounted(async () => {
   await load();
-  refreshCatalog().then(() => load());
+  void api.refreshModelCatalog().then(() => load());
   void loadSkills();
 });
 
@@ -311,18 +297,19 @@ async function save() {
       })),
       gemini_api_key: opt(geminiKey.value),
       claude_api_key: opt(claudeKey.value),
-      create_model: createModel.value.trim(),
-      generate_model: generateModel.value.trim(),
-      chat_model: chatModel.value.trim(),
-      refine_model: refineModel.value.trim(),
-      knowledge_model: knowledgeModel.value.trim(),
       ui_locale: uiLocale.value,
+      mcp_port: Number(mcpPort.value) || 17832,
+      mcp_enabled: mcpEnabled.value,
+      mcp_lan: mcpLan.value,
     });
     settings.value = s;
-    catalog.value = s.model_catalog;
     setLocalePreference((s.ui_locale || "system") as LocalePreference);
+    mcpPort.value = s.mcp_port || 17832;
+    mcpEnabled.value = s.mcp_enabled !== false;
+    mcpLan.value = !!s.mcp_lan;
+    void refreshMcpStatus();
     msg.value = t("settings.saved");
-    await refreshCatalog();
+    await api.refreshModelCatalog();
     await load();
   } catch (e) {
     err.value = String(e);
@@ -341,31 +328,12 @@ function onLocaleChange() {
   setLocalePreference(uiLocale.value);
 }
 
-const catalogHint = computed(() => {
-  void t;
-  const c = catalog.value;
-  if (!c) return "";
-  const parts = [
-    (c.compat || []).length && `OpenAI ${c.compat.length}`,
-    c.gemini.length && `Gemini ${c.gemini.length}`,
-    c.claude.length && `Claude ${c.claude.length}`,
-  ].filter(Boolean);
-  const errKeys = Object.keys(c.errors || {});
-  const fail = errKeys.length ? t("settings.catalogFailed", { keys: errKeys.join(", ") }) : "";
-  const when = c.updated_at ? ` · ${c.updated_at.slice(0, 19).replace("T", " ")}` : "";
-  const sep = fail ? ` · ${fail}` : "";
-  return parts.length
-    ? `${parts.join(" / ")}${when}${sep}`
-    : `${t("settings.catalogWaiting")}${sep}`;
-});
-
 const scrollRoot = ref<HTMLElement | null>(null);
 const activeSection = ref("language");
 
 const settingsSections = computed(() => [
   { id: "language", label: t("settings.language") },
   { id: "skills", label: t("settings.skills") },
-  { id: "models", label: t("settings.models") },
   { id: "compat", label: t("settings.compatTitle") },
   { id: "gemini", label: "Gemini" },
   { id: "claude", label: "Claude" },
@@ -438,14 +406,58 @@ function scrollToSection(id: string) {
       </CardContent>
     </Card>
 
+    <Card id="settings-mcp" class="scroll-mt-4">
+      <CardHeader>
+        <CardTitle>{{ t("mcp.title") }}</CardTitle>
+        <p class="text-sm text-muted-foreground">
+          {{ t("mcp.hint", { port: mcpPort || 17832 }) }}
+        </p>
+      </CardHeader>
+      <CardContent class="space-y-4">
+        <label class="flex items-center gap-2 text-sm">
+          <input v-model="mcpEnabled" type="checkbox" class="h-4 w-4" />
+          {{ t("mcp.enabled") }}
+        </label>
+        <label class="flex items-center gap-2 text-sm">
+          <input v-model="mcpLan" type="checkbox" class="h-4 w-4" />
+          {{ t("mcp.lan") }}
+        </label>
+        <p v-if="mcpLan" class="text-xs text-muted-foreground">{{ t("mcp.lanHint") }}</p>
+        <div class="space-y-1">
+          <label class="text-xs text-muted-foreground">{{ t("mcp.port") }}</label>
+          <Input v-model.number="mcpPort" type="number" min="1024" max="65535" class="h-9" />
+        </div>
+        <div class="rounded-md border bg-muted/30 px-3 py-2 text-xs">
+          <p>
+            {{ t("mcp.endpoint") }}:
+            <span class="font-mono">{{ mcpStatus?.endpoint || `http://127.0.0.1:${mcpPort}/mcp` }}</span>
+          </p>
+          <p v-if="mcpLan || mcpStatus?.lan_enabled" class="mt-1">
+            {{ t("mcp.lanEndpoint") }}:
+            <span class="font-mono">{{ mcpStatus?.lan_endpoint || `http://<LAN-IP>:${mcpPort}/mcp` }}</span>
+          </p>
+          <p class="mt-1" :class="mcpStatus?.running ? 'text-primary' : 'text-muted-foreground'">
+            {{ mcpStatus?.running ? t("mcp.statusRunning") : t("mcp.statusStopped") }}
+            <template v-if="mcpStatus?.error"> · {{ mcpStatus.error }}</template>
+          </p>
+        </div>
+        <Button variant="outline" size="sm" :disabled="mcpBusy || saving" @click="restartMcp">
+          {{ mcpBusy ? t("settings.saving") : t("mcp.restart") }}
+        </Button>
+      </CardContent>
+    </Card>
+
     <Card id="settings-skills" class="scroll-mt-4">
       <CardHeader>
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">
             <CardTitle>{{ t("settings.skills") }}</CardTitle>
             <p class="mt-1 text-sm text-muted-foreground">{{ t("settings.skillsHint") }}</p>
-            <p class="mt-1 truncate font-mono text-xs text-muted-foreground" :title="skillsRoot">
-              {{ skillsRoot || "…" }}
+            <p class="mt-1 truncate font-mono text-xs text-muted-foreground" :title="skillsBundled">
+              {{ t("settings.skillsBundled") }} · {{ skillsBundled || "…" }}
+            </p>
+            <p class="mt-1 truncate font-mono text-xs text-muted-foreground" :title="skillsUser || skillsRoot">
+              {{ t("settings.skillsUser") }} · {{ skillsUser || skillsRoot || "…" }}
             </p>
           </div>
           <Button variant="outline" size="sm" class="shrink-0" :disabled="skillsBusy" @click="loadSkills">
@@ -467,6 +479,12 @@ function scrollToSection(id: string) {
             <button type="button" class="w-full text-left" @click="toggleSkill(s.name)">
               <div class="flex flex-wrap items-center gap-2">
                 <span class="font-mono text-sm font-medium">@{{ s.name }}</span>
+                <span
+                  v-if="s.builtin"
+                  class="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                >
+                  {{ t("settings.skillsBuiltin") }}
+                </span>
                 <span
                   v-if="s.trigger"
                   class="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
@@ -496,70 +514,6 @@ function scrollToSection(id: string) {
             </Button>
           </div>
           <p v-if="skillMatch" class="text-sm text-muted-foreground">{{ skillMatchText(skillMatch) }}</p>
-        </div>
-      </CardContent>
-    </Card>
-
-    <Card id="settings-models" class="scroll-mt-4">
-      <CardHeader>
-        <div class="flex items-start justify-between gap-3">
-          <div>
-            <CardTitle>{{ t("settings.models") }}</CardTitle>
-            <p class="mt-1 text-sm text-muted-foreground">{{ t("settings.modelsHint") }}</p>
-            <p class="mt-1 text-xs text-muted-foreground">{{ catalogHint }}</p>
-          </div>
-          <Button variant="outline" size="sm" :disabled="catalogBusy" @click="refreshCatalog().then(load)">
-            {{ catalogBusy ? t("settings.refreshing") : t("settings.refreshCatalog") }}
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent class="space-y-4">
-        <div>
-          <label class="mb-1 block text-sm">{{ t("settings.createModel") }}</label>
-          <select
-            v-model="createModel"
-            class="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-          >
-            <option v-for="m in optionsFor(createModel)" :key="m.id" :value="m.id">{{ m.label }}</option>
-          </select>
-        </div>
-        <div>
-          <label class="mb-1 block text-sm">{{ t("settings.generateModel") }}</label>
-          <select
-            v-model="generateModel"
-            class="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-          >
-            <option v-for="m in optionsFor(generateModel)" :key="m.id" :value="m.id">{{ m.label }}</option>
-          </select>
-        </div>
-        <div>
-          <label class="mb-1 block text-sm">{{ t("settings.chatModel") }}</label>
-          <select
-            v-model="chatModel"
-            class="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-          >
-            <option v-for="m in optionsFor(chatModel)" :key="m.id" :value="m.id">{{ m.label }}</option>
-          </select>
-        </div>
-        <div>
-          <label class="mb-1 block text-sm">{{ t("settings.refineModel") }}</label>
-          <select
-            v-model="refineModel"
-            class="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-          >
-            <option v-for="m in optionsFor(refineModel)" :key="m.id" :value="m.id">{{ m.label }}</option>
-          </select>
-          <p class="mt-1 text-xs text-muted-foreground">{{ t("settings.refineHint") }}</p>
-        </div>
-        <div>
-          <label class="mb-1 block text-sm">{{ t("settings.knowledgeModel") }}</label>
-          <select
-            v-model="knowledgeModel"
-            class="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-          >
-            <option v-for="m in optionsFor(knowledgeModel)" :key="m.id" :value="m.id">{{ m.label }}</option>
-          </select>
-          <p class="mt-1 text-xs text-muted-foreground">{{ t("settings.knowledgeHint") }}</p>
         </div>
       </CardContent>
     </Card>

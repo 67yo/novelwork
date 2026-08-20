@@ -20,6 +20,7 @@ const run = createChatRunProgress({
 run.advance("thinking", "thinking");
 run.onTokens(100, 0, false);
 assert(lines.some((l) => l.includes("p~100")), "est prompt");
+assert(lines.some((l) => l.includes("total")), "live total");
 run.onTokens(120, 40, true);
 assert(lines.some((l) => l.includes("p=120") && l.includes("c=40")), "confirmed tokens");
 run.onTokens(10, 5, true);

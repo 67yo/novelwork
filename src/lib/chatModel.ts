@@ -30,7 +30,7 @@ export function modelSelectOptions(
   return rows;
 }
 
-/** Chat 面板模型：加载设置默认值，变更时写回对应任务模型。 */
+/** Chat 面板模型：加载设置默认值，变更时写回 chat_model（全应用 LLM 共用）。 */
 export function usePersistedChatModel(setting: ChatModelSetting) {
   const model = ref("");
   const options = ref<{ id: string; label: string }[]>([]);

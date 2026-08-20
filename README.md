@@ -1,4 +1,4 @@
-# Nove Work
+# Novel Work
 
 强约束 AI 小说写作工具（Demo）。域名：[nove.work](https://nove.work) / novework.net
 
@@ -18,6 +18,27 @@ pnpm tauri dev
 ```
 
 需要本机已安装 Rust、pnpm。macOS / Windows。
+
+## 打包
+
+### Windows 安装包（NSIS，`*-setup.exe`）
+
+在 **Windows** 上（需 [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) + WebView2 运行时环境）：
+
+```bash
+pnpm install
+pnpm build:windows
+```
+
+安装包输出目录：
+
+```text
+src-tauri/target/release/bundle/nsis/
+```
+
+也可在 GitHub Actions 手动触发 **windows-nsis** workflow，或推送 `v*` 标签；产物为 Artifact `Novel-Work-windows-nsis`。
+
+配置见 `src-tauri/tauri.conf.json`（`bundle.windows.nsis`）与 `tauri.windows.conf.json`。当前为当前用户安装、简中/英文可选；未配置代码签名。
 
 ## DeepSeek API Key
 

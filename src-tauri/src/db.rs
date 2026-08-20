@@ -1,4 +1,4 @@
-use crate::models::{AppSettings, ChatMessage, KnowledgeBook, ModelCatalog, NovelProject};
+use crate::models::{AppSettings, KnowledgeBook, ModelCatalog, NovelProject, PublicKnowledgeCard};
 use crate::paths::db_path;
 use anyhow::{Context, Result};
 use rusqlite::{params, Connection, OptionalExtension};
@@ -116,6 +116,24 @@ impl Db {
         );
         let _ = conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_chat_messages_node ON chat_messages(novel_id, node_id)",
+            [],
+        );
+        let _ = conn.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS public_knowledge_cards (
+              id TEXT PRIMARY KEY,
+              title TEXT NOT NULL,
+              book_ids TEXT NOT NULL,
+              extract_prompt TEXT NOT NULL,
+              extracted TEXT NOT NULL,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              archived INTEGER NOT NULL DEFAULT 0
+            );
+            "#,
+        );
+        let _ = conn.execute(
+            "ALTER TABLE public_knowledge_cards ADD COLUMN archived INTEGER NOT NULL DEFAULT 0",
             [],
         );
         migrate_token_usage_novel_id(&conn)?;
@@ -237,6 +255,18 @@ impl Db {
             refine_model: get("refine_model", &d.refine_model),
             knowledge_model: get("knowledge_model", &d.knowledge_model),
             ui_locale: get("ui_locale", &d.ui_locale),
+            mcp_port: get("mcp_port", &d.mcp_port.to_string())
+                .parse()
+                .unwrap_or(d.mcp_port),
+            mcp_enabled: match get("mcp_enabled", if d.mcp_enabled { "1" } else { "0" }).as_str()
+            {
+                "0" | "false" | "False" | "no" => false,
+                _ => true,
+            },
+            mcp_lan: matches!(
+                get("mcp_lan", if d.mcp_lan { "1" } else { "0" }).as_str(),
+                "1" | "true" | "True" | "yes"
+            ),
         };
         // migrate legacy plaintext → encrypted on read
         let needs_migrate = migrated
@@ -314,6 +344,12 @@ impl Db {
             ("refine_model", s.refine_model.clone()),
             ("knowledge_model", s.knowledge_model.clone()),
             ("ui_locale", s.ui_locale.clone()),
+            ("mcp_port", s.mcp_port.to_string()),
+            (
+                "mcp_enabled",
+                if s.mcp_enabled { "1" } else { "0" }.to_string(),
+            ),
+            ("mcp_lan", if s.mcp_lan { "1" } else { "0" }.to_string()),
         ];
         let conn = self.conn.lock().unwrap();
         for (k, v) in pairs {
@@ -384,6 +420,84 @@ impl Db {
             .list_knowledge()?
             .into_iter()
             .find(|b| b.id == id))
+    }
+
+    pub fn list_public_knowledge_cards(&self) -> Result<Vec<PublicKnowledgeCard>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, title, book_ids, extract_prompt, extracted, created_at, updated_at,
+                    COALESCE(archived, 0)
+             FROM public_knowledge_cards ORDER BY updated_at DESC",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            let book_ids: String = row.get(2)?;
+            let archived_i: i64 = row.get(7).unwrap_or(0);
+            Ok(PublicKnowledgeCard {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                book_ids: serde_json::from_str(&book_ids).unwrap_or_default(),
+                extract_prompt: row.get(3)?,
+                extracted: row.get(4)?,
+                created_at: row.get(5)?,
+                updated_at: row.get(6)?,
+                archived: archived_i != 0,
+            })
+        })?;
+        Ok(rows.filter_map(|r| r.ok()).collect())
+    }
+
+    pub fn get_public_knowledge_card(&self, id: &str) -> Result<Option<PublicKnowledgeCard>> {
+        Ok(self
+            .list_public_knowledge_cards()?
+            .into_iter()
+            .find(|c| c.id == id))
+    }
+
+    pub fn upsert_public_knowledge_card(&self, card: &PublicKnowledgeCard) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let books = serde_json::to_string(&card.book_ids)?;
+        conn.execute(
+            "INSERT INTO public_knowledge_cards(id, title, book_ids, extract_prompt, extracted, created_at, updated_at, archived)
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8)
+             ON CONFLICT(id) DO UPDATE SET
+               title=excluded.title,
+               book_ids=excluded.book_ids,
+               extract_prompt=excluded.extract_prompt,
+               extracted=excluded.extracted,
+               updated_at=excluded.updated_at",
+            params![
+                card.id,
+                card.title,
+                books,
+                card.extract_prompt,
+                card.extracted,
+                card.created_at,
+                card.updated_at,
+                card.archived as i64
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn set_public_knowledge_card_archived(&self, id: &str, archived: bool) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let n = conn.execute(
+            "UPDATE public_knowledge_cards SET archived=?1 WHERE id=?2",
+            params![archived as i64, id],
+        )?;
+        if n == 0 {
+            anyhow::bail!("public knowledge card not found");
+        }
+        Ok(())
+    }
+
+    pub fn delete_public_knowledge_card(&self, id: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let n = conn.execute("DELETE FROM public_knowledge_cards WHERE id=?1", params![id])?;
+        if n == 0 {
+            anyhow::bail!("public knowledge card not found");
+        }
+        Ok(())
     }
 
     pub fn set_knowledge_archived(&self, id: &str, archived: bool) -> Result<()> {
@@ -750,39 +864,6 @@ impl Db {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         })?;
         Ok(rows.filter_map(|r| r.ok()).collect())
-    }
-
-    pub fn list_chat(&self, novel_id: &str) -> Result<Vec<ChatMessage>> {
-        self.list_chat_for_node(novel_id, "")
-    }
-
-    /// `node_id` 空串 = 根创作 Chat；否则为卡片 Chat。
-    pub fn list_chat_for_node(&self, novel_id: &str, node_id: &str) -> Result<Vec<ChatMessage>> {
-        let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT id, novel_id, role, content, created_at, COALESCE(node_id, '') FROM chat_messages
-             WHERE novel_id=?1 AND COALESCE(node_id, '')=?2 ORDER BY created_at ASC",
-        )?;
-        let rows = stmt.query_map(params![novel_id, node_id], |row| {
-            Ok(ChatMessage {
-                id: row.get(0)?,
-                novel_id: row.get(1)?,
-                role: row.get(2)?,
-                content: row.get(3)?,
-                created_at: row.get(4)?,
-                node_id: row.get(5)?,
-            })
-        })?;
-        Ok(rows.filter_map(|r| r.ok()).collect())
-    }
-
-    pub fn insert_chat(&self, m: &ChatMessage) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute(
-            "INSERT INTO chat_messages(id, novel_id, role, content, created_at, node_id) VALUES(?1,?2,?3,?4,?5,?6)",
-            params![m.id, m.novel_id, m.role, m.content, m.created_at, m.node_id],
-        )?;
-        Ok(())
     }
 
     pub fn delete_chat_for_node(&self, novel_id: &str, node_id: &str) -> Result<()> {

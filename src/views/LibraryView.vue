@@ -1,49 +1,90 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import {
-  api,
-  type ChatTurn,
-  type KnowledgeBook,
-  type KnowledgeChunk,
-  type SkillPreviewItem,
-} from "@/lib/api";
-import { formatChatContent } from "@/lib/chatFormat";
-import { usePersistedChatModel } from "@/lib/chatModel";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { api, type KnowledgeBook, type KnowledgeChunk, type PublicKnowledgeCard } from "@/lib/api";
 import { useI18n } from "@/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
+type ModelProgress = {
+  phase?: string;
+  file?: string;
+  fileIndex?: number;
+  fileTotal?: number;
+  bytesDownloaded?: number;
+  bytesTotal?: number | null;
+  done?: number;
+  total?: number;
+  percent?: number;
+};
+
 const { t } = useI18n();
 const books = ref<KnowledgeBook[]>([]);
+const publicCards = ref<PublicKnowledgeCard[]>([]);
 const genres = ref<string[]>([]);
 const selectedGenres = ref<string[]>([]);
 const path = ref("");
 const url = ref("");
-const prompt = ref("");
 const busy = ref(false);
-const chatBusy = ref(false);
 const error = ref("");
 const showImport = ref(false);
-const tab = ref<"active" | "archived">("active");
+const section = ref<"sources" | "cards">("sources");
+const statusTab = ref<"active" | "archived">("active");
 const importMode = ref<"file" | "url">("file");
 const fileDropHover = ref(false);
 let unlistenFileDrop: (() => void) | null = null;
+let unlistenModelProgress: UnlistenFn | null = null;
 
-const extractMessages = ref<ChatTurn[]>([]);
-const extractChatInput = ref("");
-const extractListEl = ref<HTMLElement | null>(null);
-const chatSkills = ref<SkillPreviewItem[]>([]);
-const {
-  model: chatModel,
-  options: chatModelOptions,
-  load: loadChatModel,
-  persist: persistChatModel,
-} = usePersistedChatModel("knowledge_model");
-type SlashCmd = { cmd: string; insert: string; hint: string };
-const slashActive = ref(0);
+const modelProgress = ref<ModelProgress | null>(null);
+
+const modelProgressLabel = computed(() => {
+  const p = modelProgress.value;
+  if (!p?.phase) return "";
+  if (p.phase === "download") return t("library.modelDownloading");
+  if (p.phase === "load" || p.phase === "ready") return t("library.modelLoading");
+  if (p.phase === "embed") return t("library.modelEmbedding");
+  if (p.phase === "done") return t("library.modelDone");
+  return "";
+});
+
+const modelProgressPercent = computed(() =>
+  Math.max(0, Math.min(100, Math.round(modelProgress.value?.percent ?? 0))),
+);
+
+const modelProgressDetail = computed(() => {
+  const p = modelProgress.value;
+  if (!p) return "";
+  if (p.phase === "download" && p.file) {
+    const file = p.file.split("/").pop() || p.file;
+    if (p.bytesTotal && p.bytesTotal > 0) {
+      return t("library.modelDownloadBytes", {
+        file,
+        done: formatMb(p.bytesDownloaded ?? 0),
+        total: formatMb(p.bytesTotal),
+      });
+    }
+    return t("library.modelDownloadFile", {
+      file,
+      index: p.fileIndex ?? 0,
+      total: p.fileTotal ?? 0,
+    });
+  }
+  if (p.phase === "embed" && p.total) {
+    return t("library.modelEmbedDetail", { done: p.done ?? 0, total: p.total });
+  }
+  return "";
+});
+
+function formatMb(n: number) {
+  return (n / (1024 * 1024)).toFixed(1);
+}
+
+function resetModelProgress() {
+  modelProgress.value = null;
+}
 
 const editing = ref<KnowledgeBook | null>(null);
 const editTitle = ref("");
@@ -75,48 +116,39 @@ const pendingDelete = ref<KnowledgeBook | null>(null);
 const deleting = ref(false);
 const reextractId = ref("");
 const reextractTarget = ref<KnowledgeBook | null>(null);
-const reextractPrompt = ref("");
 const reextractError = ref("");
 
 const visible = computed(() =>
-  books.value.filter((b) => (tab.value === "archived" ? b.archived : !b.archived)),
+  books.value.filter((b) => (statusTab.value === "archived" ? b.archived : !b.archived)),
 );
 
-function resetExtractChat() {
-  extractMessages.value = [{ role: "assistant", content: t("library.extractChatWelcome") }];
-  extractChatInput.value = "";
-  slashActive.value = 0;
+const visibleCards = computed(() =>
+  publicCards.value.filter((c) => (statusTab.value === "archived" ? c.archived : !c.archived)),
+);
+
+const bookTitleById = computed(() => {
+  const m = new Map<string, string>();
+  for (const b of books.value) m.set(b.id, b.title);
+  return m;
+});
+
+function cardBookLabels(c: PublicKnowledgeCard): string {
+  const names = c.book_ids
+    .map((id) => bookTitleById.value.get(id) || id)
+    .filter(Boolean);
+  return names.join("、");
 }
 
 function toggleImport() {
   showImport.value = !showImport.value;
   error.value = "";
-  if (showImport.value) {
-    syncDefaultPrompt();
-    resetExtractChat();
-  }
 }
 
 async function refresh() {
   books.value = await api.listKnowledge();
   genres.value = await api.listGenres();
-  syncDefaultPrompt();
+  publicCards.value = await api.listPublicKnowledgeCards().catch(() => []);
 }
-
-function syncDefaultPrompt() {
-  const bookDefault = t("library.defaultPrompt");
-  const urlDefault = t("library.defaultUrlPrompt");
-  if (!prompt.value || prompt.value === bookDefault || prompt.value === urlDefault) {
-    prompt.value = importMode.value === "url" ? urlDefault : bookDefault;
-  }
-}
-
-watch(importMode, () => {
-  syncDefaultPrompt();
-  if (showImport.value && extractMessages.value.length <= 1) {
-    resetExtractChat();
-  }
-});
 
 function acceptImportPath(p: string) {
   const lower = p.toLowerCase();
@@ -145,119 +177,13 @@ const fileName = computed(() => {
   return parts[parts.length - 1] || p;
 });
 
-async function loadChatSkills() {
-  try {
-    const p = await api.listChatSkills();
-    chatSkills.value = p.skills;
-  } catch {
-    chatSkills.value = [];
-  }
-}
-
-const skillSlashCmds = computed<SlashCmd[]>(() =>
-  chatSkills.value.map((s) => {
-    const line = (s.description || "").split(/\n/)[0]?.trim() || t("workspace.slashHintSkill");
-    const hint = line.length > 72 ? `${line.slice(0, 72)}…` : line;
-    return { cmd: `/${s.name}`, insert: `/${s.name} `, hint };
-  }),
-);
-
-const slashSuggestions = computed(() => {
-  const cmds = skillSlashCmds.value;
-  if (!cmds.length) return [];
-  const v = extractChatInput.value;
-  if (!v.startsWith("/") || /\s/.test(v)) return [];
-  const q = v.toLowerCase();
-  return cmds.filter((c) => c.cmd.toLowerCase().startsWith(q) || c.cmd.startsWith(v));
-});
-
-watch(slashSuggestions, () => {
-  slashActive.value = 0;
-});
-
-function applySlashCmd(cmd: SlashCmd) {
-  extractChatInput.value = cmd.insert;
-  slashActive.value = 0;
-}
-
-async function scrollExtractBottom() {
-  await nextTick();
-  if (extractListEl.value) extractListEl.value.scrollTop = extractListEl.value.scrollHeight;
-}
-
-function onExtractChatKeydown(ev: KeyboardEvent) {
-  const list = slashSuggestions.value;
-  if (list.length) {
-    if (ev.key === "ArrowDown") {
-      ev.preventDefault();
-      slashActive.value = (slashActive.value + 1) % list.length;
-    } else if (ev.key === "ArrowUp") {
-      ev.preventDefault();
-      slashActive.value = (slashActive.value - 1 + list.length) % list.length;
-    } else if (ev.key === "Enter" || ev.key === "Tab") {
-      ev.preventDefault();
-      applySlashCmd(list[slashActive.value] ?? list[0]);
-    } else if (ev.key === "Escape") {
-      ev.preventDefault();
-      extractChatInput.value = "";
-    }
-    return;
-  }
-  if (ev.key === "Enter" && !ev.shiftKey) {
-    ev.preventDefault();
-    void sendExtractChat();
-  }
-}
-
-async function sendExtractChat() {
-  const text = extractChatInput.value.trim();
-  if (!text || chatBusy.value || busy.value) return;
-  error.value = "";
-  chatBusy.value = true;
-  try {
-    const next = [...extractMessages.value, { role: "user", content: text }];
-    extractMessages.value = next;
-    extractChatInput.value = "";
-    await scrollExtractBottom();
-    const r = await api.knowledgeExtractChat(next, importMode.value === "url", chatModel.value);
-    extractMessages.value = [...extractMessages.value, { role: "assistant", content: r.reply }];
-    await scrollExtractBottom();
-    if (r.extract_prompt) {
-      prompt.value = r.extract_prompt;
-    }
-    if (r.used_mock) {
-      error.value = t("library.extractChatMock");
-    }
-  } catch (e) {
-    const msg = String(e);
-    if (msg.toLowerCase().includes("cancelled")) {
-      extractMessages.value = [
-        ...extractMessages.value,
-        { role: "assistant", content: t("workspace.chatStopped") },
-      ];
-    } else {
-      error.value = msg;
-    }
-  } finally {
-    chatBusy.value = false;
-  }
-}
-
-async function stopExtractChat() {
-  if (!chatBusy.value) return;
-  try {
-    await api.chatCancel("__knowledge_extract__");
-  } catch {
-    /* ignore */
-  }
-}
-
 onMounted(async () => {
   await refresh();
-  void loadChatSkills();
-  void loadChatModel(t("settings.deprecated"));
+  unlistenModelProgress = await listen<ModelProgress>("knowledge-model-progress", (ev) => {
+    modelProgress.value = ev.payload ?? null;
+  });
   unlistenFileDrop = await getCurrentWebview().onDragDropEvent((ev) => {
-    if (!showImport.value || tab.value !== "active" || importMode.value !== "file") {
+    if (!showImport.value || section.value !== "sources" || statusTab.value !== "active" || importMode.value !== "file") {
       fileDropHover.value = false;
       return;
     }
@@ -279,6 +205,8 @@ onMounted(async () => {
 onUnmounted(() => {
   unlistenFileDrop?.();
   unlistenFileDrop = null;
+  unlistenModelProgress?.();
+  unlistenModelProgress = null;
 });
 
 function toggleGenre(g: string) {
@@ -311,27 +239,25 @@ async function doImport() {
       return;
     }
   }
-  if (!prompt.value.trim()) {
-    error.value = t("library.needExtractPrompt");
-    return;
-  }
   busy.value = true;
   error.value = "";
+  resetModelProgress();
   try {
     if (usingUrl) {
-      await api.importKnowledgeUrl(u, prompt.value, selectedGenres.value);
+      await api.importKnowledgeUrl(u, selectedGenres.value);
       url.value = "";
     } else {
-      await api.importKnowledge(path.value, prompt.value, selectedGenres.value);
+      await api.importKnowledge(path.value, selectedGenres.value);
       path.value = "";
     }
     showImport.value = false;
-    tab.value = "active";
+    statusTab.value = "active";
     await refresh();
   } catch (e) {
     error.value = String(e);
   } finally {
     busy.value = false;
+    resetModelProgress();
   }
 }
 
@@ -429,12 +355,14 @@ async function rebuildIndex() {
   if (!b || indexBusy.value) return;
   indexBusy.value = true;
   chunksError.value = "";
+  resetModelProgress();
   try {
     indexStatus.value = await api.rebuildKnowledgeIndex(b.id);
   } catch (e) {
     chunksError.value = String(e);
   } finally {
     indexBusy.value = false;
+    resetModelProgress();
   }
 }
 
@@ -452,6 +380,16 @@ async function archive(b: KnowledgeBook, archived: boolean) {
   try {
     await api.archiveKnowledge(b.id, archived);
     if (viewing.value?.id === b.id) closeChunks();
+    await refresh();
+  } catch (e) {
+    error.value = String(e);
+  }
+}
+
+async function archiveCard(c: PublicKnowledgeCard, archived: boolean) {
+  error.value = "";
+  try {
+    await api.archivePublicKnowledgeCard(c.id, archived);
     await refresh();
   } catch (e) {
     error.value = String(e);
@@ -484,6 +422,93 @@ async function confirmDelete() {
   }
 }
 
+const editingCard = ref<PublicKnowledgeCard | null>(null);
+const cardTitle = ref("");
+const cardExtracted = ref("");
+const pendingDeleteCard = ref<PublicKnowledgeCard | null>(null);
+
+function startEditCard(c: PublicKnowledgeCard) {
+  editingCard.value = c;
+  cardTitle.value = c.title;
+  cardExtracted.value = c.extracted;
+  editError.value = "";
+}
+
+function startNewCard() {
+  editingCard.value = {
+    id: "",
+    title: "",
+    book_ids: [],
+    extract_prompt: "",
+    extracted: "",
+    created_at: "",
+    updated_at: "",
+    archived: false,
+  };
+  cardTitle.value = "";
+  cardExtracted.value = "";
+  editError.value = "";
+}
+
+function cancelEditCard() {
+  if (editBusy.value) return;
+  editingCard.value = null;
+  editError.value = "";
+}
+
+async function saveEditCard() {
+  const c = editingCard.value;
+  if (!c) return;
+  const title = cardTitle.value.trim();
+  if (!title) {
+    editError.value = t("library.editTitleRequired");
+    return;
+  }
+  editBusy.value = true;
+  editError.value = "";
+  try {
+    await api.upsertPublicKnowledgeCard({
+      id: c.id || null,
+      title,
+      book_ids: c.book_ids,
+      extract_prompt: c.extract_prompt,
+      extracted: cardExtracted.value,
+    });
+    editingCard.value = null;
+    await refresh();
+  } catch (e) {
+    editError.value = String(e);
+  } finally {
+    editBusy.value = false;
+  }
+}
+
+function askDeleteCard(c: PublicKnowledgeCard) {
+  pendingDeleteCard.value = c;
+  error.value = "";
+}
+
+function cancelDeleteCard() {
+  if (deleting.value) return;
+  pendingDeleteCard.value = null;
+}
+
+async function confirmDeleteCard() {
+  const c = pendingDeleteCard.value;
+  if (!c) return;
+  deleting.value = true;
+  try {
+    await api.deletePublicKnowledgeCard(c.id);
+    pendingDeleteCard.value = null;
+    if (editingCard.value?.id === c.id) editingCard.value = null;
+    await refresh();
+  } catch (e) {
+    error.value = String(e);
+  } finally {
+    deleting.value = false;
+  }
+}
+
 function isHttpSource(p: string) {
   const s = p.trim().toLowerCase();
   return s.startsWith("http://") || s.startsWith("https://");
@@ -492,7 +517,6 @@ function isHttpSource(p: string) {
 function openReextract(b: KnowledgeBook) {
   if (reextractId.value || busy.value) return;
   reextractTarget.value = b;
-  reextractPrompt.value = b.extract_prompt || "";
   reextractError.value = "";
   error.value = "";
 }
@@ -500,34 +524,28 @@ function openReextract(b: KnowledgeBook) {
 function cancelReextract() {
   if (reextractId.value) return;
   reextractTarget.value = null;
-  reextractPrompt.value = "";
   reextractError.value = "";
 }
 
 async function confirmReextract() {
   const b = reextractTarget.value;
   if (!b || reextractId.value || busy.value) return;
-  const focus = reextractPrompt.value.trim();
-  if (!focus) {
-    reextractError.value = t("library.needExtractPrompt");
-    return;
-  }
   reextractId.value = b.id;
   reextractError.value = "";
   error.value = "";
+  resetModelProgress();
   try {
     let updated: KnowledgeBook;
     try {
-      updated = await api.reextractKnowledge(b.id, null, focus);
+      updated = await api.reextractKnowledge(b.id);
     } catch (e) {
       const msg = String(e);
       if (isHttpSource(b.source_path) || !msg.includes("源文件不存在")) throw e;
       const p = await api.pickTextFile();
       if (!p) return;
-      updated = await api.reextractKnowledge(b.id, p, focus);
+      updated = await api.reextractKnowledge(b.id, p);
     }
     reextractTarget.value = null;
-    reextractPrompt.value = "";
     await refresh();
     if (viewing.value?.id === updated.id) {
       viewing.value = updated;
@@ -537,6 +555,7 @@ async function confirmReextract() {
     reextractError.value = String(e);
   } finally {
     reextractId.value = "";
+    resetModelProgress();
   }
 }
 </script>
@@ -546,31 +565,64 @@ async function confirmReextract() {
     <div class="flex items-end justify-between gap-4">
       <div>
         <h1 class="text-2xl font-semibold tracking-tight">{{ t("library.title") }}</h1>
-        <p class="mt-1 text-sm text-muted-foreground">{{ t("library.subtitle") }}</p>
+        <p class="mt-1 text-sm text-muted-foreground">
+          {{ section === "cards" ? t("library.subtitleCards") : t("library.subtitle") }}
+        </p>
       </div>
-      <Button @click="toggleImport">
+    </div>
+
+    <div class="flex flex-wrap items-center gap-3">
+      <div class="flex gap-1 text-sm">
+        <button
+          type="button"
+          class="rounded-md px-3 py-1.5"
+          :class="section === 'sources' ? 'bg-accent' : 'text-muted-foreground hover:bg-muted'"
+          @click="section = 'sources'"
+        >
+          {{ t("library.tabSources") }}
+        </button>
+        <button
+          type="button"
+          class="rounded-md px-3 py-1.5"
+          :class="section === 'cards' ? 'bg-accent' : 'text-muted-foreground hover:bg-muted'"
+          @click="section = 'cards'"
+        >
+          {{ t("library.tabCards") }}
+        </button>
+      </div>
+      <div
+        class="flex rounded-md border p-0.5 text-xs"
+        role="tablist"
+        :aria-label="t('library.statusFilter')"
+      >
+        <button
+          type="button"
+          class="rounded px-2.5 py-1"
+          :class="statusTab === 'active' ? 'bg-accent' : 'text-muted-foreground hover:bg-muted'"
+          @click="statusTab = 'active'"
+        >
+          {{ t("library.tabActive") }}
+        </button>
+        <button
+          type="button"
+          class="rounded px-2.5 py-1"
+          :class="statusTab === 'archived' ? 'bg-accent' : 'text-muted-foreground hover:bg-muted'"
+          @click="statusTab = 'archived'"
+        >
+          {{ t("library.tabArchived") }}
+        </button>
+      </div>
+      <div class="flex-1" />
+      <Button v-if="section === 'sources' && statusTab === 'active'" size="sm" @click="toggleImport">
         {{ showImport ? t("library.cancel") : t("library.import") }}
+      </Button>
+      <Button v-if="section === 'cards' && statusTab === 'active'" size="sm" @click="startNewCard">
+        {{ t("library.newCard") }}
       </Button>
     </div>
 
-    <div class="flex gap-2 text-sm">
-      <button
-        class="rounded-md px-3 py-1.5"
-        :class="tab === 'active' ? 'bg-accent' : 'text-muted-foreground hover:bg-muted'"
-        @click="tab = 'active'"
-      >
-        {{ t("library.tabActive") }}
-      </button>
-      <button
-        class="rounded-md px-3 py-1.5"
-        :class="tab === 'archived' ? 'bg-accent' : 'text-muted-foreground hover:bg-muted'"
-        @click="tab = 'archived'"
-      >
-        {{ t("library.tabArchived") }}
-      </button>
-    </div>
-
-    <Card v-if="showImport && tab === 'active'">
+    <template v-if="section === 'sources'">
+    <Card v-if="showImport && statusTab === 'active'">
       <CardHeader>
         <CardTitle>{{ t("library.importTxt") }}</CardTitle>
       </CardHeader>
@@ -620,75 +672,6 @@ async function confirmReextract() {
           <p class="mt-1 text-xs text-muted-foreground">{{ t("library.urlHint") }}</p>
         </div>
         <div>
-          <label class="mb-1 block text-sm">{{ t("library.extractChat") }}</label>
-          <p class="mb-2 text-xs text-muted-foreground">{{ t("library.extractChatHint") }}</p>
-          <div
-            ref="extractListEl"
-            class="mb-2 h-48 space-y-2 overflow-y-auto rounded-md border bg-muted/30 p-3"
-          >
-            <div
-              v-for="(m, i) in extractMessages"
-              :key="i"
-              class="rounded-lg px-3 py-2 text-sm"
-              :class="m.role === 'user' ? 'ml-8 bg-accent' : 'mr-6 bg-background'"
-            >
-              <div class="mb-0.5 text-[10px] uppercase text-muted-foreground">{{ m.role }}</div>
-              <div class="whitespace-pre-wrap break-words leading-relaxed">
-                {{ formatChatContent(m.content) }}
-              </div>
-            </div>
-          </div>
-          <div class="relative">
-            <ul
-              v-if="slashSuggestions.length"
-              class="absolute bottom-full left-0 right-0 z-20 mb-1 max-h-48 overflow-auto rounded-md border bg-popover py-1 text-sm shadow-md"
-              role="listbox"
-            >
-              <li
-                v-for="(s, i) in slashSuggestions"
-                :key="s.cmd"
-                class="cursor-pointer px-3 py-1.5"
-                :class="i === slashActive ? 'bg-accent text-accent-foreground' : 'hover:bg-muted'"
-                role="option"
-                :aria-selected="i === slashActive"
-                @mousedown.prevent="applySlashCmd(s)"
-              >
-                <span class="font-medium">{{ s.cmd }}</span>
-                <span class="ml-2 text-xs text-muted-foreground">{{ s.hint }}</span>
-              </li>
-            </ul>
-            <Textarea
-              v-model="extractChatInput"
-              rows="2"
-              :placeholder="t('library.extractChatPlaceholder')"
-              :disabled="chatBusy || busy"
-              @keydown="onExtractChatKeydown"
-            />
-          </div>
-          <div class="mt-2 flex flex-wrap items-center gap-2">
-            <select
-              v-model="chatModel"
-              class="h-9 min-w-[9rem] flex-1 rounded-md border border-input bg-background px-2 text-xs"
-              :aria-label="t('chat.pickModel')"
-              :disabled="chatBusy || busy"
-              @change="persistChatModel"
-            >
-              <option v-for="m in chatModelOptions" :key="m.id" :value="m.id">{{ m.label }}</option>
-            </select>
-            <Button v-if="chatBusy" variant="destructive" @click="stopExtractChat">
-              {{ t("workspace.stop") }}
-            </Button>
-            <Button v-else :disabled="busy" @click="sendExtractChat">
-              {{ t("library.extractChatSend") }}
-            </Button>
-          </div>
-        </div>
-        <div>
-          <label class="mb-1 block text-sm">{{ t("library.extractPrompt") }}</label>
-          <p class="mb-1 text-xs text-muted-foreground">{{ t("library.extractPromptHint") }}</p>
-          <Textarea v-model="prompt" rows="3" />
-        </div>
-        <div>
           <label class="mb-2 block text-sm">{{ t("library.genres") }}</label>
           <div class="flex max-h-28 flex-wrap gap-2 overflow-y-auto overscroll-contain">
             <button
@@ -704,7 +687,22 @@ async function confirmReextract() {
           </div>
         </div>
         <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
-        <Button :disabled="busy || chatBusy" @click="doImport">
+        <div v-if="busy && modelProgress" class="space-y-2 rounded-md border bg-muted/30 p-3">
+          <div class="flex items-center justify-between gap-2 text-sm">
+            <span>{{ modelProgressLabel }}</span>
+            <span class="tabular-nums text-muted-foreground">{{ modelProgressPercent }}%</span>
+          </div>
+          <div class="h-2 overflow-hidden rounded-full bg-muted">
+            <div
+              class="h-full rounded-full bg-primary transition-[width] duration-200"
+              :style="{ width: `${modelProgressPercent}%` }"
+            />
+          </div>
+          <p v-if="modelProgressDetail" class="truncate text-xs text-muted-foreground">
+            {{ modelProgressDetail }}
+          </p>
+        </div>
+        <Button :disabled="busy" @click="doImport">
           {{ busy ? t("library.importing") : t("library.doImport") }}
         </Button>
       </CardContent>
@@ -764,8 +762,52 @@ async function confirmReextract() {
     </div>
 
     <p v-if="!visible.length" class="text-sm text-muted-foreground">
-      {{ tab === "archived" ? t("library.emptyArchived") : t("library.empty") }}
+      {{ statusTab === "archived" ? t("library.emptyArchived") : t("library.empty") }}
     </p>
+    </template>
+
+    <template v-else>
+      <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
+      <div class="grid grid-cols-[repeat(auto-fill,minmax(16rem,1fr))] gap-4">
+        <Card v-for="c in visibleCards" :key="c.id">
+          <CardHeader>
+            <CardTitle class="text-base">{{ c.title }}</CardTitle>
+            <p v-if="c.book_ids.length" class="text-sm text-muted-foreground">
+              {{ t("library.cardBooks") }} · {{ cardBookLabels(c) }}
+            </p>
+          </CardHeader>
+          <CardContent class="space-y-3 text-sm">
+            <p class="line-clamp-4 text-muted-foreground">
+              {{ (c.extracted || "").trim() || t("library.cardEmptyExtracted") }}
+            </p>
+            <div class="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" @click="startEditCard(c)">
+                {{ t("library.edit") }}
+              </Button>
+              <Button
+                v-if="!c.archived"
+                size="sm"
+                variant="outline"
+                @click="archiveCard(c, true)"
+              >
+                {{ t("library.archive") }}
+              </Button>
+              <template v-else>
+                <Button size="sm" variant="outline" @click="archiveCard(c, false)">
+                  {{ t("library.unarchive") }}
+                </Button>
+                <Button size="sm" variant="destructive" @click="askDeleteCard(c)">
+                  {{ t("library.delete") }}
+                </Button>
+              </template>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+      <p v-if="!visibleCards.length" class="text-sm text-muted-foreground">
+        {{ statusTab === "archived" ? t("library.emptyArchivedCards") : t("library.emptyCards") }}
+      </p>
+    </template>
 
     <div
       v-if="editing"
@@ -853,6 +895,21 @@ async function confirmReextract() {
                   })
                 }}
               </p>
+              <div v-if="indexBusy && modelProgress" class="mt-2 space-y-1.5">
+                <div class="flex items-center justify-between gap-2 text-xs">
+                  <span>{{ modelProgressLabel }}</span>
+                  <span class="tabular-nums text-muted-foreground">{{ modelProgressPercent }}%</span>
+                </div>
+                <div class="h-1.5 overflow-hidden rounded-full bg-muted">
+                  <div
+                    class="h-full rounded-full bg-primary transition-[width] duration-200"
+                    :style="{ width: `${modelProgressPercent}%` }"
+                  />
+                </div>
+                <p v-if="modelProgressDetail" class="truncate text-[11px] text-muted-foreground">
+                  {{ modelProgressDetail }}
+                </p>
+              </div>
             </div>
             <div class="flex shrink-0 items-center gap-1">
               <Button
@@ -894,29 +951,31 @@ async function confirmReextract() {
       @click.self="cancelReextract"
     >
       <div
-        class="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-lg border bg-background shadow-lg"
+        class="w-full max-w-md rounded-lg border bg-background p-5 shadow-lg"
         role="dialog"
         aria-modal="true"
       >
-        <div class="shrink-0 border-b px-5 py-4">
-          <h2 class="text-base font-semibold">{{ t("library.reextract") }}</h2>
-          <p class="mt-1 text-xs text-muted-foreground">
-            {{ t("library.reextractPanelHint", { title: reextractTarget.title }) }}
-          </p>
-        </div>
-        <div class="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
-          <div>
-            <label class="mb-1 block text-sm">{{ t("library.extractPrompt") }}</label>
-            <Textarea
-              v-model="reextractPrompt"
-              rows="6"
-              :disabled="!!reextractId"
-              :placeholder="t('library.extractChatPlaceholder')"
+        <h2 class="text-base font-semibold">{{ t("library.reextract") }}</h2>
+        <p class="mt-3 text-sm text-muted-foreground">
+          {{ t("library.reextractPanelHint", { title: reextractTarget.title }) }}
+        </p>
+        <div v-if="reextractId && modelProgress" class="mt-3 space-y-2">
+          <div class="flex items-center justify-between gap-2 text-sm">
+            <span>{{ modelProgressLabel }}</span>
+            <span class="tabular-nums text-muted-foreground">{{ modelProgressPercent }}%</span>
+          </div>
+          <div class="h-2 overflow-hidden rounded-full bg-muted">
+            <div
+              class="h-full rounded-full bg-primary transition-[width] duration-200"
+              :style="{ width: `${modelProgressPercent}%` }"
             />
           </div>
-          <p v-if="reextractError" class="text-sm text-destructive">{{ reextractError }}</p>
+          <p v-if="modelProgressDetail" class="truncate text-xs text-muted-foreground">
+            {{ modelProgressDetail }}
+          </p>
         </div>
-        <div class="flex shrink-0 justify-end gap-2 border-t px-5 py-3">
+        <p v-if="reextractError" class="mt-2 text-sm text-destructive">{{ reextractError }}</p>
+        <div class="mt-5 flex justify-end gap-2">
           <Button variant="outline" :disabled="!!reextractId" @click="cancelReextract">
             {{ t("library.cancel") }}
           </Button>
@@ -945,6 +1004,75 @@ async function confirmReextract() {
             {{ t("library.cancel") }}
           </Button>
           <Button variant="destructive" :disabled="deleting" @click="confirmDelete">
+            {{ deleting ? t("library.deleting") : t("library.delete") }}
+          </Button>
+        </div>
+      </div>
+    </div>
+
+    <div
+      v-if="editingCard"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      @click.self="cancelEditCard"
+    >
+      <div
+        class="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-lg border bg-background shadow-lg"
+        role="dialog"
+        aria-modal="true"
+      >
+        <div class="shrink-0 border-b px-5 py-4">
+          <h2 class="text-base font-semibold">
+            {{ editingCard.id ? t("library.edit") : t("library.newCardTitle") }}
+          </h2>
+        </div>
+        <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+          <div>
+            <label class="mb-1 block text-sm">{{ t("library.editTitle") }}</label>
+            <Input v-model="cardTitle" class="h-9" />
+          </div>
+          <p v-if="editingCard.book_ids.length" class="text-xs text-muted-foreground">
+            {{ t("library.cardBooks") }} · {{ cardBookLabels(editingCard) }}
+          </p>
+          <div>
+            <label class="mb-1 block text-sm">{{ t("library.cardExtracted") }}</label>
+            <Textarea
+              v-model="cardExtracted"
+              rows="12"
+              class="min-h-[12rem] text-sm"
+              :placeholder="t('library.cardExtractedPh')"
+            />
+          </div>
+          <p v-if="editError" class="text-sm text-destructive">{{ editError }}</p>
+        </div>
+        <div class="flex shrink-0 justify-end gap-2 border-t px-5 py-3">
+          <Button variant="outline" :disabled="editBusy" @click="cancelEditCard">
+            {{ t("library.cancel") }}
+          </Button>
+          <Button :disabled="editBusy" @click="saveEditCard">
+            {{ editBusy ? t("library.saving") : t("library.renameSave") }}
+          </Button>
+        </div>
+      </div>
+    </div>
+
+    <div
+      v-if="pendingDeleteCard"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      @click.self="cancelDeleteCard"
+    >
+      <div class="w-full max-w-md rounded-lg border bg-background p-5 shadow-lg" role="dialog" aria-modal="true">
+        <h2 class="text-base font-semibold">{{ t("library.delete") }}</h2>
+        <p class="mt-3 whitespace-pre-wrap text-sm text-muted-foreground">
+          {{ t("library.deleteCardConfirm", { title: pendingDeleteCard.title }) }}
+        </p>
+        <p class="mt-2 text-sm font-medium text-destructive">
+          {{ t("library.deleteCardConfirmAgain", { title: pendingDeleteCard.title }) }}
+        </p>
+        <div class="mt-5 flex justify-end gap-2">
+          <Button variant="outline" :disabled="deleting" @click="cancelDeleteCard">
+            {{ t("library.cancel") }}
+          </Button>
+          <Button variant="destructive" :disabled="deleting" @click="confirmDeleteCard">
             {{ deleting ? t("library.deleting") : t("library.delete") }}
           </Button>
         </div>

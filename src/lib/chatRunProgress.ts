@@ -28,10 +28,13 @@ export function createChatRunProgress(opts: {
   const flush = () => {
     if (closed) return;
     const now = performance.now();
+    let total = 0;
     const lines = steps.map((s) => {
       const ms = s.done ? s.ms : Math.round(now - stepStartedAt);
+      total += ms;
       return `• ${s.label}  ${opts.formatMs(ms)}`;
     });
+    lines.push(opts.formatTotal(opts.formatMs(total)));
     const prompt = promptSum + (promptEst ?? 0);
     if (prompt > 0 || completionSum > 0) {
       const confirmed = promptEst == null && promptSum > 0;

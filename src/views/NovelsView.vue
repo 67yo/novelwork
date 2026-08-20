@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { api, type ChatTurn, type NovelProject } from "@/lib/api";
-import { formatChatContent } from "@/lib/chatFormat";
-import { usePersistedChatModel } from "@/lib/chatModel";
+import { api, type NovelProject } from "@/lib/api";
 import { useI18n } from "@/i18n";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -19,25 +18,14 @@ const router = useRouter();
 const novels = ref<NovelProject[]>([]);
 const tab = ref<"active" | "archived">("active");
 const showCreate = ref(false);
-const messages = ref<ChatTurn[]>([]);
-const chatInput = ref("");
+const title = ref("");
+const synopsis = ref("");
 const busy = ref(false);
 const error = ref("");
-const listEl = ref<HTMLElement | null>(null);
-const {
-  model: chatModel,
-  options: chatModelOptions,
-  load: loadChatModel,
-  persist: persistChatModel,
-} = usePersistedChatModel("create_model");
 
 const visible = computed(() =>
   novels.value.filter((n) => (tab.value === "archived" ? n.archived : !n.archived)),
 );
-
-function resetMessages() {
-  messages.value = [{ role: "assistant", content: t("novels.createWelcome") }];
-}
 
 async function refresh() {
   novels.value = await api.listNovels();
@@ -45,81 +33,44 @@ async function refresh() {
 
 function openCreate() {
   showCreate.value = true;
+  title.value = "";
+  synopsis.value = "";
   error.value = "";
-  resetMessages();
+}
+
+function closeCreate() {
+  if (busy.value) return;
+  showCreate.value = false;
+  title.value = "";
+  synopsis.value = "";
+  error.value = "";
 }
 
 onMounted(() => {
   void refresh();
-  void loadChatModel(t("settings.deprecated"));
 });
 
-function closeCreate() {
-  showCreate.value = false;
-  chatInput.value = "";
-  error.value = "";
-}
-
-async function scrollBottom() {
-  await nextTick();
-  if (listEl.value) listEl.value.scrollTop = listEl.value.scrollHeight;
-}
-
-function onChatKeydown(ev: KeyboardEvent) {
-  if (ev.key === "Enter" && !ev.shiftKey) {
-    ev.preventDefault();
-    void send(false);
+async function confirmCreate() {
+  const tTitle = title.value.trim();
+  if (!tTitle) {
+    error.value = t("novels.needTitle");
+    return;
   }
-}
-
-async function send(forceCreate = false) {
-  const text = chatInput.value.trim();
-  if (!forceCreate && !text) return;
-  error.value = "";
   busy.value = true;
+  error.value = "";
   try {
-    const next = [...messages.value];
-    if (text) {
-      next.push({ role: "user", content: text });
-      messages.value = next;
-      chatInput.value = "";
-      await scrollBottom();
-    } else if (forceCreate) {
-      next.push({ role: "user", content: t("novels.forceCreateMsg") });
-      messages.value = next;
-      await scrollBottom();
-    }
-
-    const r = await api.createNovelChat(messages.value, forceCreate, chatModel.value);
-    messages.value = [...messages.value, { role: "assistant", content: r.reply }];
-    await scrollBottom();
-    if (r.used_mock) {
-      error.value = t("novels.mockHint");
-    }
-    if (r.novel) {
-      await router.push(`/novels/${r.novel.id}`);
-    }
+    const novel = await api.createNovel({
+      title: tTitle,
+      synopsis: synopsis.value.trim(),
+      knowledge_ids: [],
+      knowledge_strategy: "",
+    });
+    showCreate.value = false;
+    await router.push(`/novels/${novel.id}`);
   } catch (e) {
-    const msg = String(e);
-    if (msg.toLowerCase().includes("cancelled")) {
-      messages.value = [
-        ...messages.value,
-        { role: "assistant", content: t("workspace.chatStopped") },
-      ];
-    } else {
-      error.value = msg;
-    }
+    error.value = String(e);
   } finally {
     busy.value = false;
-  }
-}
-
-async function stopChat() {
-  if (!busy.value) return;
-  try {
-    await api.chatCancel("__create__");
-  } catch {
-    /* ignore */
   }
 }
 
@@ -190,52 +141,37 @@ async function confirmDelete() {
 
     <Card v-if="showCreate" class="max-w-xl border-primary/20">
       <CardHeader class="pb-2">
-        <CardTitle class="text-base">{{ t("novels.createChat") }}</CardTitle>
+        <CardTitle class="text-base">{{ t("novels.createForm") }}</CardTitle>
         <p class="text-xs text-muted-foreground">{{ t("novels.createHint") }}</p>
       </CardHeader>
       <CardContent class="space-y-3">
-        <div ref="listEl" class="h-56 space-y-2 overflow-y-auto rounded-md border bg-muted/30 p-3">
-          <div
-            v-for="(m, i) in messages"
-            :key="i"
-            class="rounded-lg px-3 py-2 text-sm"
-            :class="m.role === 'user' ? 'ml-8 bg-accent' : 'mr-6 bg-background'"
-          >
-            <div class="mb-0.5 text-[10px] uppercase text-muted-foreground">{{ m.role }}</div>
-            <div class="whitespace-pre-wrap break-words leading-relaxed">
-              {{ formatChatContent(m.content) }}
-            </div>
-          </div>
-        </div>
-        <Textarea
-          v-model="chatInput"
-          rows="2"
-          :placeholder="t('novels.placeholder')"
-          @keydown="onChatKeydown"
-        />
-        <div class="flex flex-wrap items-center gap-2">
-          <select
-            v-model="chatModel"
-            class="h-9 min-w-[9rem] flex-1 rounded-md border border-input bg-background px-2 text-xs"
-            :aria-label="t('chat.pickModel')"
+        <div>
+          <label class="mb-1 block text-sm">{{ t("novels.createTitle") }}</label>
+          <Input
+            v-model="title"
+            :placeholder="t('novels.createTitlePh')"
             :disabled="busy"
-            @change="persistChatModel"
-          >
-            <option v-for="m in chatModelOptions" :key="m.id" :value="m.id">{{ m.label }}</option>
-          </select>
-          <Button v-if="busy" variant="destructive" @click="stopChat">
-            {{ t("workspace.stop") }}
-          </Button>
-          <template v-else>
-            <Button @click="send(false)">
-              {{ t("novels.send") }}
-            </Button>
-            <Button variant="secondary" @click="send(true)">
-              {{ t("novels.forceCreate") }}
-            </Button>
-          </template>
+            @keydown.enter.prevent="confirmCreate"
+          />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm">{{ t("novels.createSynopsis") }}</label>
+          <Textarea
+            v-model="synopsis"
+            rows="5"
+            :placeholder="t('novels.createSynopsisPh')"
+            :disabled="busy"
+          />
         </div>
         <p v-if="error" class="text-xs text-destructive">{{ error }}</p>
+        <div class="flex justify-end gap-2">
+          <Button variant="outline" :disabled="busy" @click="closeCreate">
+            {{ t("novels.cancel") }}
+          </Button>
+          <Button :disabled="busy" @click="confirmCreate">
+            {{ busy ? t("novels.creating") : t("novels.createConfirm") }}
+          </Button>
+        </div>
       </CardContent>
     </Card>
 
