@@ -18,9 +18,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import {
   api,
-  fillKnowledgeCard,
   type ChapterMemoryGroup,
-  type KnowledgeBook,
   type PublicKnowledgeCard,
   type NovelProject,
   type NovelTree,
@@ -34,7 +32,59 @@ import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import StoryNode from "@/components/flow/StoryNode.vue";
 import CharacterCardPanel from "@/components/CharacterCardPanel.vue";
+import CoreLawsPanel from "@/components/CoreLawsPanel.vue";
+import WorldAxiomPanel from "@/components/WorldAxiomPanel.vue";
+import KeyLocationPanel from "@/components/KeyLocationPanel.vue";
+import SocialPowerPanel from "@/components/SocialPowerPanel.vue";
+import WorldRacePanel from "@/components/WorldRacePanel.vue";
+import MajorFactionPanel from "@/components/MajorFactionPanel.vue";
+import SpatiotemporalPanel from "@/components/SpatiotemporalPanel.vue";
+import ExistencePanel from "@/components/ExistencePanel.vue";
+import InfoFlowPanel from "@/components/InfoFlowPanel.vue";
+import WorldviewChatPanel from "@/components/WorldviewChatPanel.vue";
+import WorldviewFanTitle from "@/components/WorldviewFanTitle.vue";
 import { useI18n } from "@/i18n";
+import type { CoreLawsData, WorldAxiom } from "@/lib/coreLaws";
+import { isAxiomSlot, normalizeAxiom } from "@/lib/coreLaws";
+import {
+  axiomHostCoreLawsId,
+  axiomsFromLinkedCards,
+  createAxiomCard,
+  linkedAxiomCards,
+  migrateInlineAxiomsToCards,
+  syncCoreLawsExtracted,
+} from "@/lib/axiomCards";
+import type { KeyLocation, SpatiotemporalData } from "@/lib/spatiotemporal";
+import { isLocationSlot, normalizeLocation } from "@/lib/spatiotemporal";
+import {
+  createLocationCard,
+  linkedLocationCards,
+  locationHostSpatiotemporalId,
+  locationsFromLinkedCards,
+  migrateInlineLocationsToCards,
+  syncSpatiotemporalExtracted,
+} from "@/lib/locationCards";
+import {
+  createFactionCard,
+  createRaceCard,
+  factionsFromLinkedCards,
+  isSocialPowerChildSlot,
+  linkedFactionCards,
+  linkedRaceCards,
+  migrateInlineSocialPowerToCards,
+  racesFromLinkedCards,
+  socialPowerHostId,
+  syncSocialPowerExtracted,
+} from "@/lib/socialPowerCards";
+import type { MajorFaction, SocialPowerData, WorldRace } from "@/lib/socialPower";
+import type { ExistenceData } from "@/lib/existence";
+import type { InfoFlowData } from "@/lib/infoFlow";
+import {
+  isFactionSlot,
+  isRaceSlot,
+  normalizeFaction,
+  normalizeRace,
+} from "@/lib/socialPower";
 import {
   BookOpen,
   Brain,
@@ -47,7 +97,6 @@ import {
   Loader2,
   PanelBottom,
   PanelRight,
-  Pencil,
   Plus,
   RefreshCw,
   Share2,
@@ -72,6 +121,23 @@ import {
   volumeLocalPlotIds,
   volumeEffectiveKnowledgeIds,
 } from "@/lib/treeLayout";
+import {
+  ensureWorldviewCards,
+  isFixedRootKnowledgeEdge,
+  isFixedRootKnowledgeSlot,
+  isWorldviewFanSlot,
+  knowledgeSlot,
+  missingWorldviewSlots,
+  worldviewComplete,
+  worldviewFanTitle,
+} from "@/lib/worldview";
+import {
+  buildKnowledgeNavItems,
+  filterHostPanelLinkedKnowledge,
+  knowledgeChipShell,
+  knowledgeNodeLabel,
+  sortLinkedKnowledgeNodes,
+} from "@/lib/knowledgeListSort";
 
 const props = defineProps<{ id: string }>();
 const { t, locale } = useI18n();
@@ -85,15 +151,11 @@ const flowDeleteKeyCode = null as null;
 const novel = ref<NovelProject | null>(null);
 const tree = ref<NovelTree | null>(null);
 const selected = ref<TreeNode | null>(null);
-const knowledgeBooks = ref<KnowledgeBook[]>([]);
 const publicKnowledgeCards = ref<PublicKnowledgeCard[]>([]);
 const publicPickOpen = ref(false);
 const publicPickFilter = ref("");
 const publicPickBusy = ref(false);
 const publishBusy = ref(false);
-const knowledgeBookFilter = ref("");
-const knowledgeFillBusy = ref(false);
-const pendingKnowledgeFill = ref(false);
 const chapterMd = ref("");
 /** 章节正文手动编辑 */
 const bodyEditing = ref(false);
@@ -103,7 +165,9 @@ const bodyAutosaved = ref(false);
 const bodyTaEl = ref<HTMLTextAreaElement | null>(null);
 const bodyMirrorEl = ref<HTMLElement | null>(null);
 const bodyScrollTop = ref(0);
-const paraGutterTops = ref<{ index: number; top: number }[]>([]);
+const paraGutterTops = ref<{ index: number; top: number; bottom: number }[]>([]);
+/** 鼠标悬停段落；仅该段显示 AI 改写 icon */
+const hoveredParaIndex = ref<number | null>(null);
 const pendingParaRewrite = ref<{ index: number; text: string } | null>(null);
 const paraRewriteNote = ref("");
 const paraRewriteBusy = ref(false);
@@ -168,7 +232,6 @@ const coverBusy = ref(false);
 const coverPromptBusy = ref(false);
 const coverPrompt = ref("");
 const coverPromptHint = ref("");
-const chapterBodyEl = ref<HTMLElement | null>(null);
 const copyHint = ref("");
 /** 精修前后快照（会话内，按节点） */
 const refineBeforeByNode = ref<Record<string, string>>({});
@@ -259,7 +322,8 @@ function syncFlowFromTree() {
     targetHandle: e.target_handle ?? edgeDefaultTarget(e.kind),
     // ponytail: animated edges keep WebKit.GPU busy at idle; use color/style instead
     animated: false,
-    updatable: true,
+    // 世界观 / 故事规则连线不可拖改、不可双击切断
+    updatable: !isFixedRootKnowledgeEdge(tr.nodes, e),
     label: edgeDisplayLabel(e),
     style: edgeStyle(e.kind),
   }));
@@ -329,8 +393,9 @@ function kindFromNodes(sourceId: string, targetId: string): string {
 
 async function loadAll() {
   novel.value = await api.getNovel(props.id);
-  tree.value = await api.getTree(props.id);
-  knowledgeBooks.value = (await api.listKnowledge()).filter((b) => !b.archived);
+  let tr = await api.getTree(props.id);
+  tr = await maybeMigrateWorldview(tr);
+  tree.value = tr;
   publicKnowledgeCards.value = await api.listPublicKnowledgeCards().catch(() => []);
   syncFlowFromTree();
   const root = tree.value.nodes.find((n) => n.kind === "novel");
@@ -345,12 +410,23 @@ async function loadAll() {
 }
 
 async function reloadTreeFromDisk() {
-  tree.value = await api.getTree(props.id);
+  let tr = await api.getTree(props.id);
+  tr = await maybeMigrateWorldview(tr);
+  tree.value = tr;
   if (selected.value) {
     const n = tree.value.nodes.find((x) => x.id === selected.value!.id);
     if (n) selected.value = n;
   }
   syncFlowFromTree();
+}
+
+async function maybeMigrateWorldview(tr: NovelTree): Promise<NovelTree> {
+  const ax = migrateInlineAxiomsToCards(tr);
+  const loc = migrateInlineLocationsToCards(tr);
+  const sp = migrateInlineSocialPowerToCards(tr);
+  if (!ax && !loc && !sp) return tr;
+  applyAutoLayout(tr.nodes, tr.edges);
+  return persistTree(tr);
 }
 
 function markFlowSelection() {
@@ -366,37 +442,49 @@ async function selectNode(n: TreeNode) {
   markFlowSelection();
   void api.setWorkspaceSelection(props.id, n.id);
   bodyTab.value = "body";
-  bodyEditing.value = false;
-  bodyDraft.value = "";
   notice.value = "";
   chapterResultNotice.value = "";
   copyHint.value = "";
   memoryPanelOpen.value = false;
+  pendingParaRewrite.value = null;
   if (n.kind === "chapter" || n.kind === "side_plot") {
     chapterMd.value = await api.getChapter(props.id, n.id);
   } else {
     chapterMd.value = "";
   }
+  if (n.kind === "chapter") {
+    enterChapterBodyEdit();
+  } else {
+    leaveChapterBodyEdit();
+  }
 }
 
-function startEditChapterBody() {
-  if (!selected.value || selected.value.kind !== "chapter" || chapterBusy.value) {
+/** 选中章节后始终进入全文编辑（无 Markdown 预览模式） */
+function enterChapterBodyEdit() {
+  if (!selected.value || selected.value.kind !== "chapter") {
+    leaveChapterBodyEdit();
     return;
   }
   bodyDraft.value = stripChapterMeta(chapterMd.value);
   bodyEditing.value = true;
   bodyAutosaved.value = false;
   lastSavedBody = bodyDraft.value;
-  bodyTab.value = "body";
+  bodyTab.value = bodyTab.value === "diff" ? bodyTab.value : "body";
   nextTick(() => refreshParaGutters());
 }
 
-function cancelEditChapterBody() {
+function leaveChapterBodyEdit() {
   bodyEditing.value = false;
   bodyDraft.value = "";
   bodyAutosaved.value = false;
   lastSavedBody = "";
   paraGutterTops.value = [];
+  hoveredParaIndex.value = null;
+  pendingParaRewrite.value = null;
+}
+
+/** 生成/精修前：关掉段落改写弹层，保留编辑态 */
+function cancelEditChapterBody() {
   pendingParaRewrite.value = null;
 }
 
@@ -411,12 +499,13 @@ const refreshParaGutters = useDebounceFn(() => {
   }
   mirror.style.width = `${ta.clientWidth}px`;
   const spans = mirror.querySelectorAll<HTMLElement>("[data-para-i]");
-  const tops: { index: number; top: number }[] = [];
+  const tops: { index: number; top: number; bottom: number }[] = [];
   for (const el of spans) {
     if (el.dataset.nonempty !== "1") continue;
     const i = Number(el.dataset.paraI);
     if (!Number.isFinite(i)) continue;
-    tops.push({ index: i, top: el.offsetTop });
+    const top = el.offsetTop;
+    tops.push({ index: i, top, bottom: top + el.offsetHeight });
   }
   paraGutterTops.value = tops;
 }, 40);
@@ -425,11 +514,34 @@ function onBodyTaScroll() {
   bodyScrollTop.value = bodyTaEl.value?.scrollTop ?? 0;
 }
 
-async function persistChapterBody(exit: boolean) {
+function onBodyEditorPointerMove(ev: PointerEvent) {
+  const ta = bodyTaEl.value;
+  if (!ta || !bodyEditing.value || paraRewriteBusy.value) {
+    hoveredParaIndex.value = null;
+    return;
+  }
+  const rect = ta.getBoundingClientRect();
+  const y = ev.clientY - rect.top + ta.scrollTop;
+  let hit: number | null = null;
+  for (const g of paraGutterTops.value) {
+    if (y >= g.top && y < g.bottom) {
+      hit = g.index;
+      break;
+    }
+  }
+  hoveredParaIndex.value = hit;
+}
+
+function onBodyEditorPointerLeave() {
+  hoveredParaIndex.value = null;
+}
+
+
+async function persistChapterBody() {
   if (!selected.value || selected.value.kind !== "chapter" || bodySaveBusy.value) return;
   const nodeId = selected.value.id;
   const draft = bodyDraft.value;
-  if (!exit && draft === lastSavedBody) return;
+  if (draft === lastSavedBody) return;
   bodySaveBusy.value = true;
   try {
     const words = await api.saveChapter(props.id, nodeId, draft);
@@ -442,20 +554,13 @@ async function persistChapterBody(exit: boolean) {
       const cur = tree.value.nodes.find((x) => x.id === selected.value!.id);
       if (cur) selected.value = cur;
     }
-    if (exit) {
-      bodyEditing.value = false;
-      bodyDraft.value = "";
-      lastSavedBody = "";
-      paraGutterTops.value = [];
-      chapterResultNotice.value = t("workspace.bodySaved", { n: words });
-    }
+    chapterResultNotice.value = t("workspace.bodySaved", { n: words });
   } catch (e) {
     chapterResultNotice.value = String(e);
     bodyAutosaved.value = false;
   } finally {
     bodySaveBusy.value = false;
-    // 保存期间又改过：再排一次自动保存
-    if (bodyEditing.value && !exit && bodyDraft.value !== lastSavedBody) {
+    if (bodyEditing.value && bodyDraft.value !== lastSavedBody) {
       scheduleBodyAutosave();
     }
   }
@@ -463,7 +568,7 @@ async function persistChapterBody(exit: boolean) {
 
 const scheduleBodyAutosave = useDebounceFn(() => {
   if (!bodyEditing.value) return;
-  void persistChapterBody(false);
+  void persistChapterBody();
 }, 3000);
 
 watch(bodyDraft, () => {
@@ -473,9 +578,6 @@ watch(bodyDraft, () => {
   nextTick(() => refreshParaGutters());
 });
 
-async function saveChapterBody() {
-  await persistChapterBody(true);
-}
 
 function openParaRewrite(index: number) {
   const line = bodyLines.value[index];
@@ -503,7 +605,7 @@ async function confirmParaRewrite() {
     bodyDraft.value = replaceBodyLine(bodyDraft.value, pending.index, out);
     pendingParaRewrite.value = null;
     paraRewriteNote.value = "";
-    await persistChapterBody(false);
+    await persistChapterBody();
     nextTick(() => refreshParaGutters());
   } catch (e) {
     paraRewriteError.value = String(e);
@@ -512,6 +614,7 @@ async function confirmParaRewrite() {
   }
 }
 
+
 function onNodeClick(ev: NodeMouseEvent) {
   const data = ev.node.data as TreeNode;
   if (data) void selectNode(data);
@@ -519,6 +622,7 @@ function onNodeClick(ev: NodeMouseEvent) {
 
 function unlinkEdgeRefs(e: TreeEdge) {
   if (!tree.value) return;
+  if (isFixedRootKnowledgeEdge(tree.value.nodes, e)) return;
   const src = tree.value.nodes.find((n) => n.id === e.source);
   const tgt = tree.value.nodes.find((n) => n.id === e.target);
   if (!src || !tgt) return;
@@ -658,6 +762,11 @@ async function onEdgeUpdate(ev: EdgeUpdateEvent) {
   if (!tree.value || !ev.connection.source || !ev.connection.target) return;
   const te = tree.value.edges.find((e) => e.id === ev.edge.id);
   if (!te) return;
+  if (isFixedRootKnowledgeEdge(tree.value.nodes, te)) {
+    notice.value = t("workspace.wv.linkLocked");
+    syncFlowFromTree();
+    return;
+  }
   unlinkEdgeRefs(te);
   const kind = kindFromNodes(ev.connection.source, ev.connection.target);
   te.source = ev.connection.source;
@@ -683,6 +792,10 @@ async function onEdgeDoubleClick(ev: { edge: { id: string } }) {
   if (!tree.value) return;
   const te = tree.value.edges.find((e) => e.id === ev.edge.id);
   if (!te) return;
+  if (isFixedRootKnowledgeEdge(tree.value.nodes, te)) {
+    notice.value = t("workspace.wv.linkLocked");
+    return;
+  }
   if (relationEdgeId.value === te.id) closeRelationEditor();
   unlinkEdgeRefs(te);
   tree.value.edges = tree.value.edges.filter((e) => e.id !== te.id);
@@ -874,7 +987,16 @@ watch(
     await loadAll();
   },
 );
-watch(locale, () => syncFlowFromTree());
+watch(locale, () => {
+  if (tree.value) {
+    for (const n of tree.value.nodes) {
+      if (n.kind !== "knowledge") continue;
+      const slot = knowledgeSlot(n);
+      if (isWorldviewFanSlot(slot)) applyWorldviewFanLabel(n, slot);
+    }
+  }
+  syncFlowFromTree();
+});
 
 function isCancelledErr(e: unknown): boolean {
   return String(e).toLowerCase().includes("cancelled");
@@ -908,6 +1030,7 @@ async function executeGenerate(
     refineBeforeByNode.value = { ...refineBeforeByNode.value };
     chapterMd.value = r.content;
     bodyTab.value = "body";
+    enterChapterBodyEdit();
     chapterResultNotice.value = r.message;
     tree.value = await api.getTree(props.id);
     syncFlowFromTree();
@@ -931,6 +1054,9 @@ async function generate(): Promise<boolean> {
   ensureGenerateBrief();
   return executeGenerate(selected.value.id, [], generateBrief.value);
 }
+
+// ponytail: auto-gen UI 暂未挂回；保留函数用于后续接回按钮。
+void generate;
 
 function factoryMemoryExtractNotes(): string {
   return t("workspace.memoryExtractNotesDefault");
@@ -1183,6 +1309,7 @@ async function executeRefine(nodeId: string, userBrief: string): Promise<boolean
     refineBeforeByNode.value = { ...refineBeforeByNode.value, [nodeId]: before };
     chapterMd.value = r.content;
     bodyTab.value = "diff";
+    enterChapterBodyEdit();
     chapterResultNotice.value = r.message;
     tree.value = await api.getTree(props.id);
     syncFlowFromTree();
@@ -1207,6 +1334,9 @@ async function refine(): Promise<boolean> {
   return executeRefine(selected.value.id, refineBrief.value);
 }
 
+// ponytail: auto-refine UI 暂未挂回；保留函数用于后续接回按钮。
+void refine;
+
 async function stopChapter() {
   if (!chapterBusy.value) return;
   try {
@@ -1217,7 +1347,7 @@ async function stopChapter() {
 }
 
 async function copyChapterBody() {
-  const md = stripChapterMeta(chapterMd.value);
+  const md = stripChapterMeta(bodyEditing.value ? bodyDraft.value : chapterMd.value);
   if (!md) return;
   const el = document.createElement("div");
   el.innerHTML = renderChapterMd(md);
@@ -1239,11 +1369,34 @@ async function copyChapterBody() {
 }
 
 function emptyCharacter(): NonNullable<TreeNode["character"]> {
-  return { role: "", personality: "", motto: "", gender: "", style: "", alignment: "" };
+  return {
+    role: "",
+    personality: "",
+    motto: "",
+    gender: "",
+    style: "",
+    alignment: "",
+    age: "",
+    constraints: "",
+  };
 }
 
 function emptyKnowledge(): NonNullable<TreeNode["knowledge"]> {
-  return { book_ids: [], extract_prompt: "", extracted: "" };
+  return {
+    book_ids: [],
+    extract_prompt: "",
+    extracted: "",
+    slot: "",
+    core_laws: null,
+    spatiotemporal: null,
+    world_axiom: null,
+    key_location: null,
+    social_power: null,
+    world_race: null,
+    major_faction: null,
+    existence: null,
+    info_flow: null,
+  };
 }
 
 function plainTree(tr: NovelTree): NovelTree {
@@ -1574,14 +1727,163 @@ async function copyCoverPrompt() {
 const selectedIsChapter = computed(() => selected.value?.kind === "chapter");
 const selectedIsCharacter = computed(() => selected.value?.kind === "character");
 const selectedIsKnowledge = computed(() => selected.value?.kind === "knowledge");
+const selectedIsCoreLaws = computed(
+  () =>
+    selected.value?.kind === "knowledge" &&
+    knowledgeSlot(selected.value) === "wv_core_laws",
+);
+const selectedIsWorldAxiom = computed(
+  () =>
+    selected.value?.kind === "knowledge" && isAxiomSlot(knowledgeSlot(selected.value)),
+);
+const selectedIsKeyLocation = computed(
+  () =>
+    selected.value?.kind === "knowledge" && isLocationSlot(knowledgeSlot(selected.value)),
+);
+const selectedIsSocialPower = computed(
+  () =>
+    selected.value?.kind === "knowledge" &&
+    knowledgeSlot(selected.value) === "wv_social_power",
+);
+const selectedIsWorldRace = computed(
+  () => selected.value?.kind === "knowledge" && isRaceSlot(knowledgeSlot(selected.value)),
+);
+const selectedIsMajorFaction = computed(
+  () => selected.value?.kind === "knowledge" && isFactionSlot(knowledgeSlot(selected.value)),
+);
+const selectedIsSpatiotemporal = computed(
+  () =>
+    selected.value?.kind === "knowledge" &&
+    knowledgeSlot(selected.value) === "wv_spatiotemporal",
+);
+const selectedIsExistence = computed(
+  () =>
+    selected.value?.kind === "knowledge" &&
+    knowledgeSlot(selected.value) === "wv_existence",
+);
+const selectedIsInfoFlow = computed(
+  () =>
+    selected.value?.kind === "knowledge" &&
+    knowledgeSlot(selected.value) === "wv_info_flow",
+);
+const selectedWorldviewFanSlot = computed(() => {
+  if (!selected.value || selected.value.kind !== "knowledge") return "";
+  const slot = knowledgeSlot(selected.value);
+  return isWorldviewFanSlot(slot) ? slot : "";
+});
 const selectedIsNovel = computed(() => selected.value?.kind === "novel");
+
+const coreLawsAxiomLinks = computed(() => {
+  if (!tree.value || !selected.value || !selectedIsCoreLaws.value) return [];
+  return linkedAxiomCards(tree.value, selected.value.id).map((n) => ({
+    id: n.id,
+    title: n.knowledge?.world_axiom?.name?.trim() || n.label || "",
+  }));
+});
+
+const coreLawsLinkedAxioms = computed((): WorldAxiom[] => {
+  if (!tree.value || !selected.value || !selectedIsCoreLaws.value) return [];
+  return axiomsFromLinkedCards(tree.value, selected.value.id);
+});
+
+const spatiotemporalLocationLinks = computed(() => {
+  if (!tree.value || !selected.value || !selectedIsSpatiotemporal.value) return [];
+  return linkedLocationCards(tree.value, selected.value.id).map((n) => ({
+    id: n.id,
+    title: n.knowledge?.key_location?.name?.trim() || n.label || "",
+  }));
+});
+
+const spatiotemporalLinkedLocations = computed((): KeyLocation[] => {
+  if (!tree.value || !selected.value || !selectedIsSpatiotemporal.value) return [];
+  return locationsFromLinkedCards(tree.value, selected.value.id);
+});
+
+const socialPowerRaceLinks = computed(() => {
+  if (!tree.value || !selected.value || !selectedIsSocialPower.value) return [];
+  return linkedRaceCards(tree.value, selected.value.id).map((n) => ({
+    id: n.id,
+    title: n.knowledge?.world_race?.name?.trim() || n.label || "",
+  }));
+});
+
+const socialPowerFactionLinks = computed(() => {
+  if (!tree.value || !selected.value || !selectedIsSocialPower.value) return [];
+  return linkedFactionCards(tree.value, selected.value.id).map((n) => ({
+    id: n.id,
+    title:
+      n.knowledge?.major_faction?.name?.trim() ||
+      n.knowledge?.major_faction?.faction_type?.trim() ||
+      n.label ||
+      "",
+  }));
+});
+
+const socialPowerLinkedRaces = computed((): WorldRace[] => {
+  if (!tree.value || !selected.value || !selectedIsSocialPower.value) return [];
+  return racesFromLinkedCards(tree.value, selected.value.id);
+});
+
+const socialPowerLinkedFactions = computed((): MajorFaction[] => {
+  if (!tree.value || !selected.value || !selectedIsSocialPower.value) return [];
+  return factionsFromLinkedCards(tree.value, selected.value.id);
+});
 const selectedIsVolume = computed(() => selected.value?.kind === "volume");
+
+const rootWorldviewComplete = computed(() =>
+  tree.value ? worldviewComplete(tree.value) : false,
+);
+const worldviewBusy = ref(false);
+const worldviewChatOpen = ref(false);
+
+async function openWorldviewChat() {
+  if (!tree.value || worldviewBusy.value) return;
+  worldviewBusy.value = true;
+  try {
+    const before = missingWorldviewSlots(tree.value).length;
+    ensureWorldviewCards(tree.value, (key) => t(key as Parameters<typeof t>[0]));
+    migrateInlineAxiomsToCards(tree.value);
+    migrateInlineLocationsToCards(tree.value);
+    migrateInlineSocialPowerToCards(tree.value);
+    applyAutoLayout(tree.value.nodes, tree.value.edges);
+    tree.value = await persistTree(tree.value);
+    syncFlowFromTree();
+    if (before > 0) {
+      await nextTick();
+      void fitView({ padding: 0.18, duration: 280 });
+    }
+    worldviewChatOpen.value = true;
+  } catch (e) {
+    notice.value = String(e);
+  } finally {
+    worldviewBusy.value = false;
+  }
+}
+
+async function onWorldviewChatApplied() {
+  if (!tree.value) return;
+  try {
+    let tr = await api.getTree(props.id);
+    tr = await maybeMigrateWorldview(tr);
+    tree.value = tr;
+    syncFlowFromTree();
+    if (selected.value?.kind === "novel") {
+      const n = tree.value.nodes.find((x) => x.id === selected.value!.id);
+      if (n) selected.value = n;
+    }
+    notice.value = t("workspace.wv.chatDone");
+    await nextTick();
+    void fitView({ padding: 0.18, duration: 280 });
+  } catch (e) {
+    notice.value = String(e);
+  }
+}
 
 function sortNodesByCanvasPosition<T extends { position: { x: number; y: number } }>(nodes: T[]): T[] {
   return nodes.slice().sort((a, b) => a.position.y - b.position.y || a.position.x - b.position.x);
 }
 
-type CanvasNavItem = { id: string; label: string; kind: TreeNode["kind"] };
+type CanvasNavItem = { id: string; label: string; kind: TreeNode["kind"]; indent?: number };
 
 /** 根 → 章节（按画布 y 排序），供左侧浮动导航 */
 const canvasNavChapterItems = computed((): CanvasNavItem[] => {
@@ -1636,11 +1938,7 @@ const canvasNavPlotItems = computed((): CanvasNavItem[] => {
 const canvasNavKnowledgeItems = computed((): CanvasNavItem[] => {
   const tr = tree.value;
   if (!tr) return [];
-  return sortNodesByCanvasPosition(tr.nodes.filter((n) => n.kind === "knowledge")).map((n) => ({
-    id: n.id,
-    label: n.label?.trim() || t("workspace.knowledgeCard"),
-    kind: "knowledge" as const,
-  }));
+  return buildKnowledgeNavItems(tr, t);
 });
 
 const canvasNavTabDefs = computed(() =>
@@ -1698,8 +1996,10 @@ function toggleChapterNav() {
 }
 
 const canDeleteSelectedCard = computed(() => {
-  const k = selected.value?.kind;
-  return !!k && k !== "novel";
+  const n = selected.value;
+  if (!n || n.kind === "novel") return false;
+  if (n.kind === "knowledge" && isFixedRootKnowledgeSlot(knowledgeSlot(n))) return false;
+  return true;
 });
 
 type PendingCardDelete = {
@@ -1752,9 +2052,40 @@ async function confirmPendingCardDelete() {
 
   deletingCard.value = true;
   const id = p.id;
+  const axiomHost =
+    tree.value && selected.value && isAxiomSlot(knowledgeSlot(selected.value))
+      ? axiomHostCoreLawsId(tree.value, id)
+      : tree.value
+        ? axiomHostCoreLawsId(tree.value, id)
+        : null;
+  const locationHost =
+    tree.value && selected.value && isLocationSlot(knowledgeSlot(selected.value))
+      ? locationHostSpatiotemporalId(tree.value, id)
+      : tree.value
+        ? locationHostSpatiotemporalId(tree.value, id)
+        : null;
+  const socialHost =
+    tree.value && selected.value && isSocialPowerChildSlot(knowledgeSlot(selected.value))
+      ? socialPowerHostId(tree.value, id)
+      : tree.value
+        ? socialPowerHostId(tree.value, id)
+        : null;
   try {
     tree.value = await api.deleteTreeCard(props.id, id);
     pruneTreeRefs(tree.value);
+    if (axiomHost) {
+      syncCoreLawsExtracted(tree.value, axiomHost);
+      applyAutoLayout(tree.value.nodes, tree.value.edges);
+      tree.value = await persistTree(tree.value);
+    } else if (locationHost) {
+      syncSpatiotemporalExtracted(tree.value, locationHost);
+      applyAutoLayout(tree.value.nodes, tree.value.edges);
+      tree.value = await persistTree(tree.value);
+    } else if (socialHost) {
+      syncSocialPowerExtracted(tree.value, socialHost);
+      applyAutoLayout(tree.value.nodes, tree.value.edges);
+      tree.value = await persistTree(tree.value);
+    }
     removeNodes([id], true);
     syncFlowFromTree();
 
@@ -1765,8 +2096,12 @@ async function confirmPendingCardDelete() {
     }
 
     pendingCardDelete.value = null;
-    const root = tree.value.nodes.find((n) => n.kind === "novel");
-    if (root) await selectNode(root);
+    const prefer =
+      (axiomHost && tree.value.nodes.find((n) => n.id === axiomHost)) ||
+      (locationHost && tree.value.nodes.find((n) => n.id === locationHost)) ||
+      (socialHost && tree.value.nodes.find((n) => n.id === socialHost)) ||
+      tree.value.nodes.find((n) => n.kind === "novel");
+    if (prefer) await selectNode(prefer);
     else {
       selected.value = null;
       void api.setWorkspaceSelection(null, null);
@@ -1801,42 +2136,16 @@ function onCanvasKeydown(ev: KeyboardEvent) {
 
 const knowledgeDraft = computed(() => selected.value?.knowledge ?? emptyKnowledge());
 
-const filteredKnowledgeBooks = computed(() => {
-  const q = knowledgeBookFilter.value.trim().toLowerCase();
-  if (!q) return knowledgeBooks.value;
-  return knowledgeBooks.value.filter(
-    (b) =>
-      b.title.toLowerCase().includes(q) ||
-      b.genres.some((g) => g.toLowerCase().includes(q)),
-  );
-});
-
-watch(
-  () => selected.value?.id,
-  () => {
-    knowledgeBookFilter.value = "";
-  },
-);
-
 function ensureKnowledgePayload() {
   if (!selected.value || selected.value.kind !== "knowledge") return null;
   if (!selected.value.knowledge) selected.value.knowledge = emptyKnowledge();
   return selected.value.knowledge;
 }
 
-function toggleKnowledgeBook(bookId: string) {
-  const k = ensureKnowledgePayload();
-  if (!k) return;
-  if (k.book_ids.includes(bookId)) {
-    k.book_ids = k.book_ids.filter((id) => id !== bookId);
-  } else {
-    k.book_ids = [...k.book_ids, bookId];
-  }
-  void persistSelectedKnowledge();
-}
-
 async function persistSelectedKnowledge() {
   if (!tree.value || !selected.value || selected.value.kind !== "knowledge") return;
+  const slot = knowledgeSlot(selected.value);
+  if (isWorldviewFanSlot(slot)) applyWorldviewFanLabel(selected.value, slot);
   const n = tree.value.nodes.find((x) => x.id === selected.value!.id);
   if (n) {
     n.knowledge = selected.value.knowledge;
@@ -1847,6 +2156,280 @@ async function persistSelectedKnowledge() {
   }
   tree.value = await persistTree(tree.value);
   syncFlowFromTree();
+}
+
+function applyWorldviewFanLabel(node: TreeNode, slot: string) {
+  const title = worldviewFanTitle(t, slot);
+  if (title) node.label = title;
+}
+
+async function persistSelectedCoreLaws(payload: {
+  coreLaws: CoreLawsData;
+  extracted: string;
+}) {
+  if (!tree.value || !selected.value || selected.value.kind !== "knowledge") return;
+  const k = ensureKnowledgePayload();
+  if (!k) return;
+  applyWorldviewFanLabel(selected.value, "wv_core_laws");
+  payload.coreLaws.axioms = [];
+  k.core_laws = payload.coreLaws;
+  k.extracted = payload.extracted;
+  k.slot = "wv_core_laws";
+  await persistSelectedKnowledge();
+}
+
+async function persistSelectedWorldAxiom(payload: {
+  name: string;
+  worldAxiom: WorldAxiom;
+  extracted: string;
+}) {
+  if (!tree.value || !selected.value || selected.value.kind !== "knowledge") return;
+  const k = ensureKnowledgePayload();
+  if (!k) return;
+  selected.value.label = payload.name;
+  k.world_axiom = normalizeAxiom(payload.worldAxiom);
+  k.extracted = payload.extracted;
+  k.slot = "wv_axiom";
+  const hostId = axiomHostCoreLawsId(tree.value, selected.value.id);
+  await persistSelectedKnowledge();
+  if (hostId && tree.value) {
+    syncCoreLawsExtracted(tree.value, hostId);
+    tree.value = await persistTree(tree.value);
+    syncFlowFromTree();
+  }
+}
+
+async function addCoreLawsAxiom() {
+  if (!tree.value || !selected.value || !selectedIsCoreLaws.value) return;
+  const n = linkedAxiomCards(tree.value, selected.value.id).length + 1;
+  const node = createAxiomCard(
+    tree.value,
+    selected.value.id,
+    t("workspace.coreLaws.axiomN", { n }),
+  );
+  if (!node) return;
+  applyAutoLayout(tree.value.nodes, tree.value.edges);
+  tree.value = await persistTree(tree.value);
+  syncFlowFromTree();
+  await selectNode(node);
+  await nextTick();
+  void fitView({ padding: 0.18, duration: 280 });
+}
+
+async function openCoreLawsAxiom(id: string) {
+  if (!tree.value) return;
+  const n = tree.value.nodes.find((x) => x.id === id);
+  if (n) await selectNode(n);
+}
+
+async function persistSelectedSpatiotemporal(payload: {
+  spatiotemporal: SpatiotemporalData;
+  extracted: string;
+}) {
+  if (!tree.value || !selected.value || selected.value.kind !== "knowledge") return;
+  const k = ensureKnowledgePayload();
+  if (!k) return;
+  applyWorldviewFanLabel(selected.value, "wv_spatiotemporal");
+  payload.spatiotemporal.locations = [];
+  k.spatiotemporal = payload.spatiotemporal;
+  k.extracted = payload.extracted;
+  k.slot = "wv_spatiotemporal";
+  await persistSelectedKnowledge();
+}
+
+async function persistSelectedExistence(payload: {
+  existence: ExistenceData;
+  extracted: string;
+}) {
+  if (!tree.value || !selected.value || selected.value.kind !== "knowledge") return;
+  const k = ensureKnowledgePayload();
+  if (!k) return;
+  applyWorldviewFanLabel(selected.value, "wv_existence");
+  k.existence = payload.existence;
+  k.extracted = payload.extracted;
+  k.slot = "wv_existence";
+  await persistSelectedKnowledge();
+}
+
+async function persistSelectedInfoFlow(payload: {
+  infoFlow: InfoFlowData;
+  extracted: string;
+}) {
+  if (!tree.value || !selected.value || selected.value.kind !== "knowledge") return;
+  const k = ensureKnowledgePayload();
+  if (!k) return;
+  applyWorldviewFanLabel(selected.value, "wv_info_flow");
+  k.info_flow = payload.infoFlow;
+  k.extracted = payload.extracted;
+  k.slot = "wv_info_flow";
+  await persistSelectedKnowledge();
+}
+
+async function persistSelectedKeyLocation(payload: {
+  name: string;
+  keyLocation: KeyLocation;
+  extracted: string;
+}) {
+  if (!tree.value || !selected.value || selected.value.kind !== "knowledge") return;
+  const k = ensureKnowledgePayload();
+  if (!k) return;
+  selected.value.label = payload.name;
+  k.key_location = normalizeLocation(payload.keyLocation);
+  k.extracted = payload.extracted;
+  k.slot = "wv_location";
+  const hostId = locationHostSpatiotemporalId(tree.value, selected.value.id);
+  await persistSelectedKnowledge();
+  if (hostId && tree.value) {
+    syncSpatiotemporalExtracted(tree.value, hostId);
+    tree.value = await persistTree(tree.value);
+    syncFlowFromTree();
+  }
+}
+
+async function addSpatiotemporalLocation() {
+  if (!tree.value || !selected.value || !selectedIsSpatiotemporal.value) return;
+  const n = linkedLocationCards(tree.value, selected.value.id).length + 1;
+  const node = createLocationCard(
+    tree.value,
+    selected.value.id,
+    t("workspace.st.locationN", { n }),
+  );
+  if (!node) return;
+  applyAutoLayout(tree.value.nodes, tree.value.edges);
+  tree.value = await persistTree(tree.value);
+  syncFlowFromTree();
+  await selectNode(node);
+  await nextTick();
+  void fitView({ padding: 0.18, duration: 280 });
+}
+
+async function openSpatiotemporalLocation(id: string) {
+  if (!tree.value) return;
+  const n = tree.value.nodes.find((x) => x.id === id);
+  if (n) await selectNode(n);
+}
+
+async function addSpatiotemporalLocations(locs: KeyLocation[]) {
+  if (!tree.value || !selected.value || !selectedIsSpatiotemporal.value || !locs.length) return;
+  let last: TreeNode | null = null;
+  for (const loc of locs) {
+    last = createLocationCard(
+      tree.value,
+      selected.value.id,
+      loc.name.trim() || t("workspace.st.locationUntitled"),
+      loc,
+    );
+  }
+  if (!last) return;
+  applyAutoLayout(tree.value.nodes, tree.value.edges);
+  tree.value = await persistTree(tree.value);
+  syncFlowFromTree();
+  await nextTick();
+  void fitView({ padding: 0.18, duration: 280 });
+}
+
+async function persistSelectedSocialPower(payload: {
+  socialPower: SocialPowerData;
+  extracted: string;
+}) {
+  if (!tree.value || !selected.value || selected.value.kind !== "knowledge") return;
+  const k = ensureKnowledgePayload();
+  if (!k) return;
+  applyWorldviewFanLabel(selected.value, "wv_social_power");
+  payload.socialPower.races = [];
+  payload.socialPower.factions = [];
+  k.social_power = payload.socialPower;
+  k.extracted = payload.extracted;
+  k.slot = "wv_social_power";
+  await persistSelectedKnowledge();
+}
+
+async function persistSelectedWorldRace(payload: {
+  name: string;
+  worldRace: WorldRace;
+  extracted: string;
+}) {
+  if (!tree.value || !selected.value || selected.value.kind !== "knowledge") return;
+  const k = ensureKnowledgePayload();
+  if (!k) return;
+  selected.value.label = payload.name;
+  k.world_race = normalizeRace(payload.worldRace);
+  k.extracted = payload.extracted;
+  k.slot = "wv_race";
+  const hostId = socialPowerHostId(tree.value, selected.value.id);
+  await persistSelectedKnowledge();
+  if (hostId && tree.value) {
+    syncSocialPowerExtracted(tree.value, hostId);
+    tree.value = await persistTree(tree.value);
+    syncFlowFromTree();
+  }
+}
+
+async function persistSelectedMajorFaction(payload: {
+  name: string;
+  majorFaction: MajorFaction;
+  extracted: string;
+}) {
+  if (!tree.value || !selected.value || selected.value.kind !== "knowledge") return;
+  const k = ensureKnowledgePayload();
+  if (!k) return;
+  selected.value.label = payload.name;
+  k.major_faction = normalizeFaction(payload.majorFaction);
+  k.extracted = payload.extracted;
+  k.slot = "wv_faction";
+  const hostId = socialPowerHostId(tree.value, selected.value.id);
+  await persistSelectedKnowledge();
+  if (hostId && tree.value) {
+    syncSocialPowerExtracted(tree.value, hostId);
+    tree.value = await persistTree(tree.value);
+    syncFlowFromTree();
+  }
+}
+
+async function addSocialPowerRace() {
+  if (!tree.value || !selected.value || !selectedIsSocialPower.value) return;
+  const n = linkedRaceCards(tree.value, selected.value.id).length + 1;
+  const node = createRaceCard(
+    tree.value,
+    selected.value.id,
+    t("workspace.pow.raceN", { n }),
+  );
+  if (!node) return;
+  applyAutoLayout(tree.value.nodes, tree.value.edges);
+  tree.value = await persistTree(tree.value);
+  syncFlowFromTree();
+  await selectNode(node);
+  await nextTick();
+  void fitView({ padding: 0.18, duration: 280 });
+}
+
+async function addSocialPowerFaction() {
+  if (!tree.value || !selected.value || !selectedIsSocialPower.value) return;
+  const n = linkedFactionCards(tree.value, selected.value.id).length + 1;
+  const node = createFactionCard(
+    tree.value,
+    selected.value.id,
+    t("workspace.pow.factionN", { n }),
+  );
+  if (!node) return;
+  applyAutoLayout(tree.value.nodes, tree.value.edges);
+  tree.value = await persistTree(tree.value);
+  syncFlowFromTree();
+  await selectNode(node);
+  await nextTick();
+  void fitView({ padding: 0.18, duration: 280 });
+}
+
+async function openSocialPowerRace(id: string) {
+  if (!tree.value) return;
+  const n = tree.value.nodes.find((x) => x.id === id);
+  if (n) await selectNode(n);
+}
+
+async function openSocialPowerFaction(id: string) {
+  if (!tree.value) return;
+  const n = tree.value.nodes.find((x) => x.id === id);
+  if (n) await selectNode(n);
 }
 
 async function publishSelectedKnowledge() {
@@ -2039,35 +2622,6 @@ async function persistNovelPlan() {
   }
 }
 
-function requestFillKnowledge() {
-  if (!selected.value || selected.value.kind !== "knowledge") return;
-  if (!knowledgeDraft.value.book_ids.length || knowledgeFillBusy.value) return;
-  if ((knowledgeDraft.value.extracted || "").trim()) {
-    pendingKnowledgeFill.value = true;
-    return;
-  }
-  void runFillKnowledge();
-}
-
-async function runFillKnowledge() {
-  if (!selected.value || selected.value.kind !== "knowledge") return;
-  pendingKnowledgeFill.value = false;
-  await persistSelectedKnowledge();
-  knowledgeFillBusy.value = true;
-  notice.value = "";
-  try {
-    tree.value = await fillKnowledgeCard(props.id, selected.value.id);
-    const updated = tree.value.nodes.find((n) => n.id === selected.value!.id);
-    if (updated) selected.value = updated;
-    syncFlowFromTree();
-    notice.value = t("workspace.knowledgeFilled");
-  } catch (e) {
-    notice.value = String(e);
-  } finally {
-    knowledgeFillBusy.value = false;
-  }
-}
-
 const hasRefineDiff = computed(() => {
   const id = selected.value?.id;
   return !!(id && refineBeforeByNode.value[id] != null && chapterMd.value);
@@ -2081,7 +2635,6 @@ const refineDiffHunks = computed(() => {
   return diffLines(before, chapterMd.value);
 });
 
-const chapterHtml = computed(() => (chapterMd.value ? renderChapterMd(chapterMd.value) : ""));
 
 /** 本章继承的根剧情（只读） */
 const chapterLinkedPlotsFromRoot = computed(() => {
@@ -2214,7 +2767,13 @@ const chapterLinkedKnowledge = computed(() => {
   const ch = selected.value;
   const tr = tree.value;
   if (!ch || ch.kind !== "chapter" || !tr) {
-    return [] as { id: string; label: string; snippet: string; from: "root" | "volume" | "chapter" }[];
+    return [] as {
+      id: string;
+      label: string;
+      snippet: string;
+      from: "root" | "volume" | "chapter";
+      chipShell: string;
+    }[];
   }
   const byId = new Map(tr.nodes.map((n) => [n.id, n]));
   const rootSet = new Set(rootLinkedKnowledgeIds(tr.nodes, tr.edges));
@@ -2224,10 +2783,13 @@ const chapterLinkedKnowledge = computed(() => {
       ? chapterInheritedKnowledgeIds(ch.id, tr.nodes, tr.edges).filter((id) => !rootSet.has(id))
       : [],
   );
-  return chapterEffectiveKnowledgeIds(ch.id, tr.nodes, tr.edges)
-    .map((id) => byId.get(id))
-    .filter((n): n is NonNullable<typeof n> => !!n && n.kind === "knowledge")
-    .map((n) => {
+  return sortLinkedKnowledgeNodes(
+    filterHostPanelLinkedKnowledge(
+      chapterEffectiveKnowledgeIds(ch.id, tr.nodes, tr.edges)
+        .map((id) => byId.get(id))
+        .filter((n): n is NonNullable<typeof n> => !!n && n.kind === "knowledge"),
+    ),
+  ).map((n) => {
       const kn = n.knowledge;
       const snippet =
         (kn?.extracted || kn?.extract_prompt || n.outline || "").trim().slice(0, 120);
@@ -2236,7 +2798,13 @@ const chapterLinkedKnowledge = computed(() => {
         : volSet.has(n.id)
           ? "volume"
           : "chapter";
-      return { id: n.id, label: n.label, snippet, from };
+      return {
+        id: n.id,
+        label: knowledgeNodeLabel(n, t),
+        snippet,
+        from,
+        chipShell: knowledgeChipShell(n),
+      };
     });
 });
 
@@ -2244,22 +2812,32 @@ const volumeLinkedKnowledge = computed(() => {
   const vol = selected.value;
   const tr = tree.value;
   if (!vol || vol.kind !== "volume" || !tr) {
-    return [] as { id: string; label: string; snippet: string; from: "root" | "volume" }[];
+    return [] as {
+      id: string;
+      label: string;
+      snippet: string;
+      from: "root" | "volume";
+      chipShell: string;
+    }[];
   }
   const byId = new Map(tr.nodes.map((n) => [n.id, n]));
   const rootSet = new Set(rootLinkedKnowledgeIds(tr.nodes, tr.edges));
-  return volumeEffectiveKnowledgeIds(vol.id, tr.nodes, tr.edges)
-    .map((id) => byId.get(id))
-    .filter((n): n is NonNullable<typeof n> => !!n && n.kind === "knowledge")
-    .map((n) => {
+  return sortLinkedKnowledgeNodes(
+    filterHostPanelLinkedKnowledge(
+      volumeEffectiveKnowledgeIds(vol.id, tr.nodes, tr.edges)
+        .map((id) => byId.get(id))
+        .filter((n): n is NonNullable<typeof n> => !!n && n.kind === "knowledge"),
+    ),
+  ).map((n) => {
       const kn = n.knowledge;
       const snippet =
         (kn?.extracted || kn?.extract_prompt || n.outline || "").trim().slice(0, 120);
       return {
         id: n.id,
-        label: n.label,
+        label: knowledgeNodeLabel(n, t),
         snippet,
         from: (rootSet.has(n.id) ? "root" : "volume") as "root" | "volume",
+        chipShell: knowledgeChipShell(n),
       };
     });
 });
@@ -2439,7 +3017,7 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
 <template>
   <div class="flex h-full flex-col">
     <div class="min-h-0 flex-1" :style="workspaceGridStyle">
-      <!-- 左：章节预览 -->
+      <!-- 左：卡片属性 -->
       <div class="flex min-h-0 min-w-0 flex-col border-r" style="grid-area: left">
         <div class="shrink-0 space-y-2 border-b p-3">
           <div class="flex items-start justify-between gap-2">
@@ -2646,14 +3224,92 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
             :busy="characterSaveBusy"
             @save="persistSelectedCharacter"
           />
+          <CoreLawsPanel
+            v-else-if="selectedIsCoreLaws"
+            :novel-id="id"
+            :data="selected?.knowledge?.core_laws"
+            :axiom-links="coreLawsAxiomLinks"
+            :linked-axioms="coreLawsLinkedAxioms"
+            @save="persistSelectedCoreLaws"
+            @add-axiom="addCoreLawsAxiom"
+            @open-axiom="openCoreLawsAxiom"
+          />
+          <WorldAxiomPanel
+            v-else-if="selectedIsWorldAxiom"
+            :novel-id="id"
+            :name="selected?.label ?? ''"
+            :data="selected?.knowledge?.world_axiom"
+            @save="persistSelectedWorldAxiom"
+          />
+          <SocialPowerPanel
+            v-else-if="selectedIsSocialPower"
+            :novel-id="id"
+            :data="selected?.knowledge?.social_power"
+            :race-links="socialPowerRaceLinks"
+            :faction-links="socialPowerFactionLinks"
+            :linked-races="socialPowerLinkedRaces"
+            :linked-factions="socialPowerLinkedFactions"
+            @save="persistSelectedSocialPower"
+            @add-race="addSocialPowerRace"
+            @add-faction="addSocialPowerFaction"
+            @open-race="openSocialPowerRace"
+            @open-faction="openSocialPowerFaction"
+          />
+          <WorldRacePanel
+            v-else-if="selectedIsWorldRace"
+            :novel-id="id"
+            :name="selected?.label ?? ''"
+            :data="selected?.knowledge?.world_race"
+            @save="persistSelectedWorldRace"
+          />
+          <MajorFactionPanel
+            v-else-if="selectedIsMajorFaction"
+            :novel-id="id"
+            :name="selected?.label ?? ''"
+            :data="selected?.knowledge?.major_faction"
+            @save="persistSelectedMajorFaction"
+          />
+          <KeyLocationPanel
+            v-else-if="selectedIsKeyLocation"
+            :novel-id="id"
+            :name="selected?.label ?? ''"
+            :data="selected?.knowledge?.key_location"
+            @save="persistSelectedKeyLocation"
+          />
+          <SpatiotemporalPanel
+            v-else-if="selectedIsSpatiotemporal"
+            :novel-id="id"
+            :data="selected?.knowledge?.spatiotemporal"
+            :location-links="spatiotemporalLocationLinks"
+            :linked-locations="spatiotemporalLinkedLocations"
+            @save="persistSelectedSpatiotemporal"
+            @add-location="addSpatiotemporalLocation"
+            @open-location="openSpatiotemporalLocation"
+            @add-locations="addSpatiotemporalLocations"
+          />
+          <ExistencePanel
+            v-else-if="selectedIsExistence"
+            :novel-id="id"
+            :data="selected?.knowledge?.existence"
+            @save="persistSelectedExistence"
+          />
+          <InfoFlowPanel
+            v-else-if="selectedIsInfoFlow"
+            :novel-id="id"
+            :data="selected?.knowledge?.info_flow"
+            @save="persistSelectedInfoFlow"
+          />
           <div v-else-if="selectedIsKnowledge" class="space-y-4 text-sm">
             <div>
-              <div class="mb-1 flex items-center justify-between gap-2">
-                <label class="mb-0 block text-xs text-muted-foreground">{{ t("workspace.knowledgeLabel") }}</label>
+              <div class="mb-1 flex items-start justify-between gap-2">
+                <div class="min-w-0 flex-1">
+                  <WorldviewFanTitle v-if="selectedWorldviewFanSlot" :slot="selectedWorldviewFanSlot" />
+                  <label v-else class="mb-0 block text-xs text-muted-foreground">{{ t("workspace.knowledgeLabel") }}</label>
+                </div>
                 <Button
                   size="sm"
                   variant="outline"
-                  class="h-7 px-2 text-xs"
+                  class="h-7 shrink-0 px-2 text-xs"
                   :disabled="publishBusy"
                   :title="t('workspace.publishKnowledge')"
                   @click="publishSelectedKnowledge"
@@ -2664,6 +3320,7 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                 </Button>
               </div>
               <Input
+                v-if="!selectedWorldviewFanSlot"
                 :model-value="selected?.label ?? ''"
                 class="h-8"
                 @update:model-value="(v) => { if (selected) selected.label = String(v); }"
@@ -2678,7 +3335,6 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                 rows="10"
                 class="min-h-[10rem] text-sm"
                 :placeholder="t('workspace.knowledgeFeaturesPh')"
-                :disabled="knowledgeFillBusy"
                 @update:model-value="(v) => { const k = ensureKnowledgePayload(); if (k) k.extracted = String(v); }"
                 @change="persistSelectedKnowledge"
               />
@@ -2690,63 +3346,6 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                   })
                 }}
               </p>
-            </div>
-            <div>
-              <div class="mb-1 flex items-center justify-between gap-2">
-                <label class="text-xs text-muted-foreground">{{ t("workspace.knowledgePickBooks") }}</label>
-                <Button
-                  size="sm"
-                  class="h-7 px-2 text-xs"
-                  :disabled="knowledgeFillBusy || !knowledgeDraft.book_ids.length"
-                  @click="requestFillKnowledge"
-                >
-                  <Loader2 v-if="knowledgeFillBusy" class="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                  {{ knowledgeFillBusy ? t("workspace.knowledgeFilling") : t("workspace.knowledgeFill") }}
-                </Button>
-              </div>
-              <p v-if="!knowledgeBooks.length" class="text-xs text-muted-foreground">{{ t("workspace.knowledgeNoBooks") }}</p>
-              <div v-else class="space-y-1.5">
-                <Input
-                  v-model="knowledgeBookFilter"
-                  class="h-7 text-xs"
-                  :placeholder="t('workspace.knowledgeSearchBooks')"
-                />
-                <div class="max-h-44 overflow-y-auto rounded-md border">
-                  <button
-                    v-for="b in filteredKnowledgeBooks"
-                    :key="b.id"
-                    type="button"
-                    class="flex w-full items-center gap-2 border-b border-border/50 px-2 py-1.5 text-left last:border-b-0 hover:bg-muted/50"
-                    :class="knowledgeDraft.book_ids.includes(b.id) ? 'bg-teal-50/90' : ''"
-                    :title="[b.title, ...b.genres].filter(Boolean).join(' · ')"
-                    @click="toggleKnowledgeBook(b.id)"
-                  >
-                    <span
-                      class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border text-[9px] leading-none"
-                      :class="
-                        knowledgeDraft.book_ids.includes(b.id)
-                          ? 'border-teal-700 bg-teal-700 text-white'
-                          : 'border-muted-foreground/40'
-                      "
-                      aria-hidden="true"
-                    >
-                      <span v-if="knowledgeDraft.book_ids.includes(b.id)">✓</span>
-                    </span>
-                    <span class="min-w-0 flex-1 truncate text-xs">
-                      {{ b.title }}
-                      <span v-if="b.genres.length" class="text-muted-foreground">
-                        · {{ b.genres.join("、") }}
-                      </span>
-                    </span>
-                  </button>
-                  <p
-                    v-if="!filteredKnowledgeBooks.length"
-                    class="px-2 py-3 text-center text-xs text-muted-foreground"
-                  >
-                    {{ t("workspace.knowledgeSearchEmpty") }}
-                  </p>
-                </div>
-              </div>
             </div>
           </div>
           <div v-else-if="selectedIsNovel" class="flex min-h-0 flex-1 flex-col gap-4">
@@ -2858,6 +3457,28 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
               </div>
               <p class="text-[11px] text-muted-foreground">{{ t("workspace.planHint") }}</p>
             </div>
+            <div class="space-y-2 rounded-md border bg-muted/30 p-3">
+              <div class="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  class="justify-start"
+                  :disabled="worldviewBusy"
+                  @click="openWorldviewChat"
+                >
+                  <Loader2 v-if="worldviewBusy" class="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  <Sparkles v-else class="mr-1.5 h-3.5 w-3.5" />
+                  {{
+                    worldviewBusy
+                      ? t("workspace.wv.busy")
+                      : rootWorldviewComplete
+                        ? t("workspace.wv.chatOpen")
+                        : t("workspace.wv.generate")
+                  }}
+                </Button>
+              </div>
+              <p class="text-[11px] text-muted-foreground">{{ t("workspace.wv.hint") }}</p>
+            </div>
             </div>
             <div class="flex min-h-[12rem] flex-1 flex-col space-y-2">
               <label class="block shrink-0 text-xs text-muted-foreground">{{ t("workspace.rootOutline") }}</label>
@@ -2922,11 +3543,12 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                 <p class="text-[11px] font-medium text-teal-900 dark:text-teal-100">
                   {{ t("workspace.volumeLinkedKnowledge") }}
                 </p>
-                <ul v-if="volumeLinkedKnowledge.length" class="space-y-1">
+                <ul v-if="volumeLinkedKnowledge.length" class="flex flex-wrap items-start justify-start gap-1">
                   <li
                     v-for="k in volumeLinkedKnowledge"
                     :key="k.id"
-                    class="flex items-start gap-2 rounded border bg-background px-2 py-1.5 text-xs"
+                    class="inline-flex max-w-full items-center gap-1.5 rounded border px-2 py-1 text-xs"
+                    :class="k.chipShell"
                   >
                     <span
                       class="mt-0.5 shrink-0 rounded bg-muted px-1 py-0.5 text-[9px] font-medium text-muted-foreground"
@@ -2935,11 +3557,8 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                         ? t("workspace.chapterPlotInherited")
                         : t("workspace.volumePlotInherited")
                     }}</span>
-                    <div class="min-w-0 flex-1">
-                      <span class="font-medium">{{ k.label }}</span>
-                      <p v-if="k.snippet" class="mt-0.5 line-clamp-2 text-[10px] text-muted-foreground">
-                        {{ k.snippet }}
-                      </p>
+                    <div class="min-w-0">
+                      <span class="block max-w-[180px] truncate font-medium">{{ k.label }}</span>
                     </div>
                   </li>
                 </ul>
@@ -3036,11 +3655,12 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                 {{ t("workspace.chapterLinkedKnowledge") }}
               </p>
               <p class="text-[10px] text-muted-foreground">{{ t("workspace.chapterLinkedKnowledgeHint") }}</p>
-              <ul v-if="chapterLinkedKnowledge.length" class="space-y-1">
+              <ul v-if="chapterLinkedKnowledge.length" class="flex flex-wrap items-start justify-start gap-1">
                 <li
                   v-for="k in chapterLinkedKnowledge"
                   :key="k.id"
-                  class="flex items-start gap-2 rounded border bg-background px-2 py-1.5 text-xs"
+                  class="inline-flex max-w-full items-center gap-1.5 rounded border px-2 py-1 text-xs"
+                  :class="k.chipShell"
                 >
                   <span
                     v-if="k.from !== 'chapter'"
@@ -3055,11 +3675,8 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                       ? t("workspace.chapterPlotInherited")
                       : t("workspace.volumePlotInherited")
                   }}</span>
-                  <div class="min-w-0 flex-1">
-                    <span class="font-medium">{{ k.label }}</span>
-                    <p v-if="k.snippet" class="mt-0.5 line-clamp-2 text-[10px] text-muted-foreground">
-                      {{ k.snippet }}
-                    </p>
+                  <div class="min-w-0">
+                    <span class="block max-w-[180px] truncate font-medium">{{ k.label }}</span>
                   </div>
                 </li>
               </ul>
@@ -3282,18 +3899,19 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                   v-for="item in canvasNavActiveItems"
                   :key="item.id"
                   type="button"
-                  class="block w-full truncate px-2 py-0.5 text-left text-[11px] leading-snug hover:bg-muted/70"
-                  :class="
+                  class="block w-full truncate py-0.5 text-left text-[11px] leading-snug hover:bg-muted/70"
+                  :class="[
+                    item.indent ? 'pl-3 pr-2' : 'px-2',
                     selected?.id === item.id
                       ? 'bg-primary/10 font-medium text-primary'
                       : item.kind === 'novel'
                         ? 'text-muted-foreground'
-                        : 'text-foreground'
-                  "
+                        : 'text-foreground',
+                  ]"
                   :title="item.label"
                   @click="focusCanvasNav(item.id)"
                 >
-                  {{ item.label }}
+                  <span v-if="item.indent" class="text-muted-foreground">|- </span>{{ item.label }}
                 </button>
                 <p
                   v-if="!canvasNavActiveItems.length"
@@ -3398,7 +4016,7 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                 size="sm"
                 variant="outline"
                 class="px-2"
-                :disabled="!!busy || !chapterMd || bodyEditing"
+                :disabled="!!busy || !(bodyEditing ? bodyDraft : chapterMd)"
                 :title="t('workspace.copyBody')"
                 :aria-label="t('workspace.copyBody')"
                 @click="copyChapterBody"
@@ -3409,7 +4027,7 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                 size="sm"
                 variant="outline"
                 class="px-2"
-                :disabled="memoryBusy || (chapterBusy && busy !== 'regen-memory') || bodyEditing"
+                :disabled="memoryBusy || (chapterBusy && busy !== 'regen-memory')"
                 :title="t('workspace.memoryPreview')"
                 :aria-label="t('workspace.memoryPreview')"
                 @click="openChapterMemory"
@@ -3422,40 +4040,6 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
               </Button>
               <span v-if="copyHint" class="text-[11px] text-muted-foreground">{{ copyHint }}</span>
             </template>
-            <div
-              v-if="selectedIsChapter"
-              class="inline-flex rounded-md border bg-muted/40 p-0.5"
-              role="group"
-              :aria-label="t('workspace.bodyModeHint')"
-            >
-              <button
-                type="button"
-                class="rounded px-2 py-1 text-xs transition-colors"
-                :class="
-                  !bodyEditing
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                "
-                :aria-pressed="!bodyEditing"
-                @click="cancelEditChapterBody"
-              >
-                {{ t("workspace.bodyPreview") }}
-              </button>
-              <button
-                type="button"
-                class="rounded px-2 py-1 text-xs transition-colors"
-                :class="
-                  bodyEditing
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                "
-                :aria-pressed="bodyEditing"
-                :disabled="!!busy"
-                @click="startEditChapterBody"
-              >
-                {{ t("workspace.editBody") }}
-              </button>
-            </div>
             <div
               class="inline-flex rounded-md border bg-muted/40 p-0.5"
               role="group"
@@ -3494,21 +4078,65 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
             </div>
           </div>
         </div>
-        <div
-          class="min-h-0 flex-1 p-3"
-          :class="bodyEditing ? 'flex flex-col overflow-hidden' : 'overflow-auto'"
-        >
+        <div class="flex min-h-0 flex-1 flex-col overflow-hidden p-3">
           <template v-if="!selectedIsChapter">
             <p class="text-xs text-muted-foreground">{{ t("workspace.bodyDockPickChapter") }}</p>
           </template>
-          <template v-else-if="bodyEditing">
-            <div class="relative flex min-h-0 w-full flex-1">
+          <template v-else>
+            <div
+              v-if="hasRefineDiff"
+              class="mb-2 flex shrink-0 flex-wrap items-center gap-1 border-b pb-2"
+            >
+              <button
+                type="button"
+                class="rounded px-2 py-1 text-xs"
+                :class="bodyTab === 'body' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'"
+                @click="bodyTab = 'body'"
+              >
+                {{ t("workspace.bodyTab") }}
+              </button>
+              <button
+                type="button"
+                class="rounded px-2 py-1 text-xs"
+                :class="bodyTab === 'diff' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'"
+                @click="bodyTab = 'diff'"
+              >
+                {{ t("workspace.refineDiffTab") }}
+              </button>
+            </div>
+            <div
+              v-if="bodyTab === 'diff' && hasRefineDiff"
+              class="min-h-0 flex-1 space-y-0.5 overflow-auto font-sans text-sm leading-relaxed"
+              :class="chapterBusy ? 'opacity-40' : ''"
+            >
+              <p class="mb-2 text-[11px] text-muted-foreground">{{ t("workspace.refineDiffHint") }}</p>
               <div
-                class="relative w-6 shrink-0 overflow-hidden self-stretch"
+                v-for="(h, i) in refineDiffHunks"
+                :key="i"
+                class="whitespace-pre-wrap rounded-sm px-1"
+                :class="{
+                  'bg-red-100 text-red-950 dark:bg-red-950/40 dark:text-red-100': h.type === 'del',
+                  'bg-emerald-100 text-emerald-950 dark:bg-emerald-950/40 dark:text-emerald-100': h.type === 'add',
+                }"
+              >
+                <span class="mr-1 select-none opacity-50">{{
+                  h.type === "del" ? "−" : h.type === "add" ? "+" : " "
+                }}</span>{{ h.text || " " }}
+              </div>
+            </div>
+            <div
+              v-else
+              class="relative flex min-h-0 w-full flex-1"
+              @pointermove="onBodyEditorPointerMove"
+              @pointerleave="onBodyEditorPointerLeave"
+            >
+              <div
+                class="relative w-6 shrink-0 self-stretch overflow-hidden"
                 :aria-label="t('workspace.paraRewriteGutter')"
               >
                 <button
                   v-for="g in paraGutterTops"
+                  v-show="hoveredParaIndex === g.index"
                   :key="g.index"
                   type="button"
                   class="absolute left-0.5 z-[1] flex h-5 w-5 items-center justify-center rounded text-amber-800 hover:bg-amber-100 disabled:pointer-events-none disabled:opacity-40 dark:text-amber-200 dark:hover:bg-amber-950"
@@ -3548,88 +4176,14 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
               </div>
             </div>
           </template>
-          <template v-else-if="chapterMd">
-            <div
-              v-if="hasRefineDiff"
-              class="mb-3 flex flex-wrap items-center gap-1 border-b pb-2"
-            >
-              <button
-                type="button"
-                class="rounded px-2 py-1 text-xs"
-                :class="bodyTab === 'body' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'"
-                @click="bodyTab = 'body'"
-              >
-                {{ t("workspace.bodyTab") }}
-              </button>
-              <button
-                type="button"
-                class="rounded px-2 py-1 text-xs"
-                :class="bodyTab === 'diff' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'"
-                @click="bodyTab = 'diff'"
-              >
-                {{ t("workspace.refineDiffTab") }}
-              </button>
-            </div>
-            <div
-              v-if="bodyTab === 'body' || !hasRefineDiff"
-              ref="chapterBodyEl"
-              class="chapter-md text-sm leading-relaxed"
-              :class="chapterBusy ? 'opacity-40' : ''"
-              v-html="chapterHtml"
-            />
-            <div
-              v-else
-              class="space-y-0.5 font-sans text-sm leading-relaxed"
-              :class="chapterBusy ? 'opacity-40' : ''"
-            >
-              <p class="mb-2 text-[11px] text-muted-foreground">{{ t("workspace.refineDiffHint") }}</p>
-              <div
-                v-for="(h, i) in refineDiffHunks"
-                :key="i"
-                class="whitespace-pre-wrap rounded-sm px-1"
-                :class="{
-                  'bg-red-100 text-red-950 dark:bg-red-950/40 dark:text-red-100': h.type === 'del',
-                  'bg-emerald-100 text-emerald-950 dark:bg-emerald-950/40 dark:text-emerald-100': h.type === 'add',
-                }"
-              >
-                <span class="mr-1 select-none opacity-50">{{
-                  h.type === "del" ? "−" : h.type === "add" ? "+" : " "
-                }}</span>{{ h.text || " " }}
-              </div>
-            </div>
-          </template>
-          <div v-else class="space-y-3">
-            <p class="text-sm text-muted-foreground">{{ t("workspace.noBody") }}</p>
-            <Button
-              size="sm"
-              variant="outline"
-              :disabled="!!busy"
-              @click="startEditChapterBody"
-            >
-              <Pencil class="mr-1.5 h-3.5 w-3.5" />
-              {{ t("workspace.editBody") }}
-            </Button>
-          </div>
         </div>
         <div
-          v-if="selectedIsChapter && bodyEditing"
-          class="flex shrink-0 items-center justify-end gap-2 border-t px-3 py-2"
+          v-if="selectedIsChapter && bodyEditing && !(bodyTab === 'diff' && hasRefineDiff) && (bodySaveBusy || bodyAutosaved)"
+          class="flex shrink-0 items-center border-t px-3 py-1.5"
         >
-          <span
-            v-if="bodySaveBusy"
-            class="mr-auto text-[11px] text-muted-foreground"
-          >{{ t("workspace.bodySaving") }}</span>
-          <span
-            v-else-if="bodyAutosaved"
-            class="mr-auto text-[11px] text-muted-foreground"
-          >{{ t("workspace.bodyAutosaved") }}</span>
-          <Button size="sm" variant="outline" :disabled="bodySaveBusy || paraRewriteBusy" @click="cancelEditChapterBody">
-            {{ t("novels.cancel") }}
-          </Button>
-          <Button size="sm" :disabled="bodySaveBusy || paraRewriteBusy" @click="saveChapterBody">
-            <Loader2 v-if="bodySaveBusy" class="mr-1.5 h-3.5 w-3.5 animate-spin" />
-            {{ bodySaveBusy ? t("workspace.bodySaving") : t("workspace.saveBody") }}
-          </Button>
+          <span class="text-[11px] text-muted-foreground">{{
+            bodySaveBusy ? t("workspace.bodySaving") : t("workspace.bodyAutosaved")
+          }}</span>
         </div>
       </div>
     </div>
@@ -3751,26 +4305,12 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
       </div>
     </div>
 
-    <div
-      v-if="pendingKnowledgeFill"
-      class="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
-      @click.self="pendingKnowledgeFill = false"
-    >
-      <div class="w-full max-w-md rounded-lg border bg-background p-5 shadow-lg" role="dialog" aria-modal="true">
-        <h2 class="text-base font-semibold">{{ t("workspace.knowledgeFillOverwriteTitle") }}</h2>
-        <p class="mt-3 text-sm text-muted-foreground">
-          {{ t("workspace.knowledgeFillOverwriteBody") }}
-        </p>
-        <div class="mt-5 flex justify-end gap-2">
-          <Button variant="outline" :disabled="knowledgeFillBusy" @click="pendingKnowledgeFill = false">
-            {{ t("novels.cancel") }}
-          </Button>
-          <Button :disabled="knowledgeFillBusy" @click="runFillKnowledge">
-            {{ t("workspace.knowledgeFillOverwriteConfirm") }}
-          </Button>
-        </div>
-      </div>
-    </div>
+    <WorldviewChatPanel
+      :open="worldviewChatOpen"
+      :novel-id="props.id"
+      @close="worldviewChatOpen = false"
+      @applied="onWorldviewChatApplied"
+    />
 
     <div
       v-if="publicPickOpen"

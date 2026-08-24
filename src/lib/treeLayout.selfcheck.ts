@@ -297,3 +297,155 @@ console.assert(Math.abs(get("pm").position.x - expectMultiX) < 1e-6);
 }
 
 console.log("treeLayout.selfcheck ok");
+
+// 世界观扇形 + 故事规则：不上左知识带，不占剧情第一列
+{
+  const nodes = [
+    {
+      id: "r",
+      kind: "novel",
+      position: { x: 0, y: 0 },
+      linked_side_plot_ids: ["p1"],
+      linked_character_ids: [] as string[],
+      linked_knowledge_ids: [
+        "wv_core_laws",
+        "wv_spatiotemporal",
+        "wv_social_power",
+        "wv_history_culture",
+        "wv_existence",
+        "wv_info_flow",
+        "story_rules",
+        "k_left",
+      ],
+    },
+    {
+      id: "p1",
+      kind: "side_plot",
+      position: { x: 0, y: 0 },
+      linked_side_plot_ids: [] as string[],
+    },
+    ...[
+      "wv_core_laws",
+      "wv_spatiotemporal",
+      "wv_social_power",
+      "wv_history_culture",
+      "wv_existence",
+      "wv_info_flow",
+    ].map((slot, i) => ({
+      id: slot,
+      kind: "knowledge",
+      position: { x: 0, y: i },
+      knowledge: { slot },
+      linked_side_plot_ids: [] as string[],
+    })),
+    {
+      id: "story_rules",
+      kind: "knowledge",
+      position: { x: 0, y: 0 },
+      knowledge: { slot: "story_rules" },
+      linked_side_plot_ids: [] as string[],
+    },
+    {
+      id: "k_left",
+      kind: "knowledge",
+      position: { x: 0, y: 0 },
+      knowledge: { slot: "" },
+      linked_side_plot_ids: [] as string[],
+    },
+  ];
+  applyAutoLayout(nodes, []);
+  const get = (id: string) => nodes.find((n) => n.id === id)!;
+  console.assert(get("r").position.y > C.TOP, "root lowered for fan");
+  console.assert(get("wv_core_laws").position.y < get("r").position.y, "fan above root");
+  console.assert(get("story_rules").position.x === C.PLOT_X, "story rules on first right col");
+  console.assert(get("p1").position.x === C.PLOT_X + C.PLOT_DX, "plots shift past story rules");
+  console.assert(get("k_left").position.x < C.MAIN_X, "ordinary knowledge stays left");
+  console.assert(
+    get("wv_info_flow").position.x !== get("k_left").position.x ||
+      get("wv_info_flow").position.y !== get("k_left").position.y,
+    "fan not stacked on left know",
+  );
+  const fanIds = [
+    "wv_core_laws",
+    "wv_spatiotemporal",
+    "wv_social_power",
+    "wv_history_culture",
+    "wv_existence",
+    "wv_info_flow",
+  ];
+  for (let i = 0; i < fanIds.length; i++) {
+    for (let j = i + 1; j < fanIds.length; j++) {
+      const a = get(fanIds[i]!);
+      const b = get(fanIds[j]!);
+      const overlap =
+        a.position.x < b.position.x + C.SIDE_CARD_W &&
+        b.position.x < a.position.x + C.SIDE_CARD_W &&
+        a.position.y < b.position.y + 88 &&
+        b.position.y < a.position.y + 88;
+      console.assert(!overlap, `fan overlap ${fanIds[i]} ${fanIds[j]}`);
+    }
+  }
+}
+console.log("treeLayout.worldview ok");
+
+// 世界观子卡与主卡、子卡之间不重叠
+{
+  const mk = (id: string, slot: string, y = 0, links: string[] = []) => ({
+    id,
+    kind: "knowledge",
+    position: { x: 0, y },
+    knowledge: { slot },
+    linked_knowledge_ids: links,
+    linked_side_plot_ids: [] as string[],
+  });
+  const nodes = [
+    {
+      id: "r",
+      kind: "novel",
+      position: { x: 0, y: 0 },
+      linked_knowledge_ids: [
+        "wv_core_laws",
+        "wv_spatiotemporal",
+        "wv_social_power",
+        "wv_history_culture",
+        "wv_existence",
+        "wv_info_flow",
+      ],
+      linked_side_plot_ids: [] as string[],
+    },
+    mk("wv_core_laws", "wv_core_laws", 0, ["ax1", "ax2", "ax3"]),
+    mk("wv_spatiotemporal", "wv_spatiotemporal", 1, ["loc1", "loc2"]),
+    mk("wv_social_power", "wv_social_power", 2, ["race1", "fac1", "fac2"]),
+    mk("wv_history_culture", "wv_history_culture", 3),
+    mk("wv_existence", "wv_existence", 4),
+    mk("wv_info_flow", "wv_info_flow", 5),
+    mk("ax1", "wv_axiom"),
+    mk("ax2", "wv_axiom"),
+    mk("ax3", "wv_axiom"),
+    mk("loc1", "wv_location"),
+    mk("loc2", "wv_location"),
+    mk("race1", "wv_race"),
+    mk("fac1", "wv_faction"),
+    mk("fac2", "wv_faction"),
+  ];
+  applyAutoLayout(nodes, []);
+  const wv = nodes.filter(
+    (n) => n.kind === "knowledge" && n.knowledge?.slot?.startsWith("wv_"),
+  );
+  const overlap = (a: (typeof nodes)[0], b: (typeof nodes)[0]) => {
+    const w = 200;
+    const h = 88;
+    return (
+      a.position.x < b.position.x + w &&
+      b.position.x < a.position.x + w &&
+      a.position.y < b.position.y + h &&
+      b.position.y < a.position.y + h
+    );
+  };
+  for (let i = 0; i < wv.length; i++) {
+    for (let j = i + 1; j < wv.length; j++) {
+      console.assert(!overlap(wv[i]!, wv[j]!), `wv ext overlap ${wv[i]!.id} ${wv[j]!.id}`);
+    }
+  }
+}
+console.log("treeLayout.worldviewExt ok");

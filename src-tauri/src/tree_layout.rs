@@ -21,6 +21,567 @@ const TOP: f64 = 40.0;
 const MIN_CHAPTER_GAP_TIGHT: f64 = 72.0;
 const MIN_CHAPTER_GAP: f64 = 200.0;
 const CH_PAD: f64 = 48.0;
+const WV_FAN_R: f64 = 280.0;
+const AXIOM_FAN_R: f64 = 200.0;
+const LOCATION_FAN_R: f64 = 200.0;
+const SOCIAL_EXT_FAN_R: f64 = 200.0;
+const WV_FAN_SPAN_DEG: f64 = 110.0;
+const EXT_FAN_SPAN_DEG: f64 = 56.0;
+const MIN_EXT_FAN_SPAN_DEG: f64 = 28.0;
+const WV_FIX_MAX_PASSES: usize = 12;
+const WV_CARD_GAP: f64 = 16.0;
+const MAX_FAN_R: f64 = 520.0;
+const MAX_FAN_SPAN_DEG: f64 = 168.0;
+const SOCIAL_HALF_GAP_DEG: f64 = 24.0;
+const ROOT_CARD_W: f64 = 200.0;
+
+const WV_FAN_ORDER: &[&str] = &[
+    "wv_core_laws",
+    "wv_spatiotemporal",
+    "wv_social_power",
+    "wv_history_culture",
+    "wv_existence",
+    "wv_info_flow",
+];
+
+fn knowledge_slot(n: &TreeNode) -> &str {
+    n.knowledge
+        .as_ref()
+        .map(|k| k.slot.as_str())
+        .unwrap_or("")
+        .trim()
+}
+
+fn is_fan_slot(slot: &str) -> bool {
+    WV_FAN_ORDER.contains(&slot)
+}
+
+fn is_worldview_layout_slot(slot: &str) -> bool {
+    is_fan_slot(slot)
+        || matches!(
+            slot,
+            "wv_axiom" | "wv_location" | "wv_race" | "wv_faction"
+        )
+}
+
+struct FanGeo {
+    radius: f64,
+    span_deg: f64,
+}
+
+fn resolve_fan_geometry(count: usize, base_radius: f64, base_span_deg: f64) -> FanGeo {
+    if count <= 1 {
+        return FanGeo {
+            radius: base_radius,
+            span_deg: 0.0,
+        };
+    }
+    let min_arc = SIDE_CARD_W + WV_CARD_GAP;
+    let mut span_deg = base_span_deg;
+    let mut radius = base_radius.max(((count - 1) as f64 * min_arc * 180.0) / (std::f64::consts::PI * span_deg));
+    if radius > MAX_FAN_R {
+        radius = MAX_FAN_R;
+        span_deg = ((count - 1) as f64 * min_arc * 180.0) / (std::f64::consts::PI * radius);
+    }
+    span_deg = span_deg.min(MAX_FAN_SPAN_DEG).max(base_span_deg);
+    radius = radius.max(((count - 1) as f64 * min_arc * 180.0) / (std::f64::consts::PI * span_deg));
+    FanGeo { radius, span_deg }
+}
+
+fn fan_rects_overlap(ax: f64, ay: f64, aw: f64, ah: f64, bx: f64, by: f64, bw: f64, bh: f64) -> bool {
+    let pad = WV_CARD_GAP / 2.0;
+    !(ax + aw + pad <= bx || bx + bw + pad <= ax || ay + ah + pad <= by || by + bh + pad <= ay)
+}
+
+fn place_half_fan(
+    nodes: &mut [TreeNode],
+    by_id: &HashMap<String, usize>,
+    fan_ids: &[String],
+    anchor_idx: usize,
+    base_radius: f64,
+    deg_min: f64,
+    deg_max: f64,
+) {
+    let n = fan_ids.len();
+    if n == 0 {
+        return;
+    }
+    let span = (deg_max - deg_min).max(1.0);
+    let geo = resolve_fan_geometry(n, base_radius, span);
+    let anchor = &nodes[anchor_idx];
+    let cx = anchor.position.x + ROOT_CARD_W / 2.0;
+    let cy = anchor.position.y;
+    for (i, id) in fan_ids.iter().enumerate() {
+        let deg = if n == 1 {
+            (deg_min + deg_max) / 2.0
+        } else {
+            deg_min + ((deg_max - deg_min) * i as f64) / (n as f64 - 1.0)
+        };
+        let rad = deg.to_radians();
+        let idx = *by_id.get(id).unwrap();
+        let h = default_node_h(&nodes[idx].kind);
+        nodes[idx].position = NodePosition {
+            x: cx + geo.radius * rad.sin() - SIDE_CARD_W / 2.0,
+            y: cy - geo.radius * rad.cos() - h,
+        };
+    }
+}
+
+fn place_fan_above(
+    nodes: &mut [TreeNode],
+    by_id: &HashMap<String, usize>,
+    fan_ids: &[String],
+    anchor_idx: usize,
+    base_radius: f64,
+    span_deg: f64,
+) -> f64 {
+    let n = fan_ids.len();
+    if n == 0 {
+        return base_radius;
+    }
+    let geo = resolve_fan_geometry(n, base_radius, span_deg);
+    let anchor = &nodes[anchor_idx];
+    let cx = anchor.position.x + ROOT_CARD_W / 2.0;
+    let cy = anchor.position.y;
+    let start = -geo.span_deg / 2.0;
+    for (i, id) in fan_ids.iter().enumerate() {
+        let deg = if n == 1 {
+            0.0
+        } else {
+            start + (geo.span_deg * i as f64) / (n as f64 - 1.0)
+        };
+        let rad = deg.to_radians();
+        let idx = *by_id.get(id).unwrap();
+        let h = default_node_h(&nodes[idx].kind);
+        nodes[idx].position = NodePosition {
+            x: cx + geo.radius * rad.sin() - SIDE_CARD_W / 2.0,
+            y: cy - geo.radius * rad.cos() - h,
+        };
+    }
+    geo.radius
+}
+
+fn place_worldview_fan(
+    nodes: &mut [TreeNode],
+    by_id: &HashMap<String, usize>,
+    fan_ids: &[String],
+    root_idx: usize,
+) -> f64 {
+    place_fan_above(
+        nodes,
+        by_id,
+        fan_ids,
+        root_idx,
+        WV_FAN_R,
+        WV_FAN_SPAN_DEG,
+    )
+}
+
+struct WvLayoutRadii {
+    main_r: f64,
+    main_span_deg: f64,
+    axiom_r: f64,
+    location_r: f64,
+    social_r: f64,
+    ext_span_deg: f64,
+}
+
+impl Default for WvLayoutRadii {
+    fn default() -> Self {
+        Self {
+            main_r: WV_FAN_R,
+            main_span_deg: WV_FAN_SPAN_DEG,
+            axiom_r: AXIOM_FAN_R,
+            location_r: LOCATION_FAN_R,
+            social_r: SOCIAL_EXT_FAN_R,
+            ext_span_deg: EXT_FAN_SPAN_DEG,
+        }
+    }
+}
+
+fn fan_cards_count(fan_by_slot: &HashMap<String, String>) -> usize {
+    WV_FAN_ORDER
+        .iter()
+        .filter(|&&slot| fan_by_slot.contains_key(slot))
+        .count()
+}
+
+fn extension_span_cap(
+    child_count: usize,
+    main_span_deg: f64,
+    main_count: usize,
+    base_span: f64,
+) -> f64 {
+    if child_count <= 1 {
+        return 0.0;
+    }
+    let slot_deg = if main_count > 1 {
+        main_span_deg / (main_count as f64 - 1.0)
+    } else {
+        main_span_deg
+    };
+    let max_span = base_span.min((slot_deg * 0.85 * (child_count as f64 - 1.0).max(1.0) + 8.0).max(MIN_EXT_FAN_SPAN_DEG));
+    resolve_fan_geometry(child_count, AXIOM_FAN_R, max_span).span_deg
+}
+
+fn layout_worldview_extensions(
+    nodes: &mut [TreeNode],
+    by_id: &HashMap<String, usize>,
+    fan_by_slot: &HashMap<String, String>,
+    axiom_ids: &[String],
+    location_ids: &[String],
+    race_ids: &[String],
+    faction_ids: &[String],
+    radii: &WvLayoutRadii,
+) {
+    let main_span = radii.main_span_deg;
+    let main_count = fan_cards_count(fan_by_slot).max(1);
+    let ext_base = radii.ext_span_deg;
+    if let Some(core_id) = fan_by_slot.get("wv_core_laws") {
+        if !axiom_ids.is_empty() {
+            let core_idx = *by_id.get(core_id).unwrap();
+            let order: HashMap<String, usize> = nodes[core_idx]
+                .linked_knowledge_ids
+                .iter()
+                .enumerate()
+                .map(|(i, id)| (id.clone(), i))
+                .collect();
+            let mut sorted = axiom_ids.to_vec();
+            sorted.sort_by(|a, b| {
+                let ia = order.get(a).copied().unwrap_or(9999);
+                let ib = order.get(b).copied().unwrap_or(9999);
+                ia.cmp(&ib).then_with(|| {
+                    by_y(
+                        &nodes[*by_id.get(a).unwrap()],
+                        &nodes[*by_id.get(b).unwrap()],
+                    )
+                })
+            });
+            place_fan_above(
+                nodes,
+                by_id,
+                &sorted,
+                core_idx,
+                radii.axiom_r,
+                extension_span_cap(sorted.len(), main_span, main_count, ext_base),
+            );
+        }
+    }
+    if let Some(st_id) = fan_by_slot.get("wv_spatiotemporal") {
+        if !location_ids.is_empty() {
+            let st_idx = *by_id.get(st_id).unwrap();
+            let order: HashMap<String, usize> = nodes[st_idx]
+                .linked_knowledge_ids
+                .iter()
+                .enumerate()
+                .map(|(i, id)| (id.clone(), i))
+                .collect();
+            let mut sorted = location_ids.to_vec();
+            sorted.sort_by(|a, b| {
+                let ia = order.get(a).copied().unwrap_or(9999);
+                let ib = order.get(b).copied().unwrap_or(9999);
+                ia.cmp(&ib).then_with(|| {
+                    by_y(
+                        &nodes[*by_id.get(a).unwrap()],
+                        &nodes[*by_id.get(b).unwrap()],
+                    )
+                })
+            });
+            place_fan_above(
+                nodes,
+                by_id,
+                &sorted,
+                st_idx,
+                radii.location_r,
+                extension_span_cap(sorted.len(), main_span, main_count, ext_base),
+            );
+        }
+    }
+    if let Some(sp_id) = fan_by_slot.get("wv_social_power") {
+        if !race_ids.is_empty() || !faction_ids.is_empty() {
+            let sp_idx = *by_id.get(sp_id).unwrap();
+            let order: HashMap<String, usize> = nodes[sp_idx]
+                .linked_knowledge_ids
+                .iter()
+                .enumerate()
+                .map(|(i, id)| (id.clone(), i))
+                .collect();
+            let mut sorted_race = race_ids.to_vec();
+            sorted_race.sort_by(|a, b| {
+                let ia = order.get(a).copied().unwrap_or(9999);
+                let ib = order.get(b).copied().unwrap_or(9999);
+                ia.cmp(&ib).then_with(|| {
+                    by_y(
+                        &nodes[*by_id.get(a).unwrap()],
+                        &nodes[*by_id.get(b).unwrap()],
+                    )
+                })
+            });
+            let mut sorted_faction = faction_ids.to_vec();
+            sorted_faction.sort_by(|a, b| {
+                let ia = order.get(a).copied().unwrap_or(9999);
+                let ib = order.get(b).copied().unwrap_or(9999);
+                ia.cmp(&ib).then_with(|| {
+                    by_y(
+                        &nodes[*by_id.get(a).unwrap()],
+                        &nodes[*by_id.get(b).unwrap()],
+                    )
+                })
+            });
+            let race_span = extension_span_cap(sorted_race.len(), main_span, main_count, ext_base);
+            let fac_span = extension_span_cap(sorted_faction.len(), main_span, main_count, ext_base);
+            let both = !sorted_race.is_empty() && !sorted_faction.is_empty();
+            let full_span = race_span.max(fac_span).max(ext_base);
+            let half = if both {
+                (full_span - SOCIAL_HALF_GAP_DEG) / 2.0
+            } else {
+                full_span / 2.0
+            };
+            let gap_half = SOCIAL_HALF_GAP_DEG / 2.0;
+            if !sorted_race.is_empty() {
+                place_half_fan(
+                    nodes,
+                    by_id,
+                    &sorted_race,
+                    sp_idx,
+                    radii.social_r,
+                    if both { -full_span / 2.0 } else { -half },
+                    if both { -gap_half } else { half },
+                );
+            }
+            if !sorted_faction.is_empty() {
+                place_half_fan(
+                    nodes,
+                    by_id,
+                    &sorted_faction,
+                    sp_idx,
+                    radii.social_r,
+                    if both { gap_half } else { -half },
+                    if both { full_span / 2.0 } else { half },
+                );
+            }
+        }
+    }
+}
+
+fn worldview_has_overlap(nodes: &[TreeNode], wv_ids: &[String], by_id: &HashMap<String, usize>) -> bool {
+    for i in 0..wv_ids.len() {
+        for j in (i + 1)..wv_ids.len() {
+            let ai = *by_id.get(&wv_ids[i]).unwrap();
+            let bi = *by_id.get(&wv_ids[j]).unwrap();
+            let ah = default_node_h(&nodes[ai].kind);
+            let bh = default_node_h(&nodes[bi].kind);
+            if fan_rects_overlap(
+                nodes[ai].position.x,
+                nodes[ai].position.y,
+                SIDE_CARD_W,
+                ah,
+                nodes[bi].position.x,
+                nodes[bi].position.y,
+                SIDE_CARD_W,
+                bh,
+            ) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn nudge_worldview_overlaps(nodes: &mut [TreeNode], wv_ids: &[String], by_id: &HashMap<String, usize>) {
+    for _pass in 0..8 {
+        let mut moved = false;
+        for i in 0..wv_ids.len() {
+            for j in (i + 1)..wv_ids.len() {
+                let ai = *by_id.get(&wv_ids[i]).unwrap();
+                let bi = *by_id.get(&wv_ids[j]).unwrap();
+                let ah = default_node_h(&nodes[ai].kind);
+                let bh = default_node_h(&nodes[bi].kind);
+                if !fan_rects_overlap(
+                    nodes[ai].position.x,
+                    nodes[ai].position.y,
+                    SIDE_CARD_W,
+                    ah,
+                    nodes[bi].position.x,
+                    nodes[bi].position.y,
+                    SIDE_CARD_W,
+                    bh,
+                ) {
+                    continue;
+                }
+                let (upper, lower) = if nodes[ai].position.y <= nodes[bi].position.y {
+                    (ai, bi)
+                } else {
+                    (bi, ai)
+                };
+                let uh = default_node_h(&nodes[upper].kind);
+                let overlap_y = nodes[upper].position.y + uh - nodes[lower].position.y;
+                if overlap_y > 0.0 {
+                    nodes[upper].position.y -= overlap_y + WV_CARD_GAP;
+                    moved = true;
+                }
+                let lh = default_node_h(&nodes[lower].kind);
+                if fan_rects_overlap(
+                    nodes[upper].position.x,
+                    nodes[upper].position.y,
+                    SIDE_CARD_W,
+                    uh,
+                    nodes[lower].position.x,
+                    nodes[lower].position.y,
+                    SIDE_CARD_W,
+                    lh,
+                ) {
+                    let push_x = (nodes[upper].position.x + SIDE_CARD_W - nodes[lower].position.x)
+                        / 2.0
+                        + WV_CARD_GAP / 2.0;
+                    if push_x > 0.0 && nodes[upper].position.x <= nodes[lower].position.x {
+                        nodes[upper].position.x -= push_x;
+                        nodes[lower].position.x += push_x;
+                        moved = true;
+                    }
+                }
+            }
+        }
+        if !moved {
+            return;
+        }
+    }
+}
+
+fn relayout_worldview(
+    nodes: &mut [TreeNode],
+    by_id: &HashMap<String, usize>,
+    fan_ids: &[String],
+    root_idx: usize,
+    fan_by_slot: &HashMap<String, String>,
+    axiom_ids: &[String],
+    location_ids: &[String],
+    race_ids: &[String],
+    faction_ids: &[String],
+    radii: &mut WvLayoutRadii,
+) {
+    let main_geo = resolve_fan_geometry(fan_ids.len(), radii.main_r, radii.main_span_deg);
+    radii.main_r = main_geo.radius;
+    radii.main_span_deg = main_geo.span_deg;
+    place_fan_above(
+        nodes,
+        by_id,
+        fan_ids,
+        root_idx,
+        radii.main_r,
+        radii.main_span_deg,
+    );
+    layout_worldview_extensions(
+        nodes,
+        by_id,
+        fan_by_slot,
+        axiom_ids,
+        location_ids,
+        race_ids,
+        faction_ids,
+        radii,
+    );
+}
+
+fn fix_worldview_overlaps(
+    nodes: &mut [TreeNode],
+    by_id: &HashMap<String, usize>,
+    fan_ids: &[String],
+    root_idx: usize,
+    fan_by_slot: &HashMap<String, String>,
+    axiom_ids: &[String],
+    location_ids: &[String],
+    race_ids: &[String],
+    faction_ids: &[String],
+) {
+    let wv_ids: Vec<String> = nodes
+        .iter()
+        .filter(|n| {
+            n.kind == NodeKind::Knowledge && is_worldview_layout_slot(knowledge_slot(n))
+        })
+        .map(|n| n.id.clone())
+        .collect();
+    if wv_ids.len() < 2 || fan_ids.is_empty() {
+        return;
+    }
+    let mut radii = WvLayoutRadii::default();
+    for _pass in 0..WV_FIX_MAX_PASSES {
+        relayout_worldview(
+            nodes,
+            by_id,
+            fan_ids,
+            root_idx,
+            fan_by_slot,
+            axiom_ids,
+            location_ids,
+            race_ids,
+            faction_ids,
+            &mut radii,
+        );
+        if !worldview_has_overlap(nodes, &wv_ids, by_id) {
+            nudge_worldview_overlaps(nodes, &wv_ids, by_id);
+            return;
+        }
+        let mut bump_main = false;
+        let mut bump_ax = false;
+        let mut bump_loc = false;
+        let mut bump_soc = false;
+        for i in 0..wv_ids.len() {
+            for j in (i + 1)..wv_ids.len() {
+                let ai = *by_id.get(&wv_ids[i]).unwrap();
+                let bi = *by_id.get(&wv_ids[j]).unwrap();
+                let ah = default_node_h(&nodes[ai].kind);
+                let bh = default_node_h(&nodes[bi].kind);
+                if !fan_rects_overlap(
+                    nodes[ai].position.x,
+                    nodes[ai].position.y,
+                    SIDE_CARD_W,
+                    ah,
+                    nodes[bi].position.x,
+                    nodes[bi].position.y,
+                    SIDE_CARD_W,
+                    bh,
+                ) {
+                    continue;
+                }
+                let sa = knowledge_slot(&nodes[ai]);
+                let sb = knowledge_slot(&nodes[bi]);
+                if is_fan_slot(sa) && is_fan_slot(sb) {
+                    bump_main = true;
+                }
+                if sa == "wv_axiom" || sb == "wv_axiom" {
+                    bump_ax = true;
+                }
+                if sa == "wv_location" || sb == "wv_location" {
+                    bump_loc = true;
+                }
+                if sa == "wv_race" || sb == "wv_race" || sa == "wv_faction" || sb == "wv_faction" {
+                    bump_soc = true;
+                }
+            }
+        }
+        if bump_main {
+            radii.main_r += 28.0;
+            radii.main_span_deg = (radii.main_span_deg + 3.0).min(MAX_FAN_SPAN_DEG);
+        }
+        if bump_ax {
+            radii.axiom_r += 24.0;
+        }
+        if bump_loc {
+            radii.location_r += 24.0;
+        }
+        if bump_soc {
+            radii.social_r += 24.0;
+        }
+        if bump_ax || bump_loc || bump_soc {
+            radii.ext_span_deg = (radii.ext_span_deg - 3.0).max(MIN_EXT_FAN_SPAN_DEG);
+        }
+        if !bump_main && !bump_ax && !bump_loc && !bump_soc {
+            break;
+        }
+    }
+    nudge_worldview_overlaps(nodes, &wv_ids, by_id);
+}
 
 fn default_node_h(kind: &NodeKind) -> f64 {
     match kind {
@@ -595,20 +1156,70 @@ pub fn apply_auto_layout(tree: &mut NovelTree) {
     let mut knows_by_host: HashMap<String, Vec<String>> = HashMap::new();
     let mut orphan_chars: Vec<String> = Vec::new();
     let mut orphan_knows: Vec<String> = Vec::new();
+    let mut fan_by_slot: HashMap<String, String> = HashMap::new();
+    let mut story_rules_id: Option<String> = None;
+    let mut axiom_ids: Vec<String> = Vec::new();
+    let mut location_ids: Vec<String> = Vec::new();
+    let mut race_ids: Vec<String> = Vec::new();
+    let mut faction_ids: Vec<String> = Vec::new();
     for n in &tree.nodes {
-        let (host_map, by_host, orphans) = match n.kind {
-            NodeKind::Character => (&char_host, &mut chars_by_host, &mut orphan_chars),
-            NodeKind::Knowledge => (&know_host, &mut knows_by_host, &mut orphan_knows),
-            _ => continue,
-        };
-        if let Some(hid) = host_map.get(&n.id) {
-            if spine_set.contains(hid) {
-                by_host.entry(hid.clone()).or_default().push(n.id.clone());
-                continue;
+        match n.kind {
+            NodeKind::Character => {
+                if let Some(hid) = char_host.get(&n.id) {
+                    if spine_set.contains(hid) {
+                        chars_by_host
+                            .entry(hid.clone())
+                            .or_default()
+                            .push(n.id.clone());
+                        continue;
+                    }
+                }
+                orphan_chars.push(n.id.clone());
             }
+            NodeKind::Knowledge => {
+                let slot = knowledge_slot(n).to_string();
+                if slot == "story_rules" {
+                    story_rules_id = Some(n.id.clone());
+                    continue;
+                }
+                if slot == "wv_axiom" {
+                    axiom_ids.push(n.id.clone());
+                    continue;
+                }
+                if slot == "wv_location" {
+                    location_ids.push(n.id.clone());
+                    continue;
+                }
+                if slot == "wv_race" {
+                    race_ids.push(n.id.clone());
+                    continue;
+                }
+                if slot == "wv_faction" {
+                    faction_ids.push(n.id.clone());
+                    continue;
+                }
+                if is_fan_slot(&slot) {
+                    fan_by_slot.insert(slot, n.id.clone());
+                    continue;
+                }
+                if let Some(hid) = know_host.get(&n.id) {
+                    if spine_set.contains(hid) {
+                        knows_by_host
+                            .entry(hid.clone())
+                            .or_default()
+                            .push(n.id.clone());
+                        continue;
+                    }
+                }
+                orphan_knows.push(n.id.clone());
+            }
+            _ => {}
         }
-        orphans.push(n.id.clone());
     }
+    let fan_ids: Vec<String> = WV_FAN_ORDER
+        .iter()
+        .filter_map(|s| fan_by_slot.get(*s).cloned())
+        .collect();
     for list in chars_by_host.values_mut() {
         list.sort_by(|a, b| {
             by_y(
@@ -628,6 +1239,31 @@ pub fn apply_auto_layout(tree: &mut NovelTree) {
 
     let mut occupied: Vec<(f64, f64)> = Vec::new();
     let mut y = TOP;
+    if !fan_ids.is_empty() {
+        let geo = resolve_fan_geometry(fan_ids.len(), WV_FAN_R, WV_FAN_SPAN_DEG);
+        y += geo.radius + default_node_h(&NodeKind::Knowledge) + SIDE_GAP;
+    }
+    if !axiom_ids.is_empty() {
+        let geo = resolve_fan_geometry(axiom_ids.len(), AXIOM_FAN_R, EXT_FAN_SPAN_DEG);
+        y += geo.radius + default_node_h(&NodeKind::Knowledge) + SIDE_GAP;
+    }
+    if !location_ids.is_empty() {
+        let geo = resolve_fan_geometry(location_ids.len(), LOCATION_FAN_R, EXT_FAN_SPAN_DEG);
+        y += geo.radius + default_node_h(&NodeKind::Knowledge) + SIDE_GAP;
+    }
+    if !race_ids.is_empty() || !faction_ids.is_empty() {
+        let rr = if race_ids.is_empty() {
+            0.0
+        } else {
+            resolve_fan_geometry(race_ids.len(), SOCIAL_EXT_FAN_R, EXT_FAN_SPAN_DEG).radius
+        };
+        let fr = if faction_ids.is_empty() {
+            0.0
+        } else {
+            resolve_fan_geometry(faction_ids.len(), SOCIAL_EXT_FAN_R, EXT_FAN_SPAN_DEG).radius
+        };
+        y += rr.max(fr) + default_node_h(&NodeKind::Knowledge) + SIDE_GAP;
+    }
     for hid in &spine_ids {
         let hi = *by_id.get(hid).unwrap();
         tree.nodes[hi].position = NodePosition { x: MAIN_X, y };
@@ -638,11 +1274,40 @@ pub fn apply_auto_layout(tree: &mut NovelTree) {
         let char_ids = chars_by_host.get(hid).cloned().unwrap_or_default();
         let know_ids = knows_by_host.get(hid).cloned().unwrap_or_default();
 
+        let is_root = tree.nodes[hi].kind == NodeKind::Novel;
+        if is_root {
+            fix_worldview_overlaps(
+                &mut tree.nodes,
+                &by_id,
+                &fan_ids,
+                hi,
+                &fan_by_slot,
+                &axiom_ids,
+                &location_ids,
+                &race_ids,
+                &faction_ids,
+            );
+            if let Some(ref sid) = story_rules_id {
+                let si = *by_id.get(sid).unwrap();
+                tree.nodes[si].position = NodePosition {
+                    x: PLOT_X,
+                    y: tree.nodes[hi].position.y,
+                };
+                let p = &tree.nodes[si].position;
+                occupied.push((p.x, p.y));
+            }
+        }
+
+        let plot_origin_x = if is_root && story_rules_id.is_some() {
+            PLOT_X + PLOT_DX
+        } else {
+            PLOT_X
+        };
         place_grid_ids(
             &mut tree.nodes,
             &by_id,
             &plot_ids,
-            PLOT_X,
+            plot_origin_x,
             y,
             PLOT_DX,
             PLOT_DY,
@@ -665,9 +1330,15 @@ pub fn apply_auto_layout(tree: &mut NovelTree) {
             -1.0,
         );
         let know_span = place_know_ids(&mut tree.nodes, &by_id, &know_ids, &char_ids, y);
+        let story_span = if is_root && story_rules_id.is_some() {
+            PLOT_DY
+        } else {
+            0.0
+        };
         let span = grid_span(plot_ids.len(), PLOT_DY, MAX_PLOT_COL)
             .max(char_span)
-            .max(know_span);
+            .max(know_span)
+            .max(story_span);
         let linked = host_has_linked(
             &tree.nodes[hi],
             &plot_hosts,
