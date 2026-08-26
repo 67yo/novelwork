@@ -168,19 +168,6 @@ pub fn chapter_inherited_plot_ids(tree: &NovelTree, chapter_id: &str) -> Vec<Str
     ids
 }
 
-/// 章节继承的知识卡：根 + 父分卷。
-pub fn chapter_inherited_knowledge_ids(tree: &NovelTree, chapter_id: &str) -> Vec<String> {
-    let mut ids = root_knowledge_ids(tree);
-    if let Some(vid) = chapter_parent_volume_id(tree, chapter_id) {
-        for kid in volume_knowledge_ids(tree, &vid) {
-            if !ids.iter().any(|id| id == &kid) {
-                ids.push(kid);
-            }
-        }
-    }
-    ids
-}
-
 /// 章节本机剧情（不含根/分卷继承）。
 pub fn chapter_local_plot_ids(tree: &NovelTree, chapter_id: &str) -> Vec<String> {
     let inherited: HashSet<String> = chapter_inherited_plot_ids(tree, chapter_id)
@@ -218,16 +205,49 @@ pub fn chapter_local_plot_ids(tree: &NovelTree, chapter_id: &str) -> Vec<String>
     ids
 }
 
-/// 章节有效知识卡：本章 linked ∪ 边 + 根/分卷继承（本章优先）。
-pub fn chapter_effective_knowledge_ids(tree: &NovelTree, chapter_id: &str) -> Vec<String> {
+/// 章节继承的知识卡：根 + 父分卷。
+pub fn chapter_inherited_knowledge_ids(tree: &NovelTree, chapter_id: &str) -> Vec<String> {
+    let mut ids = root_knowledge_ids(tree);
+    if let Some(vid) = chapter_parent_volume_id(tree, chapter_id) {
+        for kid in volume_local_knowledge_ids(tree, &vid) {
+            if !ids.iter().any(|id| id == &kid) {
+                ids.push(kid);
+            }
+        }
+    }
+    ids
+}
+
+/// 章节本机知识卡（不含根/分卷继承）。
+pub fn chapter_local_knowledge_ids(tree: &NovelTree, chapter_id: &str) -> Vec<String> {
+    let inherited: HashSet<String> = chapter_inherited_knowledge_ids(tree, chapter_id)
+        .into_iter()
+        .collect();
     let listed = tree
         .nodes
         .iter()
         .find(|n| n.id == chapter_id)
         .map(|n| n.linked_knowledge_ids.as_slice())
         .unwrap_or(&[]);
-    let mut ids = union_linked_ids(tree, chapter_id, listed, NodeKind::Knowledge);
-    for kid in chapter_inherited_knowledge_ids(tree, chapter_id) {
+    union_linked_ids(tree, chapter_id, listed, NodeKind::Knowledge)
+        .into_iter()
+        .filter(|id| !inherited.contains(id))
+        .collect()
+}
+
+/// 分卷本机知识（不含根）。
+pub fn volume_local_knowledge_ids(tree: &NovelTree, volume_id: &str) -> Vec<String> {
+    let root_set: HashSet<String> = root_knowledge_ids(tree).into_iter().collect();
+    volume_knowledge_ids(tree, volume_id)
+        .into_iter()
+        .filter(|id| !root_set.contains(id))
+        .collect()
+}
+
+/// 章节有效知识卡：根排序 ∪ 卷排序 ∪ 本章排序（去重，先到优先）。
+pub fn chapter_effective_knowledge_ids(tree: &NovelTree, chapter_id: &str) -> Vec<String> {
+    let mut ids = chapter_inherited_knowledge_ids(tree, chapter_id);
+    for kid in chapter_local_knowledge_ids(tree, chapter_id) {
         if !ids.iter().any(|id| id == &kid) {
             ids.push(kid);
         }
@@ -235,10 +255,10 @@ pub fn chapter_effective_knowledge_ids(tree: &NovelTree, chapter_id: &str) -> Ve
     ids
 }
 
-/// 分卷有效知识：本卷 ∪ 根。
+/// 分卷有效知识：根 ∪ 本卷。
 pub fn volume_effective_knowledge_ids(tree: &NovelTree, volume_id: &str) -> Vec<String> {
-    let mut ids = volume_knowledge_ids(tree, volume_id);
-    for kid in root_knowledge_ids(tree) {
+    let mut ids = root_knowledge_ids(tree);
+    for kid in volume_local_knowledge_ids(tree, volume_id) {
         if !ids.iter().any(|id| id == &kid) {
             ids.push(kid);
         }
@@ -266,9 +286,11 @@ mod tests {
             kind,
             label: id.into(),
             outline: String::new(),
+            detailed_outline: vec![],
             character: None,
             knowledge: None,
             side_plot: None,
+            volume: None,
             linked_character_ids: vec![],
             linked_side_plot_ids: plots.iter().map(|s| (*s).into()).collect(),
             linked_knowledge_ids: know.iter().map(|s| (*s).into()).collect(),
@@ -322,7 +344,7 @@ mod tests {
         };
         assert_eq!(
             chapter_effective_knowledge_ids(&tree, "ch"),
-            vec!["ck", "rk"]
+            vec!["rk", "ck"]
         );
     }
 
@@ -351,14 +373,14 @@ mod tests {
         assert_eq!(volume_local_plot_ids(&tree, "vol"), vec!["vp"]);
         assert_eq!(
             volume_effective_knowledge_ids(&tree, "vol"),
-            vec!["vk", "rk"]
+            vec!["rk", "vk"]
         );
         let inherited = chapter_inherited_plot_ids(&tree, "ch");
         assert!(inherited.iter().any(|id| id == "rp"));
         assert!(inherited.iter().any(|id| id == "vp"));
         assert_eq!(
             chapter_effective_knowledge_ids(&tree, "ch"),
-            vec!["ck", "rk", "vk"]
+            vec!["rk", "vk", "ck"]
         );
     }
 
@@ -422,7 +444,7 @@ mod tests {
         assert!(chapter_parent_volume_id(&tree, "ch").is_none());
         assert_eq!(
             chapter_effective_knowledge_ids(&tree, "ch"),
-            vec!["ck", "rk"]
+            vec!["rk", "ck"]
         );
     }
 }

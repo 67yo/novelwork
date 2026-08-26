@@ -3,8 +3,10 @@ import {
   buildKnowledgeNavItems,
   filterHostPanelLinkedKnowledge,
   isHostPanelHiddenKnowledgeSlot,
+  mergeRootKnowledgeOrder,
+  orderKnowledgeNodesByIds,
   sortLinkedKnowledgeNodes,
-} from "@/lib/knowledgeListSort";
+} from "./knowledgeListSort";
 
 const t = (k: string) =>
   (
@@ -38,8 +40,25 @@ function mk(id: string, slot: string, label: string, linked: string[] = []): Nov
 }
 
 const tree: NovelTree = {
+  novel_id: "",
   nodes: [
-    { id: "root", kind: "novel", label: "R", outline: "", character: null, knowledge: null, side_plot: null, linked_character_ids: [], linked_side_plot_ids: [], linked_knowledge_ids: [], position: { x: 0, y: 0 }, word_count: 0, word_count_min: 0, word_count_max: 0, chapter_count: 0 },
+    {
+      id: "root",
+      kind: "novel",
+      label: "R",
+      outline: "",
+      character: null,
+      knowledge: null,
+      side_plot: null,
+      linked_character_ids: [],
+      linked_side_plot_ids: [],
+      linked_knowledge_ids: [],
+      position: { x: 0, y: 0 },
+      word_count: 0,
+      word_count_min: 0,
+      word_count_max: 0,
+      chapter_count: 0,
+    },
     mk("misc", "", "杂项卡"),
     mk("rules", "story_rules", "规则"),
     mk("sp", "wv_spatiotemporal", "时空", ["loc2", "loc1"]),
@@ -48,6 +67,7 @@ const tree: NovelTree = {
     mk("core", "wv_core_laws", "核心", ["ax2", "ax1"]),
     mk("ax1", "wv_axiom", "公理甲"),
     mk("ax2", "wv_axiom", "公理乙"),
+    mk("extra", "", "额外"),
   ],
   edges: [
     { id: "e1", source: "core", target: "ax1", kind: "knowledge", source_handle: "top", target_handle: "bottom" },
@@ -67,7 +87,6 @@ console.assert(
   nav.findIndex((x) => x.id === "rules") > nav.findIndex((x) => x.id === "sp"),
   "story rules after fan block",
 );
-console.assert(nav.at(-1)?.id === "misc", "misc last pseudo-random bucket");
 
 console.assert(isHostPanelHiddenKnowledgeSlot("wv_core_laws"), "hide fan slot");
 console.assert(isHostPanelHiddenKnowledgeSlot("story_rules"), "hide story rules");
@@ -80,5 +99,18 @@ console.assert(panelNodes.some((n) => n.id === "ax1"), "panel keeps child cards"
 const sorted = sortLinkedKnowledgeNodes(panelNodes);
 console.assert(!sorted.some((n) => n.id === "core"), "linked sort respects panel filter");
 console.assert(sorted.some((n) => n.id === "misc"), "misc visible");
+
+const ordered = orderKnowledgeNodesByIds(tree.nodes, ["misc", "ax1", "missing"]);
+console.assert(ordered.map((n) => n.id).join(",") === "misc,ax1", "orderKnowledgeNodesByIds");
+
+const merged = mergeRootKnowledgeOrder(
+  tree.nodes,
+  ["misc", "core", "rules", "extra"],
+  ["extra", "misc"],
+);
+console.assert(
+  JSON.stringify(merged) === JSON.stringify(["core", "rules", "extra", "misc"]),
+  "fixed slots stay front when reordering root",
+);
 
 console.log("knowledgeListSort.selfcheck ok");

@@ -28,7 +28,7 @@ anyhow = "1"
 parking_lot = "0.12"
 dirs = "6"
 rig-core = "0.41"
-adk-rust = { version = "2.0.0", default-features = false, features = [
+adk-rust = { version = "2.1.0", default-features = false, features = [
   "agents",
   "openai",
   "runner",

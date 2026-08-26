@@ -88,7 +88,7 @@ const slashSuggestions = computed(() => {
   const token = v.slice(prefix.length).trim().split(/\s+/).pop()?.toLowerCase() ?? "";
   const out: SlashCmd[] = [];
   for (const s of chatSkills.value) {
-    const skillCmd = `${prefix}${s.name}`;
+    const skillCmd: string = `${prefix}${s.name}`;
     const skillHint =
       (s.description || "").split(/\n/)[0]?.trim() || t("workspace.slashHintSkill");
     if (skillCmd.toLowerCase().startsWith(q) || q === prefix) {
@@ -361,6 +361,13 @@ onMounted(() => {
   }).catch(() => {});
 });
 
+watch(
+  () => route.path,
+  () => {
+    void loadModel(t("settings.deprecated"));
+  },
+);
+
 onUnmounted(() => {
   unlistenProgress?.();
   unlistenTokens?.();
@@ -528,6 +535,7 @@ onUnmounted(() => {
             class="h-7 max-w-[11rem] truncate rounded-md border-0 bg-transparent px-1 text-xs text-muted-foreground outline-none hover:bg-muted hover:text-foreground disabled:opacity-50"
             :title="t('chat.pickModel')"
             :disabled="sending"
+            @focus="() => loadModel(t('settings.deprecated'))"
             @change="persistModel"
           >
             <option v-for="m in options" :key="m.id" :value="m.id">{{ m.label }}</option>

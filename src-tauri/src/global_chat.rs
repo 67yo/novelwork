@@ -124,12 +124,24 @@ fn system_instruction(route_name: &str, path: &str, novel_id: &str, novel_title:
 本轮能自主完成的尽量连续做完，每完成一项更新该条状态并一句说明。\
 仅当某步真正缺关键参数或存在互斥路径时停下提问；人选完后继续未完成项，不要每步都问。小而单一的需求不要强行拆任务。";
 
+    let chapter_body_write = "\
+【生成 / 精修第 N 章正文】用户说「生成第 N 章」「写第 N 章内容」「精修第 N 章」「重写第 N 章」「改写第 N 章正文」等时，必须按下列流程（Chat 自写 + set_chapter_content；工作台正文栏已无生成/精修按钮，写章一律走本流程）：\n\
+① 必须先调 `get_novel_info`（记 `word_count_min`/`word_count_max`）与 `get_chapter_info`（完整读 `ai_guidance`、`node.outline` 简纲、`node.detailed_outline` 细纲与全部 `linked_*`）。\
+若 N 不明或尚无该章节点：用 `get_tree` 按 label/顺序定位章节 `node_id`，缺章则 `add_chapter` 后再 `get_chapter_info`。\n\
+② **生成新正文**（用户说生成/写/预写，且未强调在旧稿上改）：若 `detailed_outline` 为空或不存在，**必须先** `generate_detailed_outline`（由简纲进化细纲并写回）；再遵守 `content_usage`——**禁止** `get_chapter_content`，禁止参考磁盘旧稿，**按细纲扩充**写全新正文。\n\
+③ **精修 / 改稿已有正文**（用户说精修/重写/润色且章内已有正文，可带自定义提示词）：`get_chapter_info` 后**必须**再 `get_chapter_content` 读旧稿，在旧稿骨架上改，禁止无视旧稿另起炉灶；用户提示词须遵守但仍不大改主线。\n\
+④ 正文须：`detailed_outline`（若有）每条落地，否则 `outline` 简纲节拍全覆盖；`linked_plots` 每条（根/卷/本章按各自 order 与 inherited_from）要点落地；`linked_characters` 每人须出场且言行合人设；`linked_knowledge`（含世界观/故事规则若挂在根上）的 extracted 硬约束全遵守。\n\
+⑤ **落盘前自检**（内部完成，不要把清单当正文输出）：细纲/简纲节拍是否都写了？根/卷/本章剧情是否按 order 落地？链接人物是否都出场且人设一致？知识卡 extracted 是否遵守？正文非空白字数是否在 `word_count_min`–`word_count_max` 的 ±60 字有效区间内？\
+任一项明显不达标须先改正文再 `set_chapter_content`。\n\
+⑥ 仅 `set_chapter_content` 写入 Markdown 正文；完成后用一两句说明章号、约多少字、是否精修/新生成。不要输出写作过程或自我评分清单。";
+
     if novel_id.is_empty() {
         format!(
             "你是 Novel Work 的全局助手。必须通过 MCP 工具读写小说、章节、知识库与卡片；不要臆造库里没有的数据。\n\
              当前未绑定具体小说（route={route_name} path={path}）。需要改某本书时先 list_novels 或请用户打开工作台。\n\
              公共知识库不是小说设定源；只有挂到树上的知识卡才约束写作。不要声称小说「绑定了」某本公共库。\n\
              公共知识卡目录（跨小说）：list_public_knowledge_cards / upsert_public_knowledge_card；挂到某本小说用 add_public_knowledge_card（需 novel_id 或打开工作台）。\n\
+             {chapter_body_write}\n\
              {plan_and_ask}"
         )
     } else {
@@ -146,6 +158,7 @@ fn system_instruction(route_name: &str, path: &str, novel_id: &str, novel_title:
              跨小说共用：list_public_knowledge_cards / upsert_public_knowledge_card（目录）/ add_public_knowledge_card（复制到当前树并挂选中节点）。不是每张树上知识卡都要进目录。\n\
              公共知识库不是小说设定源；只有挂到树上的知识卡才约束写作。不要声称小说「绑定了」某本公共库。\n\
              了解全书先 get_novel_info；写章先 get_chapter_info（无正文，保持生成条件干净）；精修/改稿时再 get_chapter_content 读旧稿。须完整遵守 ai_guidance（含 content_usage）。用户说「这张卡 / 当前选中」时用 get_selected_card。\n\
+             {chapter_body_write}\n\
              当前 UI：route={route_name} path={path}\n\
              {plan_and_ask}"
         )
@@ -428,6 +441,7 @@ pub async fn send(
     if ep.api_key.trim().is_empty() || ep.base_url.trim().is_empty() {
         return Err("未配置可用的 OpenAI 兼容 API Key".into());
     }
+    let api_model = crate::models::api_model_id(&model_name).to_string();
 
     let novel_id = input
         .novel_id
@@ -472,7 +486,7 @@ pub async fn send(
 
     let model = Arc::new(
         OpenAICompatible::new(
-            OpenAICompatibleConfig::new(ep.api_key.clone(), model_name.clone())
+            OpenAICompatibleConfig::new(ep.api_key.clone(), api_model.clone())
                 .with_base_url(openai_compat_base(&ep.base_url))
                 .with_provider_name(if ep.label.trim().is_empty() {
                     "openai-compatible"

@@ -1,10 +1,12 @@
+import type { MessageKey } from "@/i18n/messages";
 import type { NovelTree, TreeNode } from "@/lib/api";
 import { linkedAxiomCards } from "@/lib/axiomCards";
-import { isAxiomSlot } from "@/lib/coreLaws";
 import { linkedLocationCards } from "@/lib/locationCards";
-import { isLocationSlot } from "@/lib/spatiotemporal";
 import { linkedFactionCards, linkedRaceCards } from "@/lib/socialPowerCards";
+import { linkedMajorEventCards, linkedReligionCards } from "@/lib/historyCultureCards";
+import { linkedStoryRulesBlocks } from "@/lib/storyRulesCards";
 import { isFactionSlot, isRaceSlot } from "@/lib/socialPower";
+import { storyRulesFanTitleKey } from "@/lib/storyRules";
 import {
   STORY_RULES_SLOT,
   WORLDVIEW_FAN_SLOTS,
@@ -27,10 +29,6 @@ export type KnowledgeNavItem = {
   indent: number;
   chipShell: string;
 };
-
-function isWorldviewChildSlot(slot: string): boolean {
-  return isAxiomSlot(slot) || isLocationSlot(slot) || isRaceSlot(slot) || isFactionSlot(slot);
-}
 
 /** ponytail: 稳定伪随机，避免列表每次渲染乱序 */
 function knowledgeShuffleKey(id: string): number {
@@ -65,13 +63,25 @@ function linkedChildCards(tree: NovelTree, parent: TreeNode): TreeNode[] {
     ];
     return sortByLinkedOrder(parent, merged);
   }
+  if (slot === "wv_history_culture") {
+    const merged = [
+      ...linkedReligionCards(tree, parent.id),
+      ...linkedMajorEventCards(tree, parent.id),
+    ];
+    return sortByLinkedOrder(parent, merged);
+  }
+  if (slot === "story_rules") {
+    return sortByLinkedOrder(parent, linkedStoryRulesBlocks(tree, parent.id));
+  }
   return [];
 }
 
-export function knowledgeNodeLabel(n: TreeNode, t: (key: string) => string): string {
+export function knowledgeNodeLabel(n: TreeNode, t: (key: MessageKey) => string): string {
   const slot = knowledgeSlot(n);
   const fanKey = worldviewFanTitleKey(slot);
   if (fanKey) return t(fanKey);
+  const srKey = storyRulesFanTitleKey(slot);
+  if (srKey) return t(srKey);
   if (isStoryRulesSlot(slot)) return t(STORY_RULES_SLOT.titleKey);
   return n.label?.trim() || t("workspace.knowledgeCard");
 }
@@ -100,7 +110,44 @@ export function filterHostPanelLinkedKnowledge(nodes: TreeNode[]): TreeNode[] {
   return nodes.filter((n) => !isHostPanelHiddenKnowledgeSlot(knowledgeSlot(n)));
 }
 
-/** 章节 / 卷「关联知识卡」可见项：其余稳定伪随机（前 7 槽在面板中隐藏） */
+/** 按 id 列表顺序排列节点（跳过缺失）；用于根→卷→章有效知识展示 */
+export function orderKnowledgeNodesByIds(nodes: TreeNode[], ids: string[]): TreeNode[] {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const out: TreeNode[] = [];
+  for (const id of ids) {
+    const n = byId.get(id);
+    if (n && n.kind === "knowledge") out.push(n);
+  }
+  return out;
+}
+
+/**
+ * 根上 linked_knowledge_ids：固定槽（六世界观+故事规则）永远置顶且不参与用户排序；
+ * `sortableIds` 为面板可拖拽项的新顺序。
+ */
+export function mergeRootKnowledgeOrder(
+  nodes: TreeNode[],
+  currentLinked: string[],
+  sortableIds: string[],
+): string[] {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const linkedSet = new Set(currentLinked);
+  const fixed: string[] = [];
+  for (const slot of KNOWLEDGE_PRIORITY_SLOTS) {
+    const id = currentLinked.find((x) => {
+      const n = byId.get(x);
+      return n ? knowledgeSlot(n) === slot : false;
+    });
+    if (id) fixed.push(id);
+  }
+  const fixedSet = new Set(fixed);
+  const sortable = sortableIds.filter((id) => linkedSet.has(id) && !fixedSet.has(id));
+  const sortableSet = new Set(sortable);
+  const rest = currentLinked.filter((id) => !fixedSet.has(id) && !sortableSet.has(id));
+  return [...fixed, ...sortable, ...rest];
+}
+
+/** 无 host 顺序时的兜底（优先固定槽，其余按 id） */
 export function sortLinkedKnowledgeNodes(nodes: TreeNode[]): TreeNode[] {
   return nodes.slice().sort((a, b) => {
     const sa = knowledgeSlot(a);
@@ -113,15 +160,12 @@ export function sortLinkedKnowledgeNodes(nodes: TreeNode[]): TreeNode[] {
       if (ra !== rb) return ra - rb;
       return a.id.localeCompare(b.id);
     }
-    if (isWorldviewChildSlot(sa) && isWorldviewChildSlot(sb)) {
-      return knowledgeShuffleKey(a.id) - knowledgeShuffleKey(b.id) || a.id.localeCompare(b.id);
-    }
-    return knowledgeShuffleKey(a.id) - knowledgeShuffleKey(b.id) || a.id.localeCompare(b.id);
+    return a.id.localeCompare(b.id);
   });
 }
 
 /** 画布左侧控制台 · 知识卡列表 */
-export function buildKnowledgeNavItems(tree: NovelTree, t: (key: string) => string): KnowledgeNavItem[] {
+export function buildKnowledgeNavItems(tree: NovelTree, t: (key: MessageKey) => string): KnowledgeNavItem[] {
   const knowledgeNodes = tree.nodes.filter((n) => n.kind === "knowledge");
   const bySlot = new Map<string, TreeNode>();
   for (const n of knowledgeNodes) {
@@ -151,7 +195,10 @@ export function buildKnowledgeNavItems(tree: NovelTree, t: (key: string) => stri
   }
 
   const rules = bySlot.get(STORY_RULES_SLOT.slot);
-  if (rules) push(rules, 0);
+  if (rules) {
+    push(rules, 0);
+    for (const child of linkedChildCards(tree, rules)) push(child, 1);
+  }
 
   const rest = knowledgeNodes.filter((n) => !listed.has(n.id));
   rest.sort(

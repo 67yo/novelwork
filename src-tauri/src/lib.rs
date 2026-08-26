@@ -1,8 +1,11 @@
+mod novel_features;
+mod worldview_ops;
 mod catalog;
 mod chapter_constraints;
 mod chapter_memory;
 mod chunk;
 mod commands;
+mod core_laws_fmt;
 mod db;
 mod global_chat;
 mod kb_context;
@@ -13,6 +16,15 @@ mod models;
 mod paths;
 mod prompts;
 mod sample;
+mod info_flow_fmt;
+mod existence_fmt;
+mod character_fmt;
+mod history_culture_fmt;
+mod social_power_fmt;
+mod spatiotemporal_fmt;
+mod story_rules_ops;
+mod story_rules_fmt;
+mod volume_fmt;
 mod secret;
 mod skills;
 mod tree_layout;
@@ -119,12 +131,14 @@ pub fn run() {
             commands::list_novels,
             commands::get_novel,
             commands::update_novel_plan,
+            commands::update_novel_features,
             commands::archive_novel,
             commands::delete_novel,
             commands::create_novel,
             commands::create_novel_chat,
             commands::get_tree,
             commands::save_tree,
+            commands::save_tree_json,
             commands::delete_tree_card,
             commands::get_chapter,
             commands::save_chapter,
@@ -134,8 +148,13 @@ pub fn run() {
             commands::regenerate_chapter_memory,
             commands::preview_generate_chapter,
             commands::generate_chapter,
+            commands::generate_detailed_outline,
+            commands::regenerate_detailed_outline_item,
             commands::refine_chapter,
             commands::rewrite_chapter_paragraph,
+            commands::rewrite_text_field,
+            commands::generate_worldview_chat,
+            commands::generate_story_rules_chat,
             commands::preview_chapter_outline_brief,
             commands::plan_next_chapters,
             commands::regenerate_chapter_outline,

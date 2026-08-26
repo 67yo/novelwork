@@ -98,6 +98,14 @@ export type KnowledgeChunk = {
   content: string;
 };
 
+export type NovelFeatures = {
+  genres: string[];
+  core_play: string[];
+  styles: string[];
+  relationships: string[];
+  audiences: string[];
+};
+
 export type NovelProject = {
   id: string;
   title: string;
@@ -111,24 +119,80 @@ export type NovelProject = {
   word_count_min: number;
   word_count_max: number;
   chapter_count: number;
+  features?: NovelFeatures;
   created_at: string;
   updated_at: string;
 };
 
-export type CharacterCard = {
-  role: string;
-  personality: string;
-  motto: string;
-  gender: string;
-  style: string;
-  alignment: string;
-};
+export type { CharacterCard } from "@/lib/characterCard";
+import type { CharacterCard } from "@/lib/characterCard";
+export type { VolumeData } from "@/lib/volume";
+import type { VolumeData } from "@/lib/volume";
+
+export type { WorldAxiom, CoreLawsData } from "@/lib/coreLaws";
+export type { KeyLocation, SpatiotemporalData } from "@/lib/spatiotemporal";
+export type { WorldRace, MajorFaction, SocialPowerData } from "@/lib/socialPower";
+export type { ExistenceData } from "@/lib/existence";
+export type { InfoFlowData } from "@/lib/infoFlow";
+export type { HistoryCultureData, WorldReligion, MajorEvent } from "@/lib/historyCulture";
+export type {
+  ConstraintRedlinesData,
+  FulfillmentSystemData,
+  StoryEngineData,
+  SurfaceSettingData,
+} from "@/lib/storyRules";
+import type { CoreLawsData, WorldAxiom } from "@/lib/coreLaws";
+import type { KeyLocation, SpatiotemporalData } from "@/lib/spatiotemporal";
+import type { MajorFaction, SocialPowerData, WorldRace } from "@/lib/socialPower";
+import type { ExistenceData } from "@/lib/existence";
+import type { InfoFlowData } from "@/lib/infoFlow";
+import type { HistoryCultureData, WorldReligion, MajorEvent } from "@/lib/historyCulture";
+import type {
+  ConstraintRedlinesData,
+  FulfillmentSystemData,
+  StoryEngineData,
+  SurfaceSettingData,
+} from "@/lib/storyRules";
 
 export type KnowledgeCardPayload = {
   book_ids: string[];
   extract_prompt: string;
   extracted: string;
   from_canon?: boolean;
+  /** 根固定槽位：世界观扇形 / 故事规则；空 = 普通知识卡 */
+  slot?: string;
+  /** 核心法则结构化（slot=wv_core_laws）；与 extracted 同步 */
+  core_laws?: CoreLawsData | null;
+  /** 时空地理结构化（slot=wv_spatiotemporal）；与 extracted 同步 */
+  spatiotemporal?: SpatiotemporalData | null;
+  /** 世界公理子卡（slot=wv_axiom）；挂在核心法则上方 */
+  world_axiom?: WorldAxiom | null;
+  /** 关键地点子卡（slot=wv_location）；挂在时空地理上方 */
+  key_location?: KeyLocation | null;
+  /** 社会权力结构化（slot=wv_social_power）；与 extracted 同步 */
+  social_power?: SocialPowerData | null;
+  /** 种族子卡（slot=wv_race）；挂在社会权力上方 */
+  world_race?: WorldRace | null;
+  /** 主要势力子卡（slot=wv_faction）；挂在社会权力上方 */
+  major_faction?: MajorFaction | null;
+  /** 存在基础结构化（slot=wv_existence）；与 extracted 同步 */
+  existence?: ExistenceData | null;
+  /** 信息传播结构化（slot=wv_info_flow）；与 extracted 同步 */
+  info_flow?: InfoFlowData | null;
+  /** 历史文化结构化（slot=wv_history_culture）；与 extracted 同步 */
+  history_culture?: HistoryCultureData | null;
+  /** 宗教子卡（slot=wv_religion）；挂在历史文化上方 */
+  world_religion?: WorldReligion | null;
+  /** 重大事件子卡（slot=wv_major_event）；挂在历史文化上方 */
+  major_event?: MajorEvent | null;
+  /** 表层设定（slot=sr_surface_setting）；故事规则右侧扇形 */
+  surface_setting?: SurfaceSettingData | null;
+  /** 故事引擎（slot=sr_story_engine） */
+  story_engine?: StoryEngineData | null;
+  /** 兑现系统（slot=sr_fulfillment_system） */
+  fulfillment_system?: FulfillmentSystemData | null;
+  /** 约束红线（slot=sr_constraint_redlines） */
+  constraint_redlines?: ConstraintRedlinesData | null;
 };
 
 export type PublicKnowledgeCard = {
@@ -152,10 +216,14 @@ export type TreeNode = {
   id: string;
   kind: "novel" | "volume" | "chapter" | "character" | "side_plot" | "knowledge";
   label: string;
+  /** 简纲 */
   outline: string;
+  /** 细纲（章节）：分条场景要点 */
+  detailed_outline?: string[];
   character: CharacterCard | null;
   knowledge: KnowledgeCardPayload | null;
   side_plot?: SidePlotMeta | null;
+  volume?: VolumeData | null;
   linked_character_ids: string[];
   linked_side_plot_ids: string[];
   linked_knowledge_ids: string[];
@@ -319,6 +387,7 @@ export const api = {
     }),
   getMcpStatus: () => invoke<McpStatus>("get_mcp_status"),
   restartMcpServer: () => invoke<McpStatus>("restart_mcp_server"),
+  /** novelId+nodeId = set; novelId+null = clear only if still that novel; both null = clear all */
   setWorkspaceSelection: (novelId: string | null, nodeId: string | null) =>
     invoke<void>("set_workspace_selection", { novelId, nodeId }),
   listGenres: () => invoke<string[]>("list_genres"),
@@ -377,6 +446,8 @@ export const api = {
       wordCountMax: word_count_max,
       chapterCount: chapter_count,
     }),
+  updateNovelFeatures: (novelId: string, features: NovelFeatures) =>
+    invoke<NovelProject>("update_novel_features", { novelId, features }),
   archiveNovel: (id: string, archived: boolean) =>
     invoke<NovelProject>("archive_novel", { id, archived }),
   deleteNovel: (id: string) => invoke<void>("delete_novel", { id }),
@@ -385,6 +456,7 @@ export const api = {
     synopsis: string;
     knowledge_ids: string[];
     knowledge_strategy: string;
+    features?: NovelFeatures;
   }) =>
     invoke<NovelProject>("create_novel", {
       input: {
@@ -392,6 +464,7 @@ export const api = {
         synopsis: input.synopsis,
         knowledgeIds: input.knowledge_ids,
         knowledgeStrategy: input.knowledge_strategy,
+        features: input.features,
       },
     }),
   createNovelChat: (messages: ChatTurn[], forceCreate = false, model?: string | null) =>
@@ -400,6 +473,9 @@ export const api = {
     }),
   getTree: (novelId: string) => invoke<NovelTree>("get_tree", { novelId }),
   saveTree: (tree: NovelTree) => invoke<void>("save_tree", { tree }),
+  /** 世界观 Chat 等：JSON 字符串落盘，避免 IPC 嵌套结构体解析失败 */
+  saveTreeJson: (novelId: string, treeJson: string) =>
+    invoke<NovelTree>("save_tree_json", { novelId, treeJson }),
   deleteTreeCard: (novelId: string, nodeId: string) =>
     invoke<NovelTree>("delete_tree_card", { novelId, nodeId }),
   getChapter: (novelId: string, nodeId: string) =>
@@ -420,6 +496,54 @@ export const api = {
       instruction,
       model: model?.trim() || null,
     }),
+  /** 世界观等设定字段：按提示词改写/新写（current 可空） */
+  rewriteTextField: (
+    novelId: string,
+    fieldLabel: string,
+    current: string,
+    instruction: string,
+    context?: string | null,
+    model?: string | null,
+    /** 人物卡节点 id：整卡改写时用于参考书上下文（排除自身、对齐树上其他卡） */
+    nodeId?: string | null,
+  ) =>
+    invoke<string>("rewrite_text_field", {
+      novelId,
+      fieldLabel,
+      current,
+      instruction,
+      context: context ?? null,
+      model: model?.trim() || null,
+      nodeId: nodeId?.trim() || null,
+    }),
+  /** 根节点世界观 Chat：返回 assistant 说明 + worldview JSON */
+  generateWorldviewChat: (
+    novelId: string,
+    messages: { role: string; content: string }[],
+    model?: string | null,
+  ) =>
+    invoke<{ assistant: string; worldview: Record<string, unknown> }>(
+      "generate_worldview_chat",
+      {
+        novelId,
+        messages,
+        model: model?.trim() || null,
+      },
+    ),
+  /** 故事规则 Chat：返回 assistant + 四卡 blocks JSON */
+  generateStoryRulesChat: (
+    novelId: string,
+    messages: { role: string; content: string }[],
+    model?: string | null,
+  ) =>
+    invoke<{ assistant: string; blocks: Record<string, unknown> }>(
+      "generate_story_rules_chat",
+      {
+        novelId,
+        messages,
+        model: model?.trim() || null,
+      },
+    ),
   getChapterMemory: (novelId: string, nodeId: string) =>
     invoke<string[]>("get_chapter_memory", { novelId, nodeId }),
   listAllChapterMemory: (novelId: string) =>
@@ -457,6 +581,32 @@ export const api = {
       nodeId,
       memoryNodeIds,
       userBrief,
+      model: model?.trim() || null,
+    }),
+  generateDetailedOutline: (
+    novelId: string,
+    nodeId: string,
+    userNotes?: string,
+    model?: string | null,
+  ) =>
+    invoke<string[]>("generate_detailed_outline", {
+      novelId,
+      nodeId,
+      userNotes: userNotes ?? "",
+      model: model?.trim() || null,
+    }),
+  regenerateDetailedOutlineItem: (
+    novelId: string,
+    nodeId: string,
+    index: number,
+    userNotes?: string,
+    model?: string | null,
+  ) =>
+    invoke<string>("regenerate_detailed_outline_item", {
+      novelId,
+      nodeId,
+      index,
+      userNotes: userNotes ?? "",
       model: model?.trim() || null,
     }),
   refineChapter: (

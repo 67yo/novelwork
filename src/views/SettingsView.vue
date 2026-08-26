@@ -179,6 +179,10 @@ function opt(v: string) {
 
 function openAdd() {
   adding.value = true;
+  resetAddForm();
+}
+
+function resetAddForm() {
   addLabel.value = "";
   addProtocol.value = "openai";
   addBaseUrl.value = "https://api.deepseek.com";
@@ -190,7 +194,7 @@ function openAdd() {
 
 function cancelAdd() {
   adding.value = false;
-  addErr.value = "";
+  resetAddForm();
 }
 
 async function fetchAddModels() {

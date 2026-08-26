@@ -26,7 +26,7 @@
 
 可取消：凡走 `arm_chat_cancel(novel_id)` 的流程均可 `chat_cancel` 中止（含落地补写、大纲生成、记忆抽取）。
 
-进度事件：`chapter-progress`（预生成 / 精修 / 根节点生成章节卡 / 生成下一章 / 手动重抽记忆）。
+进度事件：`chapter-progress`（预生成 / 精修 / 根节点生成章节卡 / 生成下一章 / 手动重抽记忆）。预生成与精修的第一步为 `confirm_model`（含实际模型名 `detail`），再进入 `context`。
 
 ---
 
@@ -36,8 +36,8 @@
 |------|------|----------|
 | **章节卡生成** | 结构树上的章节节点：`label` + `outline`（**无正文**） | 根节点「生成章节卡」（空卡，无 AI）；大纲刷新等仍可由后端命令支持 |
 | **分卷（volume）** | 可选中间层节点：根 → 分卷 → 章节；亦可章直接挂根 | 画布「添加分卷」/ MCP `add_volume` |
-| **预生成** | 单章 **正文** Markdown；**禁止参考本章已有正文**，按大纲/卡/前序记忆重写 | 章节卡工具栏「预生成」 |
-| **精修** | **必须在当前已有正文上**小幅改写（无正文则拒绝；**不**抽记忆） | 章节卡工具栏「精修」 |
+| **预生成** | 单章 **正文** Markdown；**禁止参考本章已有正文**，按大纲/卡/前序记忆重写 | 全局 Chat「生成第 N 章」+ MCP（工作台无按钮；后端仍有 `generate_chapter`） |
+| **精修** | **必须在当前已有正文上**小幅改写（无正文则拒绝；**不**抽记忆） | 全局 Chat「精修第 N 章」+ MCP（工作台无按钮；后端仍有 `refine_chapter`） |
 | **章节记忆** | 摘要事实（非整章正文） | 记忆面板**手动**提取（可写注意事项） |
 
 **分卷继承（写章 / MCP / 左栏）**
@@ -100,11 +100,11 @@
 
 | 块 | 上限 |
 |----|------|
-| 知识卡 `extracted`（单卡） | 500 字 |
-| 根知识卡合计 | 2k |
+| 知识卡 `extracted`（单卡） | 500 字；**核心法则**、**时空地理**、**社会权力**、**存在基础**与 **信息传播**（`wv_core_laws` / `wv_spatiotemporal` / `wv_social_power` / `wv_existence` / `wv_info_flow`）例外：由结构化字段 + 挂接子卡（若有）现场拼完整正文，单卡 ≤3500 |
+| 根知识卡合计 | 2k；含上述结构化卡时总预算按卡数追加差额（约每张再 +3k），且核心法则优先注入 |
 | 公共库检索（知识卡填充 / Chat `search_knowledge`） | 召回约 **20** ∪ 规则重排 → top **5** × **400**（带 `book_id#idx`）；评测见 `tests/fixtures/kb_retrieve_cases.json` |
 | 章节记忆（勾选范围内） | top **6** × **300**，整块硬顶 **~2k**（带 `memory:node_id`） |
-| 本章知识卡合计 | 2k |
+| 本章知识卡合计 | 2k；含上述结构化卡时同根侧追加差额 |
 
 **组装规则（`assemble_outline_gen_brief`）**
 
@@ -126,8 +126,8 @@
 |----|-------------|------|------------|
 | 简介 + 根说明 + 人物 | `root_generate_reference` | `synopsis`、根 `outline`、根链接/边关联的**人物卡** | 定调与人设 |
 | **剧情卡** | `root_linked_plots_and_knowledge` | 根 `linked_side_plot_ids` + 根边上的 `side_plot`；**仅** `plot_is_injectable`（进行中且未吸收）；只注入**要点**（`outline`） | **本批须为其安排合理推进，禁止只点名** |
-| **知识卡** | 同上 | 根 `linked_knowledge_ids` + 根边上的 `knowledge`；优先 `extracted`（单卡 ≤500，根合计 ≤2k），否则提取需求 / 节点 outline | **专名与规则勿与之冲突** |
-| **本章链接知识卡** | `chapter_context` | 章 `linked_knowledge_ids` ∪ 章边 **+ 根/分卷继承知识卡**；写作手法/文风/用词/关键词替换等**硬约束** | **生成正文必须严格遵守** |
+| **知识卡** | 同上 | 根 `linked_knowledge_ids` + 根边上的 `knowledge`（含世界观固定槽与普通知识卡）；优先 `extracted`（单卡 ≤500，根合计 ≤2k），**核心法则**则现场拼立意/禁忌/力量 + **全部公理子卡**，**时空地理**则拼立意/时代等 + **全部地点子卡**，**社会权力**则拼立意/阶层/体制/可见性 + **全部种族与主要势力子卡**，**存在基础**则拼立意/死亡/历法/寿命/疫病与繁衍，**信息传播**则拼信息速度/壁垒/留言与真相/知识载体（≤3500，合计预算按结构化卡数上调），否则提取需求 / 节点 outline | **专名与规则勿与之冲突** |
+| **本章链接知识卡** | `chapter_context` | 章有效知识 = **根排序** ∪ **分卷排序** ∪ **本章排序**（`linked_knowledge_ids` 顺序；去重先到优先）；六世界观 + 故事规则在根序最前且不参与用户排序；写作手法/文风/用词等**硬约束** | **生成正文必须严格遵守** |
 | **本章剧情** | `chapter_context` / `get_chapter_info` | 章本机剧情（可排序）+ 根/分卷继承剧情（**不参与本章 order**） | 根 / 卷 / 本章分别按各自 order |
 
 说明：
@@ -217,7 +217,8 @@
 | 全书简介 + 根节点说明 | `novel.synopsis`、根 `outline` | 定调 |
 | 根节点关联人物卡 | 根链接 / 边 | 全书人设 |
 | **前序大纲 + 章节记忆** | 结构树前序章 + `chapter_memory`（**可选勾选**，默认不带全历史；**排除本章**） | **既定事实，禁止推翻**（刹车） |
-| **本章章纲** | 章节节点 `outline` | **主线，不可丢关键节拍** |
+| **本章简纲** | 章节节点 `outline` | **主线走向** |
+| **本章细纲** | 章节节点 `detailed_outline: string[]` | **场景落地清单；正文据此扩充**（优先于简纲做验收） |
 | **链接剧情卡**（含根贯穿） | 本章链接 + 根贯穿；**仅进行中且未吸收** | **须落地并推进**（导航） |
 | 链接人物卡 + 关系边 | 本章 / 剧情卡 / 根并集 | 言行合卡 |
 | 链接知识卡 | 本章 `linked_knowledge_ids` ∪ 边（及根贯穿）；`extracted` / `extract_prompt` | **写作硬约束**：手法节奏、文风语气、用词/禁用词、关键词与专名替换、视角时态、对话与修辞等 |
@@ -225,25 +226,26 @@
 | **每章目标字数** | §4 | **硬性篇幅（写进 Prompt）** |
 | ~~本章已有正文~~ | **不注入** | 预生成禁令 |
 
-冲突时：**前序记忆/大纲 → 本章大纲 → 剧情卡 → 人物 → 本章知识卡（硬约束文风/用词） → 简介**。未链接设定勿硬塞。公共库全文不注入写作。
+冲突时：**前序记忆/大纲 → 本章细纲 → 本章简纲 → 剧情卡 → 人物 → 本章知识卡（硬约束文风/用词） → 简介**。未链接设定勿硬塞。公共库全文不注入写作。
 
 ### 2.3 流程
 
-命令：章节卡工具栏「预生成」→ `generate_chapter(…, user_brief, model?)` · Prompt：`generate_chapter_*` · 模型：传入则覆盖，否则 `generate_model`  
-（`preview_generate_chapter` 可供程序化勾选记忆章；工具栏默认**不带**历史记忆检索。）
+命令：`generate_chapter(…, user_brief, model?)`（后端仍保留；**工作台正文栏已去掉生成按钮**，日常写章用全局 Chat + MCP）· Prompt：`generate_chapter_*` · 模型：传入则覆盖，否则 Chat `chat_model`  
+（`preview_generate_chapter` 可供程序化勾选记忆章。）
 
 1. 用户点预生成，可选附加条件（即 `user_brief`）。  
-2. 组装 `root_generate_reference` +（可选）勾选**前序**章大纲/记忆 top-k（排除本章）+ `chapter_context`（含进行中剧情卡；知识卡摘要有预算）+ 用户条件；**不读**本章已有正文。  
-3. `root_chapter_word_target` 解析字数；写入 system/user（目标 + ±60；**禁止越出有效区间**，见 §4）；Prompt 写明「禁止参考本章已有正文」。  
-4. 代码生成「必须落地」契约（大纲节拍 / **可注入**剧情卡 / 本章焦点人物）写入 user。  
-5. 首轮 LLM **重写**正文（覆盖磁盘旧稿）。  
-6. **落地补写**（可选）：关键词未命中 → `repair_chapter_*` 再一轮（**不做字数验证/硬约束**，只补缺项）；Mock 跳过。  
-7. 写 `chapters/{node_id}.md`（附 footer），树上字数按正文（不含 footer）。偏目标仅 `word_count_off_note`（标注，不触发重写）。  
-8. **不**抽取章节记忆。  
+2. **细纲**：若 `detailed_outline` 为空，则 `generate_detailed_outline`（由简纲进化并写回树）；已有细纲则保留手改。亦可在左栏单独点「AI 生成」强制重写整份细纲，或对单条点「AI 重写」（`regenerate_detailed_outline_item`）；条目可上下排序。  
+3. 组装 `root_generate_reference` +（可选）勾选**前序**章大纲/记忆 top-k（排除本章）+ `chapter_context`（含简纲+细纲与进行中剧情卡；知识卡摘要有预算）+ 用户条件；**不读**本章已有正文。  
+4. `root_chapter_word_target` 解析字数；写入 system/user（目标 + ±60；**禁止越出有效区间**，见 §4）；Prompt 写明「禁止参考本章已有正文」「正文从细纲扩充」。  
+5. 代码生成「必须落地」契约（**优先细纲分条**，否则简纲节拍 / **可注入**剧情卡 / 本章焦点人物）写入 user。  
+6. 首轮 LLM **重写**正文（覆盖磁盘旧稿）。  
+7. **落地补写**（可选）：关键词未命中 → `repair_chapter_*` 再一轮（**不做字数验证/硬约束**，只补缺项）；Mock 跳过。  
+8. 写 `chapters/{node_id}.md`（附 footer），树上字数按正文（不含 footer）。偏目标仅 `word_count_off_note`（标注，不触发重写）。  
+9. **不**抽取章节记忆。  
 
 一键自动：工具栏默认（**不带历史记忆**）+ 已存/缺省条件（靠进行中剧情卡导航）。  
 
-进度阶段（5）：`context` → `writing` → `check_beats` →（缺项则）`repair_land` → `saving`。
+进度阶段（6）：`context` → `detailed_outline` → `writing` → `check_beats` →（缺项则）`repair_land` → `saving`。
 
 ### 2.4 落地检查（`chapter_constraints`）
 
@@ -276,17 +278,17 @@
 | **精修条件**（可编辑） | 精修确认框；一键自动用 `localStorage` 缺省；注入 `refine_chapter_user` |
 | **每章目标字数** | §4；system/user 写明具体区间 |
 
-UI：章节卡工具栏「精修」；默认 `memory` + 前 10 章。一键自动用已存条件与面板记忆的 mode/prevN。
+UI：精修参考默认 `memory` + 前 10 章（后端参数；Chat 路径由 Agent 自行取上下文）。
 
 ### 3.3a 段落改写（正文编辑）
 
-正文面板编辑模式：左侧 gutter（约一格 icon 宽）在**非空段落首行**显示改写入口；弹层填写修改意见 → `rewrite_chapter_paragraph`（模型同全局 Chat `chat_model`）→ 回填该段并自动保存。编辑中**停手 3 秒**后自动保存（持续输入会重置计时）；「保存正文」仍可立即落盘并退出编辑。
+正文面板**默认即为全文编辑**（无 Markdown 预览切换）。左侧 gutter（约一格 icon 宽）：**鼠标移入某非空段落时**才显示该段改写入口；弹层填写修改意见 → `rewrite_chapter_paragraph`（模型同全局 Chat `chat_model`）→ 回填该段并自动保存。编辑中**停手 3 秒**后自动保存（持续输入会重置计时；无单独「保存正文」按钮）。精修后若有 diff，可在面板内切换查看差异。
 
 Prompt：`rewrite_paragraph_*`。不经全局 Chat 多轮/工具链。
 
 ### 3.3 流程
 
-命令：章节卡工具栏「精修」→ `refine_chapter(…, user_brief, model?)` · Prompt：`refine_chapter_*` · 模型：传入则覆盖，否则 `refine_model`
+命令：`refine_chapter(…, user_brief, model?)`（后端仍保留；**工作台正文栏已去掉精修按钮**，日常精修用全局 Chat「精修第 N 章」+ MCP）· Prompt：`refine_chapter_*` · 模型：传入则覆盖，否则 Chat `chat_model`
 
 1. 读取当前章正文；若空则错误返回（须先预生成）。  
 2. 按模式组装前 N 章材料 + `chapter_context` + **当前正文底稿** + 用户精修条件。  
@@ -355,16 +357,16 @@ Prompt：`rewrite_paragraph_*`。不经全局 Chat 多轮/工具链。
 ## 6. 相关 UI 与自动化
 
 - **设置**：API / 兼容供应商与 Key；**模型在全局 Chat 发送旁选择**（写入 `chat_model`，预生成 / 精修 / 开书 / 记忆抽取共用）。**公共知识库向量索引不走 API**，使用本地 `paraphrase-multilingual-MiniLM-L12-v2`（fastembed）。  
-- **根节点**：封面、每章字数、全书章数、**总纲**。画布工具栏可添加**分卷**与章节卡。MCP / 全局 Chat 仍可批量生成章节卡或整理剧情。进入工作台默认 `fitView` 完整展示当前树。**无根 Chat**。公共库不是小说设定源。  
+- **根节点**：封面、每章字数、全书章数、**功能选项**（题材 / 核心玩法 / 风格 / 关系 / 受众，多选；创建小说时亦可设置；**世界观生成必须遵守**）、**总纲**、**生成世界观**（缺省时一键挂六张扇形世界观知识卡 + 右侧「故事规则」；`knowledge.slot` 固定；不可删，可手写 `extracted`；与根的连线不可切断）。画布工具栏可添加**分卷**与章节卡。MCP / 全局 Chat 仍可批量生成章节卡或整理剧情。进入工作台默认 `fitView` 完整展示当前树。**无根 Chat**。公共库不是小说设定源。  
 - **分卷卡**：可选中间层（根 → 分卷 → 章，或章直接挂根）。标题与分卷纲要；可挂人物/剧情/知识（继承根只读 + 本卷可排剧情）。删除二次确认：卷下章节改挂根，不删正文。  
-- **章节卡**：左侧标题、关联剧情/知识卡（**继承根 / 所属分卷**；本章剧情可拖拽排序，根/卷继承只读），**章纲**排在左栏内容最后（样式与根节点**总纲**相同）。章节正文面板工具栏：**停止**、复制、**章节记忆**、预览/编辑，位于 Markdown **预览 / 编辑**左侧（预生成/精修改由全局 Chat / MCP）。编辑模式左侧 gutter 可对单段 AI 改写（§3.3a）；编辑停手 3 秒后自动保存。画布章节卡仅显示标题 / 字数 / 章纲。MCP `get_chapter_info` **不含正文**，返回 `volume`、关联剧情（`inherited_from`: root|volume|chapter）、必出人物、关联知识卡（本章∪卷∪根），以及 `ai_guidance`（含 `content_usage`：生成勿读旧稿，精修另调 `get_chapter_content`）。MCP `get_novel_info` 返回小说简介、根上人物/剧情/知识卡与 `volumes` 摘要（不含公共库绑定）。  
-- **人物卡**：左侧表单编辑全部字段 + **保存**（无人物卡 Chat）。  
-- **知识卡**：勾选公共库后点**完整导入**（把所选库正文写入「已提取特征」；已有内容会先确认覆盖），或直接手写写作约束（手法/文风/用词/关键词替换等）。可选**存为公共知识卡**（跨小说目录，复制一份；无版本号）。工作台可从目录**添加公共知识卡**，挂到当前选中节点（章/分卷/根或其宿主）。Chat/MCP：`list_public_knowledge_cards` / `upsert_public_knowledge_card` / `add_public_knowledge_card`；树上卡仍用 `fill_knowledge_card` 或 `search_knowledge` 后 `upsert_knowledge_card`。MCP 新建默认挂当前选中章否则末章（`link_to` 的 `root` 会解析成根节点真实 id）；边为章.left ← 知识.right。挂到章节后，预生成/精修/**MCP 写章**须**严格遵守**。  
+- **章节卡**：左侧标题、关联剧情/知识卡（**继承根 / 所属分卷**；本章剧情与**本章知识**可拖拽排序，根/卷继承只读；有效知识注入顺序 **根 → 卷 → 章**；根上六世界观+故事规则固定置顶），**简纲** + **细纲列表**排在左栏内容最后（细纲可 AI 从简纲进化——先弹窗填可选提示词；**上下排序**；**单条 AI 重写**同样先填提示；或手改，失焦自动保存）。章节正文面板**默认全屏编辑**（无预览模式）；工具栏：**停止**（其它 AI 任务进行中）、复制、**章节记忆**、停靠位置（右/下）。**生成/精修正文请用全局 Chat**（「生成第 N 章」「精修第 N 章」+ MCP）。左侧 gutter **悬停段落时**显示 AI 改写入口（§3.3a）；停手 3 秒自动保存（无单独「保存正文」按钮）。画布章节卡仅显示标题 / 字数 / **简纲**。MCP `get_chapter_info` **不含正文**，返回 `volume`、关联剧情（`inherited_from`: root|volume|chapter）、必出人物、关联知识卡（本章∪卷∪根，顺序根→卷→章），以及 `ai_guidance`（含 `content_usage`：生成勿读旧稿，细纲空则先 `generate_detailed_outline`，精修另调 `get_chapter_content`）。MCP `get_novel_info` 返回小说简介、根上人物/剧情/知识卡与 `volumes` 摘要（不含公共库绑定）。  
+- **人物卡**：左侧结构化表单（真名/别称/世界位置/锚点/关系网/信念/深层/声线）+ **保存** + **AI 改写整卡**（须填满全部字段）。MCP：`get_character_card`（完整 `character` + `formatted`）/ `upsert_character_card`（可传完整 `character` 对象）。写章注入人设全文。  
+- **知识卡**：勾选公共库后点**完整导入**（把所选库正文写入「已提取特征」；已有内容会先确认覆盖），或直接手写写作约束（手法/文风/用词/关键词替换等）。可选**存为公共知识卡**（跨小说目录，复制一份；无版本号）。工作台可从目录**添加公共知识卡**，挂到当前选中节点（章/分卷/根或其宿主）。根上另有固定槽位知识卡（世界观六卡扇形向上 +「故事规则」向右），不占左栏普通知识带、不与剧情卡抢第一右列。**核心法则**（`slot=wv_core_laws`）左侧：一句话立意、**世界公理标题列表**（点标题打开子卡；**添加公理**在核心法则上方扇形挂 `wv_axiom` 知识卡，可删）、禁忌红线、力量体系、力量表现。公理字段（名称/表述/边界/代价/执行机制）在子卡编辑（可单字段或 **AI 重写整条**），汇总进核心法则 `extracted`；写作注入时核心法则正文含完整公理子卡。旧内嵌 `axioms` 打开树时自动迁为子卡。**时空地理**（`slot=wv_spatiotemporal`）：一句话立意、时代背景、生态、世界格局、**关键地点标题列表**（点标题打开子卡；**添加地点**在时空地理上方扇形挂 `wv_location` 知识卡，可删；可 **AI 一次性生成**多条子卡）、环境质感；地点字段（名称/特征/地貌/控制势力）在子卡编辑（可单字段或 **AI 重写整条**），汇总进时空地理 `extracted`；写作注入含完整地点子卡。旧内嵌 `locations` 打开树时自动迁为子卡。**社会权力**（`slot=wv_social_power`）：一句话立意、**种族标题列表**（点标题打开子卡；**添加种族**在社会权力上方扇形左弧挂 `wv_race` 知识卡，可删；画布玫瑰色）、**主要势力标题列表**（点标题打开子卡；**添加势力**在右弧挂 `wv_faction` 知识卡，可删；画布靛蓝色）、阶层结构（一句话）、政治体制、权力可见性。种族字段（名称/特征/人口/社会地位）与势力字段（类型/目标/手段/权力基础）在子卡编辑（可单字段或 **AI 重写整条**），汇总进社会权力 `extracted`；写作注入含完整种族与势力子卡。旧内嵌 `races`/`factions` 打开树时自动迁为子卡。**存在基础**（`slot=wv_existence`）：一句话立意、死亡、历法、寿命、疫病与繁衍；各字段可 **AI 改写**，保存后同步 `extracted`；写作注入由 `existence_fmt` 拼完整结构化正文。**信息传播**（`slot=wv_info_flow`）：一句话立意、信息速度、信息壁垒、留言与真相、知识载体；各字段可 **AI 改写**，保存后同步 `extracted`；写作注入由 `info_flow_fmt` 拼完整结构化正文。Chat/MCP：`list_public_knowledge_cards` / `upsert_public_knowledge_card` / `add_public_knowledge_card`；树上卡仍用 `fill_knowledge_card` 或 `search_knowledge` 后 `upsert_knowledge_card`。MCP 新建默认挂当前选中章否则末章（`link_to` 的 `root` 会解析成根节点真实 id）；边为章.left ← 知识.right（固定槽位：扇形 top→bottom，故事规则 right→left）。挂到章节后，预生成/精修/**MCP 写章**须**严格遵守**。  
 - **剧情卡**：标题/状态在上，**情节**排在左栏内容最后（样式与总纲/章纲相同；无剧情卡 Chat）。  
 - **知识库 Library**：一行工具条：左侧 **知识源 / 知识卡**，右侧小段 **进行中 / 已归档**（两类共用）+ 导入（知识源）或**新建知识卡**（知识卡页，可空手写规则，不必先导入知识源）。**知识源**：导入 txt/epub/网址时**无 Chat、无模型选择、无 AI 分析**；元数据来自文件/网页解析；正文按 **1000 字切段、段间重叠 20 字**（epub 多章另写目录块 + 按章切段）写入 SQLite + LanceDB，并用本地 MiniLM 建索引。模型文件整文件下载到 `{data}/novework/models/paraphrase-multilingual-MiniLM-L12-v2/`（绕过 hf-hub Range/`Content-Range` 问题；可用 `HF_ENDPOINT` 指定镜像）。可查看索引状态、「重建索引」、重新入库；块列表可显示来源章名提示。**知识卡**：公共知识卡目录（手写新建，或从工作台「存为公共知识卡」写入），可编辑/归档/删除目录项（树上已挂副本不级联删除；归档后不可再挂到新小说）。  
 - **画布**：添加卡片（含 MCP 新建卡）后自动一键排版；也可手动一键排版或 MCP `layout_tree`。**画布导航**（画布左侧浮动，不随缩放；工具栏 ListTree 图标切换）分 Tab：**章节**（根 + 各章）、**分卷**、**人物**、**剧情**、**知识**；点击居中放大对应卡。查看全部章节记忆。  
-- **MCP**：设置可配端口（默认 `17832`）、**是否允许局域网访问**（开启则监听 `0.0.0.0`）与是否随应用启动；侧栏显示运行状态。本机 `http://127.0.0.1:{port}/mcp` 由 **`rmcp` Streamable HTTP** 提供公共知识库导入/向量检索/归档删除，公共知识卡目录（`list_public_knowledge_cards` / `upsert_public_knowledge_card` / `add_public_knowledge_card`），以及小说建改、分卷（`add_volume`）、章节大纲与正文、人物/剧情/知识卡与关联。全书快照 `get_novel_info`（含 `volumes`），写章快照 `get_chapter_info`（含分卷继承），工作台当前选中 `get_selected_card`。工作台已选中时 MCP 的 `novel_id`/`node_id` 可省略。Chat/MCP 改树后工作台会刷新。**接口字段与样例见 [`API.md`](API.md)**（改 `mcp.rs` 工具时同步）。  
-- **全局 Chat**：左栏开关 + 壳层右侧**嵌入栏**（与工作台并排，不遮挡；**默认打开**，可隐藏、可拖宽，开关会记住）。进程内多轮，不跨重启持久。进入小说工作台时**绑定当前书**（栏标题为书名；对话按书隔离）；离开工作台回到全局槽。输入 `/` 或 `@` **补全 skills**（应用内置 `src-tauri/skills` + `~/.agents/skills`，同名覆盖内置）。内置 `/novel` 及其 SKILL.md 中的 MCP 工具名（如 `/novel get_selected_card`）可补全；工作台内 `/novel` 读写章/卡时可省略 `novel_id`/`node_id`（用当前选中）。**大需求**：先拆编号任务列表并直接开做（不征求「是否执行」）；需人力时用是否/单选/多选停下，选完连续做完且禁止同义再确认（任务行禁止 `- [ ]`）。「要不要继续」类是否题不展示选项芯片。助手仅在缺信息或互斥路径、不选就无法下一步时才给出是否/选项，对话里才出可点选项：单选即发，多选勾选后确认。完成操作后不追问要不要继续。发送后用户消息立即出现并显示本次 prompt token（先估算后按 API 实值更新）；等待时占位助手气泡显示当前步骤（连接 / 思考 / 调用 MCP 工具 / 写回复）与每步耗时。Chat 的 token 写入与预生成相同的 `token_usage` 表（绑定小说则计入该书；未绑定只进日/月总量）。ADK-Rust `LlmAgent` + 上述 skills；经 ADK `McpToolset`（HTTP）调用本机 MCP。须在设置中启用 MCP；**模型在发送旁选择**（OpenAI 兼容目录）。停止当前回复后会给未完成的 `tool_calls` 补一条 cancelled 结果，再发下一条才不会被 DeepSeek/OpenAI 以 400 拒绝。工作台**无根 Chat / 章节卡 Chat**。  
+- **MCP**：设置可配端口（默认 `17832`）、**是否允许局域网访问**（开启则监听 `0.0.0.0`）与是否随应用启动；侧栏显示运行状态。本机 `http://127.0.0.1:{port}/mcp` 由 **`rmcp` Streamable HTTP** 提供公共知识库导入/向量检索/归档删除，公共知识卡目录（`list_public_knowledge_cards` / `upsert_public_knowledge_card` / `add_public_knowledge_card`），以及小说建改（含 `features` 功能选项）、分卷（`add_volume`）、章节大纲与正文、**章节记忆**（`get_chapter_memory` / `list_chapter_memory` / `set_chapter_memory` / `regenerate_chapter_memory`）、**世界观**（`get_worldview` / `ensure_worldview` / `apply_worldview` / `generate_worldview`，生成须服从功能选项）、人物（`get_character_card` / `upsert_character_card`）、剧情/知识卡与关联。全书快照 `get_novel_info`（含 `volumes` 与 `features`），写章快照 `get_chapter_info`（含分卷继承），工作台当前选中 `get_selected_card`。工作台已选中时 MCP 的 `novel_id`/`node_id` 可省略。Chat/MCP 改树后工作台会刷新。**接口字段与样例见 [`API.md`](API.md)**；**载荷格式变更须同步 MCP**（见 `.cursor/rules/mcp-sync.mdc`）。  
+- **全局 Chat**：左栏开关 + 壳层右侧**嵌入栏**（与工作台并排，不遮挡；**默认打开**，可隐藏、可拖宽，开关会记住）。进程内多轮，不跨重启持久。进入小说工作台时**绑定当前书**（栏标题为书名；对话按书隔离）；离开工作台回到全局槽。输入 `/` 或 `@` **补全 skills**（应用内置 `src-tauri/skills` + `~/.agents/skills`，同名覆盖内置）。内置 `/novel` 及其 SKILL.md 中的 MCP 工具名（如 `/novel get_selected_card`）可补全；工作台内 `/novel` 读写章/卡时可省略 `novel_id`/`node_id`（用当前选中）。**「生成/重写第 N 章正文」**：系统指令 + `/novel` skill 规定必须先 `get_novel_info` + `get_chapter_info`；新生成禁止读旧稿，重写须 `get_chapter_content`；落盘前自检章纲/剧情 order/人物/知识卡/字数（±60）再 `set_chapter_content`（软约束，非工作台 `generate_chapter` 流水线）。**大需求**：先拆编号任务列表并直接开做（不征求「是否执行」）；需人力时用是否/单选/多选停下，选完连续做完且禁止同义再确认（任务行禁止 `- [ ]`）。「要不要继续」类是否题不展示选项芯片。助手仅在缺信息或互斥路径、不选就无法下一步时才给出是否/选项，对话里才出可点选项：单选即发，多选勾选后确认。完成操作后不追问要不要继续。发送后用户消息立即出现并显示本次 prompt token（先估算后按 API 实值更新）；等待时占位助手气泡显示当前步骤（连接 / 思考 / 调用 MCP 工具 / 写回复）与每步耗时。Chat 的 token 写入与预生成相同的 `token_usage` 表（绑定小说则计入该书；未绑定只进日/月总量）。ADK-Rust `LlmAgent` + 上述 skills；经 ADK `McpToolset`（HTTP）调用本机 MCP。须在设置中启用 MCP；**模型在发送旁选择**（OpenAI 兼容目录）。停止当前回复后会给未完成的 `tool_calls` 补一条 cancelled 结果，再发下一条才不会被 DeepSeek/OpenAI 以 400 拒绝。工作台**无根 Chat / 章节卡 Chat**。  
 - **等待界面**：阶段文案 + 进度条 + 每步耗时。  
 
 ---
@@ -373,6 +375,7 @@ Prompt：`rewrite_paragraph_*`。不经全局 Chat 多轮/工具链。
 
 | 改动类型 | 必须更新 |
 |----------|----------|
+| 树上载荷 / 写作注入格式 / MCP 工具 | `mcp.rs` + `API.md` + `skills/novel/SKILL.md`（见 `.cursor/rules/mcp-sync.mdc`） |
 | 章节卡 / 大纲生成 / 整理剧情 | §1（含 **§1.0.1**、**§1.3c**） |
 | 预生成正文 | §2、§4 |
 | 精修 / 段落改写 | §3（含 **§3.3a**）、§4 |
@@ -380,4 +383,4 @@ Prompt：`rewrite_paragraph_*`。不经全局 Chat 多轮/工具链。
 | 记忆抽取/存储（手动、注意事项） | §5 |
 | UI 文案 | `src/i18n/messages.ts` 六语言 |
 
-Cursor 规则：`.cursor/rules/project-md-sync.mdc`（改上述流程时强制同步本文）。
+Cursor 规则：`.cursor/rules/project-md-sync.mdc`（章节 AI 流程）、`.cursor/rules/mcp-sync.mdc`（载荷与 MCP 契约）、`.cursor/rules/i18n-sync.mdc`（界面文案）。

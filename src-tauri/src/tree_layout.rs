@@ -60,7 +60,7 @@ fn is_worldview_layout_slot(slot: &str) -> bool {
     is_fan_slot(slot)
         || matches!(
             slot,
-            "wv_axiom" | "wv_location" | "wv_race" | "wv_faction"
+            "wv_axiom" | "wv_location" | "wv_race" | "wv_faction" | "wv_religion" | "wv_major_event"
         )
 }
 
@@ -483,6 +483,165 @@ fn relayout_worldview(
     );
 }
 
+fn card_center_x(n: &TreeNode) -> f64 {
+    n.position.x + SIDE_CARD_W / 2.0
+}
+
+fn reach_from_center(main: &TreeNode, kid_ids: &[String], by_id: &HashMap<String, usize>, nodes: &[TreeNode], dir: f64) -> f64 {
+    let mc = card_center_x(main);
+    let mut reach = SIDE_CARD_W / 2.0;
+    for id in kid_ids {
+        let Some(&ki) = by_id.get(id) else { continue };
+        let k = &nodes[ki];
+        if dir > 0.0 {
+            reach = reach.max(k.position.x + SIDE_CARD_W - mc);
+        } else {
+            reach = reach.max(mc - k.position.x);
+        }
+    }
+    reach
+}
+
+fn adjacent_mains_too_close(
+    nodes: &[TreeNode],
+    by_id: &HashMap<String, usize>,
+    fan_by_slot: &HashMap<String, String>,
+    axiom_ids: &[String],
+    location_ids: &[String],
+    race_ids: &[String],
+    faction_ids: &[String],
+) -> bool {
+    let mut mains: Vec<&str> = WV_FAN_ORDER
+        .iter()
+        .filter_map(|s| fan_by_slot.get(*s).map(|id| id.as_str()))
+        .collect();
+    mains.sort_by(|a, b| {
+        let ca = card_center_x(&nodes[*by_id.get(*a).unwrap()]);
+        let cb = card_center_x(&nodes[*by_id.get(*b).unwrap()]);
+        ca.partial_cmp(&cb).unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.cmp(b))
+    });
+    let kids_of = |slot: &str| -> Vec<String> {
+        match slot {
+            "wv_core_laws" => axiom_ids.to_vec(),
+            "wv_spatiotemporal" => location_ids.to_vec(),
+            "wv_social_power" => {
+                let mut v = race_ids.to_vec();
+                v.extend(faction_ids.iter().cloned());
+                v
+            }
+            _ => vec![],
+        }
+    };
+    for i in 0..mains.len().saturating_sub(1) {
+        let left_id = mains[i];
+        let right_id = mains[i + 1];
+        let li = *by_id.get(left_id).unwrap();
+        let ri = *by_id.get(right_id).unwrap();
+        let left = &nodes[li];
+        let right = &nodes[ri];
+        let left_slot = knowledge_slot(left);
+        let right_slot = knowledge_slot(right);
+        let need = reach_from_center(left, &kids_of(left_slot), by_id, nodes, 1.0)
+            + reach_from_center(right, &kids_of(right_slot), by_id, nodes, -1.0)
+            + WV_CARD_GAP;
+        let have = card_center_x(right) - card_center_x(left);
+        if have + 0.5 < need {
+            return true;
+        }
+    }
+    false
+}
+
+fn separate_mains_by_child_reach(
+    nodes: &mut [TreeNode],
+    by_id: &HashMap<String, usize>,
+    fan_by_slot: &HashMap<String, String>,
+    root_idx: usize,
+    axiom_ids: &[String],
+    location_ids: &[String],
+    race_ids: &[String],
+    faction_ids: &[String],
+) -> bool {
+    let mut mains: Vec<String> = WV_FAN_ORDER
+        .iter()
+        .filter_map(|s| fan_by_slot.get(*s).cloned())
+        .collect();
+    if mains.len() < 2 {
+        return false;
+    }
+    mains.sort_by(|a, b| {
+        let ca = card_center_x(&nodes[*by_id.get(a).unwrap()]);
+        let cb = card_center_x(&nodes[*by_id.get(b).unwrap()]);
+        ca.partial_cmp(&cb)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.cmp(b))
+    });
+    let kids_of = |slot: &str| -> Vec<String> {
+        match slot {
+            "wv_core_laws" => axiom_ids.to_vec(),
+            "wv_spatiotemporal" => location_ids.to_vec(),
+            "wv_social_power" => {
+                let mut v = race_ids.to_vec();
+                v.extend(faction_ids.iter().cloned());
+                v
+            }
+            _ => vec![],
+        }
+    };
+    let mut reach_r = Vec::with_capacity(mains.len());
+    let mut reach_l = Vec::with_capacity(mains.len());
+    for id in &mains {
+        let i = *by_id.get(id).unwrap();
+        let slot = knowledge_slot(&nodes[i]).to_string();
+        let kids = kids_of(&slot);
+        reach_r.push(reach_from_center(&nodes[i], &kids, by_id, nodes, 1.0));
+        reach_l.push(reach_from_center(&nodes[i], &kids, by_id, nodes, -1.0));
+    }
+    let mut target_cx = vec![card_center_x(&nodes[*by_id.get(&mains[0]).unwrap()])];
+    for i in 1..mains.len() {
+        target_cx.push(target_cx[i - 1] + reach_r[i - 1] + reach_l[i] + WV_CARD_GAP);
+    }
+    let mid = (target_cx[0] + target_cx[target_cx.len() - 1]) / 2.0;
+    let root_cx = nodes[root_idx].position.x + ROOT_CARD_W / 2.0;
+    let shift = root_cx - mid;
+    for c in &mut target_cx {
+        *c += shift;
+    }
+    let mut changed = false;
+    for (i, id) in mains.iter().enumerate() {
+        let mi = *by_id.get(id).unwrap();
+        let nx = target_cx[i] - SIDE_CARD_W / 2.0;
+        if (nx - nodes[mi].position.x).abs() > 0.5 {
+            nodes[mi].position.x = nx;
+            changed = true;
+        }
+    }
+    changed
+}
+
+fn place_worldview_children_only(
+    nodes: &mut [TreeNode],
+    by_id: &HashMap<String, usize>,
+    fan_by_slot: &HashMap<String, String>,
+    axiom_ids: &[String],
+    location_ids: &[String],
+    race_ids: &[String],
+    faction_ids: &[String],
+    radii: &WvLayoutRadii,
+) {
+    layout_worldview_extensions(
+        nodes,
+        by_id,
+        fan_by_slot,
+        axiom_ids,
+        location_ids,
+        race_ids,
+        faction_ids,
+        radii,
+    );
+}
+
 fn fix_worldview_overlaps(
     nodes: &mut [TreeNode],
     by_id: &HashMap<String, usize>,
@@ -505,24 +664,53 @@ fn fix_worldview_overlaps(
         return;
     }
     let mut radii = WvLayoutRadii::default();
+    relayout_worldview(
+        nodes,
+        by_id,
+        fan_ids,
+        root_idx,
+        fan_by_slot,
+        axiom_ids,
+        location_ids,
+        race_ids,
+        faction_ids,
+        &mut radii,
+    );
+
     for _pass in 0..WV_FIX_MAX_PASSES {
-        relayout_worldview(
+        separate_mains_by_child_reach(
             nodes,
             by_id,
-            fan_ids,
+            fan_by_slot,
             root_idx,
+            axiom_ids,
+            location_ids,
+            race_ids,
+            faction_ids,
+        );
+        place_worldview_children_only(
+            nodes,
+            by_id,
             fan_by_slot,
             axiom_ids,
             location_ids,
             race_ids,
             faction_ids,
-            &mut radii,
+            &radii,
         );
-        if !worldview_has_overlap(nodes, &wv_ids, by_id) {
-            nudge_worldview_overlaps(nodes, &wv_ids, by_id);
-            return;
+        let tight = adjacent_mains_too_close(
+            nodes,
+            by_id,
+            fan_by_slot,
+            axiom_ids,
+            location_ids,
+            race_ids,
+            faction_ids,
+        );
+        let has_overlap = worldview_has_overlap(nodes, &wv_ids, by_id);
+        if !tight && !has_overlap {
+            break;
         }
-        let mut bump_main = false;
         let mut bump_ax = false;
         let mut bump_loc = false;
         let mut bump_soc = false;
@@ -546,23 +734,18 @@ fn fix_worldview_overlaps(
                 }
                 let sa = knowledge_slot(&nodes[ai]);
                 let sb = knowledge_slot(&nodes[bi]);
-                if is_fan_slot(sa) && is_fan_slot(sb) {
-                    bump_main = true;
-                }
-                if sa == "wv_axiom" || sb == "wv_axiom" {
+                if sa == "wv_axiom" && sb == "wv_axiom" {
                     bump_ax = true;
                 }
-                if sa == "wv_location" || sb == "wv_location" {
+                if sa == "wv_location" && sb == "wv_location" {
                     bump_loc = true;
                 }
-                if sa == "wv_race" || sb == "wv_race" || sa == "wv_faction" || sb == "wv_faction" {
+                if (sa == "wv_race" || sa == "wv_faction")
+                    && (sb == "wv_race" || sb == "wv_faction")
+                {
                     bump_soc = true;
                 }
             }
-        }
-        if bump_main {
-            radii.main_r += 28.0;
-            radii.main_span_deg = (radii.main_span_deg + 3.0).min(MAX_FAN_SPAN_DEG);
         }
         if bump_ax {
             radii.axiom_r += 24.0;
@@ -575,10 +758,32 @@ fn fix_worldview_overlaps(
         }
         if bump_ax || bump_loc || bump_soc {
             radii.ext_span_deg = (radii.ext_span_deg - 3.0).max(MIN_EXT_FAN_SPAN_DEG);
-        }
-        if !bump_main && !bump_ax && !bump_loc && !bump_soc {
+        } else if !tight {
             break;
         }
+    }
+
+    for _ in 0..2 {
+        separate_mains_by_child_reach(
+            nodes,
+            by_id,
+            fan_by_slot,
+            root_idx,
+            axiom_ids,
+            location_ids,
+            race_ids,
+            faction_ids,
+        );
+        place_worldview_children_only(
+            nodes,
+            by_id,
+            fan_by_slot,
+            axiom_ids,
+            location_ids,
+            race_ids,
+            faction_ids,
+            &radii,
+        );
     }
     nudge_worldview_overlaps(nodes, &wv_ids, by_id);
 }
@@ -1461,9 +1666,11 @@ fn dummy(id: &str, kind: NodeKind, y: f64) -> TreeNode {
         kind,
         label: id.into(),
         outline: String::new(),
+        detailed_outline: vec![],
         character: None,
         knowledge: None,
         side_plot: None,
+        volume: None,
         linked_character_ids: vec![],
         linked_side_plot_ids: vec![],
         linked_knowledge_ids: vec![],

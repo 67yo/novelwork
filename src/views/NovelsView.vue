@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import NovelFeaturesPicker from "@/components/NovelFeaturesPicker.vue";
+import { emptyNovelFeatures, normalizeNovelFeatures, type NovelFeatures } from "@/lib/novelFeatures";
 
 function coverSrc(n: NovelProject) {
   return n.cover_path ? convertFileSrc(n.cover_path) : "";
@@ -20,6 +22,7 @@ const tab = ref<"active" | "archived">("active");
 const showCreate = ref(false);
 const title = ref("");
 const synopsis = ref("");
+const features = ref<NovelFeatures>(emptyNovelFeatures());
 const busy = ref(false);
 const error = ref("");
 
@@ -35,6 +38,7 @@ function openCreate() {
   showCreate.value = true;
   title.value = "";
   synopsis.value = "";
+  features.value = emptyNovelFeatures();
   error.value = "";
 }
 
@@ -43,6 +47,7 @@ function closeCreate() {
   showCreate.value = false;
   title.value = "";
   synopsis.value = "";
+  features.value = emptyNovelFeatures();
   error.value = "";
 }
 
@@ -64,6 +69,7 @@ async function confirmCreate() {
       synopsis: synopsis.value.trim(),
       knowledge_ids: [],
       knowledge_strategy: "",
+      features: normalizeNovelFeatures(features.value),
     });
     showCreate.value = false;
     await router.push(`/novels/${novel.id}`);
@@ -162,6 +168,11 @@ async function confirmDelete() {
             :placeholder="t('novels.createSynopsisPh')"
             :disabled="busy"
           />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm">{{ t("novels.feat.title") }}</label>
+          <p class="mb-2 text-[11px] text-muted-foreground">{{ t("novels.feat.hint") }}</p>
+          <NovelFeaturesPicker v-model="features" :disabled="busy" />
         </div>
         <p v-if="error" class="text-xs text-destructive">{{ error }}</p>
         <div class="flex justify-end gap-2">

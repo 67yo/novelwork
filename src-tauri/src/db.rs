@@ -107,6 +107,10 @@ impl Db {
             [],
         );
         let _ = conn.execute(
+            "ALTER TABLE novels ADD COLUMN features TEXT NOT NULL DEFAULT '{}'",
+            [],
+        );
+        let _ = conn.execute(
             "ALTER TABLE knowledge_books ADD COLUMN archived INTEGER NOT NULL DEFAULT 0",
             [],
         );
@@ -179,19 +183,23 @@ impl Db {
                 .to_string()
         };
 
-        let mut compat_providers = Self::load_compat_providers(plain.get("compat_providers"))?;
+        // 仅当从未写过 compat_providers 行时，才从旧单项 Key 迁移一次。
+        // 已保存过空列表 `[]` 的，视为用户主动清空，禁止再次灌回。
+        let compat_row = plain.get("compat_providers");
+        let compat_ever_saved = compat_row.is_some();
+        let mut compat_providers = Self::load_compat_providers(compat_row)?;
 
-        let deepseek_api_key = decrypt("deepseek_api_key")?;
-        let chatgpt_api_key = decrypt("chatgpt_api_key")?;
+        let mut deepseek_api_key = decrypt("deepseek_api_key")?;
+        let mut chatgpt_api_key = decrypt("chatgpt_api_key")?;
         let gemini_api_key = decrypt("gemini_api_key")?;
         let claude_api_key = decrypt("claude_api_key")?;
-        let grok_api_key = decrypt("grok_api_key")?;
-        let kimi_api_key = decrypt("kimi_api_key")?;
+        let mut grok_api_key = decrypt("grok_api_key")?;
+        let mut kimi_api_key = decrypt("kimi_api_key")?;
         let deepseek_base_url = get("deepseek_base_url", &d.deepseek_base_url);
         let kimi_base_url = get("kimi_base_url", &d.kimi_base_url);
 
         let mut migrated = false;
-        if compat_providers.is_empty() {
+        if !compat_ever_saved && compat_providers.is_empty() {
             if !deepseek_api_key.trim().is_empty() {
                 compat_providers.push(crate::models::CompatProvider {
                     id: uuid::Uuid::new_v4().to_string(),
@@ -235,6 +243,13 @@ impl Db {
                     models: vec![],
                 });
                 migrated = true;
+            }
+            // 迁入列表后清掉旧单项，避免删光列表后又被迁移灌回
+            if migrated {
+                deepseek_api_key.clear();
+                kimi_api_key.clear();
+                chatgpt_api_key.clear();
+                grok_api_key.clear();
             }
         }
 
@@ -728,7 +743,7 @@ impl Db {
         let mut stmt = conn.prepare(
             "SELECT id, title, synopsis, cover_path, knowledge_ids, knowledge_strategy, created_at, updated_at,
                     COALESCE(archived, 0), COALESCE(word_count_min, 2000), COALESCE(word_count_max, 3000),
-                    COALESCE(chapter_count, 20), COALESCE(canon_mode, 'reference')
+                    COALESCE(chapter_count, 20), COALESCE(canon_mode, 'reference'), COALESCE(features, '{}')
              FROM novels ORDER BY updated_at DESC",
         )?;
         let rows = stmt.query_map([], map_novel)?;
@@ -740,7 +755,7 @@ impl Db {
         let mut stmt = conn.prepare(
             "SELECT id, title, synopsis, cover_path, knowledge_ids, knowledge_strategy, created_at, updated_at,
                     COALESCE(archived, 0), COALESCE(word_count_min, 2000), COALESCE(word_count_max, 3000),
-                    COALESCE(chapter_count, 20), COALESCE(canon_mode, 'reference')
+                    COALESCE(chapter_count, 20), COALESCE(canon_mode, 'reference'), COALESCE(features, '{}')
              FROM novels WHERE id=?1",
         )?;
         let mut rows = stmt.query_map(params![id], map_novel)?;
@@ -750,9 +765,10 @@ impl Db {
     pub fn upsert_novel(&self, n: &NovelProject) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         let mode = normalize_canon_mode(&n.canon_mode);
+        let features = serde_json::to_string(&n.features)?;
         conn.execute(
-            "INSERT INTO novels(id, title, synopsis, cover_path, knowledge_ids, knowledge_strategy, created_at, updated_at, archived, word_count_min, word_count_max, chapter_count, canon_mode)
-             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)
+            "INSERT INTO novels(id, title, synopsis, cover_path, knowledge_ids, knowledge_strategy, created_at, updated_at, archived, word_count_min, word_count_max, chapter_count, canon_mode, features)
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)
              ON CONFLICT(id) DO UPDATE SET
                title=excluded.title,
                synopsis=excluded.synopsis,
@@ -764,7 +780,8 @@ impl Db {
                word_count_min=excluded.word_count_min,
                word_count_max=excluded.word_count_max,
                chapter_count=excluded.chapter_count,
-               canon_mode=excluded.canon_mode",
+               canon_mode=excluded.canon_mode,
+               features=excluded.features",
             params![
                 n.id,
                 n.title,
@@ -779,6 +796,7 @@ impl Db {
                 n.word_count_max as i64,
                 n.chapter_count as i64,
                 mode,
+                features,
             ],
         )?;
         Ok(())
@@ -1087,6 +1105,7 @@ fn map_novel(row: &rusqlite::Row<'_>) -> rusqlite::Result<NovelProject> {
     let kids: String = row.get(4)?;
     let archived_i: i64 = row.get(8).unwrap_or(0);
     let mode: String = row.get(12).unwrap_or_else(|_| "reference".into());
+    let features_raw: String = row.get(13).unwrap_or_else(|_| "{}".into());
     Ok(NovelProject {
         id: row.get(0)?,
         title: row.get(1)?,
@@ -1101,6 +1120,7 @@ fn map_novel(row: &rusqlite::Row<'_>) -> rusqlite::Result<NovelProject> {
         word_count_max: row.get::<_, i64>(10).unwrap_or(3000) as u32,
         chapter_count: row.get::<_, i64>(11).unwrap_or(20) as u32,
         canon_mode: normalize_canon_mode(&mode),
+        features: serde_json::from_str(&features_raw).unwrap_or_default(),
     })
 }
 

@@ -75,6 +75,12 @@ onMounted(() => {
   void syncWindowTitle();
   mcpTimer = window.setInterval(() => void refreshMcp(), 4000);
 });
+watch(
+  () => route.path,
+  () => {
+    void refreshKey();
+  },
+);
 onUnmounted(() => {
   if (mcpTimer) window.clearInterval(mcpTimer);
 });

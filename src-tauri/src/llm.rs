@@ -100,6 +100,7 @@ pub async fn complete(
     }
 
     let ep = compat_endpoint(settings, &model);
+    let api_model = crate::models::api_model_id(&model).to_string();
     if ep.api_key.trim().is_empty() {
         let content = mock_complete(system, user);
         let prompt_tokens = ((system.len() + user.len()) / 4) as u32;
@@ -120,16 +121,17 @@ pub async fn complete(
 
     let url = chat_completions_url(ep.base_url);
     let mut body = json!({
-        "model": model,
+        "model": api_model,
         "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": user},
         ],
-        "temperature": if json_object {
-            0.2
-        } else {
-            chat_temperature_with_hint(&model, ep.label, ep.base_url, 0.8)
-        },
+        "temperature": chat_temperature_with_hint(
+            &api_model,
+            ep.label,
+            ep.base_url,
+            if json_object { 0.2 } else { 0.8 },
+        ),
     });
     if json_object {
         body["response_format"] = json!({"type": "json_object"});
@@ -280,6 +282,8 @@ mod tests {
             chat_temperature_with_hint("custom", "Kimi", "https://api.moonshot.ai", 0.7),
             1.0
         );
+        // json_object 路径 preferred=0.2 仍须强制为 1
+        assert_eq!(chat_temperature_with_hint("kimi-k2.5", "", "", 0.2), 1.0);
         assert_eq!(
             chat_temperature_with_hint("deepseek-chat", "DeepSeek", "https://api.deepseek.com", 0.8),
             0.8

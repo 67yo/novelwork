@@ -49,6 +49,10 @@ pub async fn refresh(db: &Db) -> Result<ModelCatalog> {
     }
 
     catalog.compat = settings.all_compat_model_ids();
+    // 遗留字段：不再从旧单项 Key 拉列表，统一清空以免删光配置后仍显示模型名
+    catalog.deepseek.clear();
+    catalog.grok.clear();
+    catalog.kimi.clear();
 
     if !settings.gemini_api_key.trim().is_empty() {
         match fetch_gemini(&settings.gemini_api_key).await {
@@ -57,6 +61,8 @@ pub async fn refresh(db: &Db) -> Result<ModelCatalog> {
                 catalog.errors.insert("gemini".into(), e.to_string());
             }
         }
+    } else {
+        catalog.gemini.clear();
     }
 
     if !settings.claude_api_key.trim().is_empty() {
@@ -66,6 +72,8 @@ pub async fn refresh(db: &Db) -> Result<ModelCatalog> {
                 catalog.errors.insert("claude".into(), e.to_string());
             }
         }
+    } else {
+        catalog.claude.clear();
     }
 
     catalog.updated_at = Utc::now().to_rfc3339();

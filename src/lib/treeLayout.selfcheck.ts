@@ -2,7 +2,10 @@ import {
   applyAutoLayout,
   chapterEffectiveKnowledgeIds,
   chapterLocalPlotIds,
+  accordionCollapsedVolumeIds,
+  collapsedVolumeHiddenIds,
   rootLinkedPlotIds,
+  volumeChapterIds,
   __layoutConsts as C,
 } from "./treeLayout.ts";
 
@@ -213,8 +216,8 @@ console.assert(Math.abs(get("pm").position.x - expectMultiX) < 1e-6);
   );
   console.assert(
     JSON.stringify(chapterEffectiveKnowledgeIds("ch", nodes, [])) ===
-      JSON.stringify(["ck", "rk"]),
-    "chapter knowledge merges root",
+      JSON.stringify(["rk", "ck"]),
+    "chapter knowledge root then chapter",
   );
 }
 
@@ -262,9 +265,9 @@ console.assert(Math.abs(get("pm").position.x - expectMultiX) < 1e-6);
     "volume inherit excluded from local plots",
   );
   console.assert(
-    JSON.stringify(chapterEffectiveKnowledgeIds("ch", nodes, edges)).includes("vk") &&
-      JSON.stringify(chapterEffectiveKnowledgeIds("ch", nodes, edges)).includes("rk"),
-    "chapter knowledge merges root+volume",
+    JSON.stringify(chapterEffectiveKnowledgeIds("ch", nodes, edges)) ===
+      JSON.stringify(["rk", "vk", "ck"]),
+    "chapter knowledge order root→volume→chapter",
   );
 }
 
@@ -416,7 +419,7 @@ console.log("treeLayout.worldview ok");
     mk("wv_core_laws", "wv_core_laws", 0, ["ax1", "ax2", "ax3"]),
     mk("wv_spatiotemporal", "wv_spatiotemporal", 1, ["loc1", "loc2"]),
     mk("wv_social_power", "wv_social_power", 2, ["race1", "fac1", "fac2"]),
-    mk("wv_history_culture", "wv_history_culture", 3),
+    mk("wv_history_culture", "wv_history_culture", 3, ["rel1", "ev1"]),
     mk("wv_existence", "wv_existence", 4),
     mk("wv_info_flow", "wv_info_flow", 5),
     mk("ax1", "wv_axiom"),
@@ -427,12 +430,15 @@ console.log("treeLayout.worldview ok");
     mk("race1", "wv_race"),
     mk("fac1", "wv_faction"),
     mk("fac2", "wv_faction"),
+    mk("rel1", "wv_religion"),
+    mk("ev1", "wv_major_event"),
   ];
   applyAutoLayout(nodes, []);
-  const wv = nodes.filter(
-    (n) => n.kind === "knowledge" && n.knowledge?.slot?.startsWith("wv_"),
-  );
-  const overlap = (a: (typeof nodes)[0], b: (typeof nodes)[0]) => {
+  const wv = nodes.filter((n) => n.kind === "knowledge");
+  const overlap = (
+    a: { position: { x: number; y: number } },
+    b: { position: { x: number; y: number } },
+  ) => {
     const w = 200;
     const h = 88;
     return (
@@ -447,5 +453,82 @@ console.log("treeLayout.worldview ok");
       console.assert(!overlap(wv[i]!, wv[j]!), `wv ext overlap ${wv[i]!.id} ${wv[j]!.id}`);
     }
   }
+  // 相邻主卡中心距 ≥ 相对方向子卡外伸之和
+  const mains = [
+    "wv_core_laws",
+    "wv_spatiotemporal",
+    "wv_social_power",
+    "wv_history_culture",
+    "wv_existence",
+    "wv_info_flow",
+  ]
+    .map((id) => nodes.find((n) => n.id === id)!)
+    .sort((a, b) => a.position.x - b.position.x);
+  const kidsOf: Record<string, string[]> = {
+    wv_core_laws: ["ax1", "ax2", "ax3"],
+    wv_spatiotemporal: ["loc1", "loc2"],
+    wv_social_power: ["race1", "fac1", "fac2"],
+    wv_history_culture: ["rel1", "ev1"],
+    wv_existence: [],
+    wv_info_flow: [],
+  };
+  const cx = (n: (typeof nodes)[0]) => n.position.x + 100;
+  const reach = (mainId: string, dir: 1 | -1) => {
+    const main = nodes.find((n) => n.id === mainId)!;
+    const mc = cx(main);
+    let r = 100;
+    for (const id of kidsOf[mainId] ?? []) {
+      const k = nodes.find((n) => n.id === id)!;
+      r = dir > 0 ? Math.max(r, k.position.x + 200 - mc) : Math.max(r, mc - k.position.x);
+    }
+    return r;
+  };
+  for (let i = 0; i < mains.length - 1; i++) {
+    const L = mains[i]!;
+    const R = mains[i + 1]!;
+    const need = reach(L.id, 1) + reach(R.id, -1) + 16;
+    const have = cx(R) - cx(L);
+    console.assert(have + 0.5 >= need, `main spacing ${L.id}-${R.id}: have=${have} need=${need}`);
+  }
 }
 console.log("treeLayout.worldviewExt ok");
+
+{
+  const nodes = [
+    { id: "r", kind: "novel", position: { x: 0, y: 0 } },
+    { id: "v", kind: "volume", position: { x: 0, y: 1 } },
+    { id: "ch", kind: "chapter", position: { x: 0, y: 2 } },
+    { id: "ch2", kind: "chapter", position: { x: 0, y: 3 } },
+    { id: "local", kind: "side_plot", position: { x: 0, y: 4 } },
+    { id: "shared", kind: "side_plot", position: { x: 0, y: 5 } },
+  ];
+  const edges = [
+    { source: "r", target: "v", kind: "volume" },
+    { source: "v", target: "ch", kind: "chapter" },
+    { source: "r", target: "ch2", kind: "chapter" },
+    { source: "ch", target: "local", kind: "side_plot" },
+    { source: "ch", target: "shared", kind: "side_plot" },
+    { source: "v", target: "shared", kind: "side_plot" },
+  ];
+  console.assert(
+    JSON.stringify(volumeChapterIds("v", nodes, edges).sort()) === JSON.stringify(["ch"]),
+    "volumeChapterIds only volume children",
+  );
+  const hid = collapsedVolumeHiddenIds(["v"], nodes, edges);
+  console.assert(hid.has("ch") && !hid.has("ch2"), "collapse hides volume chapters only");
+  console.assert(hid.has("local") && !hid.has("shared"), "collapse hides chapter-only cards");
+  console.assert(!hid.has("v") && !hid.has("r"), "volume and root stay");
+  console.assert(
+    JSON.stringify(accordionCollapsedVolumeIds(["a", "b"], [], "a")) === JSON.stringify(["b"]),
+    "expand a collapses b",
+  );
+  console.assert(
+    JSON.stringify(accordionCollapsedVolumeIds(["a", "b"], ["b"], null)) === JSON.stringify(["a", "b"]),
+    "collapse current folds all",
+  );
+  console.assert(
+    JSON.stringify(accordionCollapsedVolumeIds(["a", "b", "c"], [])) === JSON.stringify(["b", "c"]),
+    "load with all open keeps first only",
+  );
+}
+console.log("treeLayout.volumeCollapse ok");
