@@ -1,6 +1,6 @@
 # Novel Work
 
-强约束 AI 小说写作工具（Demo）。域名：[nove.work](https://nove.work) / novework.net
+强约束 AI 小说写作工具（Demo）。介绍站：[novelwork.net](https://novelwork.net)
 
 ## 技术栈
 

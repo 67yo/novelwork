@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Novel Work — 强约束 AI 小说写作</title>
+    <meta
+      name="description"
+      content="Novel Work 是本机桌面工具：把世界观、人物、文风和剧情挂在结构树上，AI 写章必须遵守。支持全局 Chat 与 MCP。"
+    />
+    <link rel="icon" href="./favicon.png" type="image/png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@500;600;700&family=Source+Sans+3:ital,wght@0,400;0,500;0,600;1,400&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #f7f1e4;
+        --bg-2: #efe6d4;
+        --ink: #2a241c;
+        --muted: #6b6154;
+        --line: #d8ccb4;
+        --card: #fffaf0;
+        --green: #2f6a4a;
+        --green-ink: #f4faf6;
+        --green-soft: #dceee3;
+        --focus: #2f6a4a;
+        --shadow: 0 18px 50px rgba(42, 36, 28, 0.08);
+        --max: 1120px;
+        --ease: 180ms ease;
+      }
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      @media (prefers-reduced-motion: reduce) {
+        html { scroll-behavior: auto; }
+        .hero-copy, .mock, .card, .step { animation: none !important; }
+      }
+      body {
+        margin: 0;
+        color: var(--ink);
+        background:
+          radial-gradient(1200px 500px at 10% -10%, #fffdf8 0%, transparent 55%),
+          var(--bg);
+        font-family: "Source Sans 3", "Noto Sans SC", "Segoe UI", sans-serif;
+        line-height: 1.6;
+        font-size: 17px;
+      }
+      a { color: inherit; }
+      .skip {
+        position: absolute;
+        left: 12px;
+        top: -48px;
+        background: var(--ink);
+        color: #fff;
+        padding: 8px 12px;
+        border-radius: 8px;
+        z-index: 20;
+      }
+      .skip:focus { top: 12px; }
+      .wrap { width: min(var(--max), calc(100% - 40px)); margin: 0 auto; }
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        backdrop-filter: blur(14px);
+        background: color-mix(in srgb, var(--bg) 82%, transparent);
+        border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+      }
+      .nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        min-height: 68px;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        text-decoration: none;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+      }
+      .brand img {
+        width: 36px;
+        height: 36px;
+        border-radius: 9px;
+        object-fit: cover;
+      }
+      nav.links { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+      nav.links a, .lang, .btn {
+        text-decoration: none;
+        border: 0;
+        cursor: pointer;
+      }
+      nav.links a {
+        color: var(--muted);
+        padding: 8px 10px;
+        border-radius: 8px;
+      }
+      nav.links a:hover { color: var(--ink); background: var(--bg-2); }
+      .lang, .btn {
+        font: inherit;
+        border-radius: 999px;
+        padding: 8px 14px;
+        transition: background var(--ease), color var(--ease), transform var(--ease);
+      }
+      .lang {
+        background: transparent;
+        color: var(--muted);
+        border: 1px solid var(--line);
+      }
+      .lang[aria-pressed="true"] {
+        background: var(--ink);
+        color: #fff;
+        border-color: var(--ink);
+      }
+      .btn-primary {
+        background: var(--green);
+        color: var(--green-ink);
+      }
+      .btn-primary:hover { filter: brightness(1.06); }
+      .btn-ghost {
+        background: transparent;
+        color: var(--ink);
+        border: 1px solid var(--line);
+      }
+      .btn-ghost:hover { background: var(--bg-2); }
+      :focus-visible {
+        outline: 2px solid var(--focus);
+        outline-offset: 3px;
+      }
+      .hero {
+        display: grid;
+        grid-template-columns: 1.05fr 0.95fr;
+        gap: 48px;
+        align-items: center;
+        padding: 72px 0 40px;
+      }
+      .kicker {
+        color: var(--green);
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        font-size: 13px;
+        margin: 0 0 14px;
+      }
+      h1 {
+        font-family: "Noto Serif SC", "Source Serif 4", serif;
+        font-size: clamp(40px, 6vw, 72px);
+        line-height: 1.08;
+        letter-spacing: -0.03em;
+        margin: 0 0 18px;
+        font-weight: 700;
+      }
+      .lede {
+        font-size: 20px;
+        color: var(--muted);
+        max-width: 36em;
+        margin: 0 0 28px;
+      }
+      .cta { display: flex; flex-wrap: wrap; gap: 10px; }
+      .meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 18px;
+        margin-top: 22px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      .meta b { color: var(--ink); font-weight: 600; }
+      .mock {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        box-shadow: var(--shadow);
+        padding: 22px 20px 18px;
+      }
+      .mock-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        color: var(--muted);
+        font-size: 12px;
+        margin-bottom: 14px;
+      }
+      .dots { display: flex; gap: 6px; }
+      .dots i {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--line);
+        display: block;
+      }
+      .canvas {
+        position: relative;
+        height: 340px;
+        background:
+          linear-gradient(var(--line) 1px, transparent 1px) 0 0 / 28px 28px,
+          linear-gradient(90deg, var(--line) 1px, transparent 1px) 0 0 / 28px 28px,
+          #fbf6ea;
+        border-radius: 14px;
+        overflow: hidden;
+      }
+      .node {
+        position: absolute;
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 8px 10px;
+        font-size: 12px;
+        box-shadow: 0 8px 18px rgba(42, 36, 28, 0.06);
+        min-width: 92px;
+      }
+      .node small { display: block; color: var(--muted); font-size: 10px; }
+      .node.root {
+        left: 38%;
+        top: 46%;
+        transform: translate(-50%, -50%);
+        border-color: var(--green);
+        background: var(--green-soft);
+        min-width: 118px;
+        z-index: 2;
+      }
+      .node.wv { background: #f3f7f4; }
+      .node.ch { min-width: 108px; }
+      .node.n1 { left: 8%; top: 10%; }
+      .node.n2 { left: 26%; top: 4%; }
+      .node.n3 { left: 46%; top: 6%; }
+      .node.n4 { left: 64%; top: 12%; }
+      .node.n5 { left: 8%; top: 36%; }
+      .node.n6 { left: 66%; top: 36%; }
+      .node.sr { left: 72%; top: 54%; border-style: dashed; }
+      .node.c1 { left: 22%; top: 70%; }
+      .node.c2 { left: 42%; top: 78%; }
+      .node.c3 { left: 62%; top: 72%; }
+      section { padding: 72px 0; }
+      .sec-title {
+        font-family: "Noto Serif SC", serif;
+        font-size: clamp(28px, 4vw, 42px);
+        margin: 0 0 10px;
+      }
+      .sec-lead { color: var(--muted); max-width: 40em; margin: 0 0 32px; }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 22px 20px;
+        min-height: 100%;
+      }
+      .card h3 {
+        font-family: "Noto Serif SC", serif;
+        font-size: 20px;
+        margin: 0 0 8px;
+      }
+      .card p { margin: 0; color: var(--muted); }
+      .icon {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        background: var(--green-soft);
+        color: var(--green);
+        display: grid;
+        place-items: center;
+        margin-bottom: 14px;
+      }
+      .icon svg { width: 18px; height: 18px; }
+      .flow {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+      }
+      .step {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 20px 18px;
+      }
+      .step em {
+        display: block;
+        font-style: normal;
+        color: var(--green);
+        font-weight: 600;
+        font-size: 13px;
+        margin-bottom: 8px;
+      }
+      .step strong {
+        display: block;
+        font-family: "Noto Serif SC", serif;
+        font-size: 18px;
+        margin-bottom: 6px;
+      }
+      .step p { margin: 0; color: var(--muted); font-size: 15px; }
+      .mcp {
+        background: var(--ink);
+        color: #efe8dc;
+        border-radius: 22px;
+        padding: 36px 32px;
+        display: grid;
+        grid-template-columns: 1.2fr 0.8fr;
+        gap: 28px;
+        align-items: center;
+      }
+      .mcp h2 { color: #fff; margin: 0 0 10px; }
+      .mcp p { color: #cfc4b2; margin: 0 0 16px; }
+      .code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 13px;
+        background: #1b1713;
+        color: #e8dcc8;
+        border-radius: 12px;
+        padding: 16px 18px;
+        overflow-x: auto;
+      }
+      footer {
+        border-top: 1px solid var(--line);
+        padding: 28px 0 40px;
+        color: var(--muted);
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+      footer a { color: var(--ink); }
+      @media (max-width: 900px) {
+        .hero, .grid, .flow, .mcp { grid-template-columns: 1fr; }
+        .hero { padding-top: 40px; }
+        .canvas { height: 300px; }
+        nav.links a:not(.btn) { display: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <a class="skip" href="#main" data-i18n="skip">跳到正文</a>
+    <header>
+      <div class="wrap nav">
+        <a class="brand" href="#top">
+          <img src="./icon.png" width="36" height="36" alt="" />
+          Novel Work
+        </a>
+        <nav class="links" aria-label="Primary">
+          <a href="#features" data-i18n="nav.features">能力</a>
+          <a href="#flow" data-i18n="nav.flow">怎么写</a>
+          <a href="#mcp" data-i18n="nav.mcp">MCP</a>
+          <button class="lang" type="button" id="langZh" aria-pressed="true">中</button>
+          <button class="lang" type="button" id="langEn" aria-pressed="false">EN</button>
+          <a class="btn btn-primary" href="https://github.com/67yo/novework" data-i18n="nav.source">源码</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <div class="wrap hero" id="top">
+        <div class="hero-copy">
+          <p class="kicker">novelwork.net</p>
+          <h1 data-i18n="hero.title">AI 按你的树写，<br />不按它的默认腔。</h1>
+          <p class="lede" data-i18n="hero.lede">
+            Novel Work 是本机桌面写作台：世界观、人物、文风、剧情都挂在结构树上。
+            生成章节时，这些卡是硬约束，不是可选参考。
+          </p>
+          <div class="cta">
+            <a class="btn btn-primary" href="https://github.com/67yo/novework" data-i18n="cta.source">查看 GitHub</a>
+            <a class="btn btn-ghost" href="#flow" data-i18n="cta.flow">看一遍工作流</a>
+          </div>
+          <div class="meta">
+            <span><b>macOS / Windows</b> · Tauri</span>
+            <span data-i18n="hero.local"><b>数据在本机</b> · SQLite + 本地向量</span>
+            <span data-i18n="hero.mcp"><b>MCP</b> · Cursor 与 Chat 读写同一棵树</span>
+          </div>
+        </div>
+        <div class="mock" aria-hidden="true">
+          <div class="mock-bar">
+            <span>Workspace</span>
+            <div class="dots"><i></i><i></i><i></i></div>
+          </div>
+          <div class="canvas">
+            <div class="node wv n1">核心法则<small>公理 / 禁忌</small></div>
+            <div class="node wv n2">时空地理<small>地点扇形</small></div>
+            <div class="node wv n3">社会权力<small>种族 · 势力</small></div>
+            <div class="node wv n4">存在基础<small>寿命 · 历法</small></div>
+            <div class="node wv n5">信息传播<small>流言与壁垒</small></div>
+            <div class="node wv n6">历史文化<small>宗教 · 事件</small></div>
+            <div class="node root">雾港回声<small>根 · 全书约束</small></div>
+            <div class="node sr">故事规则<small>引擎 / 红线</small></div>
+            <div class="node ch c1">第一章<small>简纲 + 细纲</small></div>
+            <div class="node ch c2">第二章<small>继承根设定</small></div>
+            <div class="node ch c3">文风卡<small>用词 / 禁用</small></div>
+          </div>
+        </div>
+      </div>
+
+      <section id="features">
+        <div class="wrap">
+          <h2 class="sec-title" data-i18n="feat.title">写长篇时，约束比灵感更值钱。</h2>
+          <p class="sec-lead" data-i18n="feat.lead">
+            模型很会写「像小说的句子」。Novel Work 要的是：人设不漂、专名不乱、文风不另起、章与章接得上。
+          </p>
+          <div class="grid">
+            <article class="card">
+              <div class="icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h10M4 18h7"/></svg>
+              </div>
+              <h3 data-i18n="feat.tree.h">结构树工作台</h3>
+              <p data-i18n="feat.tree.p">根、分卷、章节排在一张画布上。人物、剧情、知识卡挂到节点上，写哪一章就继承哪一层。</p>
+            </article>
+            <article class="card">
+              <div class="icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg>
+              </div>
+              <h3 data-i18n="feat.world.h">世界观扇形</h3>
+              <p data-i18n="feat.world.p">六张固定槽位：法则、地理、权力、存在、信息、历史文化，外加故事规则。生成必须服从功能选项。</p>
+            </article>
+            <article class="card">
+              <div class="icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="3"/><path d="M5 19c1.2-3 3.8-5 7-5s5.8 2 7 5"/></svg>
+              </div>
+              <h3 data-i18n="feat.char.h">结构化人物卡</h3>
+              <p data-i18n="feat.char.p">世界位置、锚点、关系、信念、深层动机、声线与肢体语言。写章注入的是 formatted 全文，不是一句性格标签。</p>
+            </article>
+            <article class="card">
+              <div class="icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 4h9l3 3v13H6z"/><path d="M9 12h6M9 16h4"/></svg>
+              </div>
+              <h3 data-i18n="feat.know.h">知识卡硬约束</h3>
+              <p data-i18n="feat.know.p">文风、用词、禁用词、专名替换挂到根，就是全书写作规则。公共库只供提炼，树上的卡才约束正文。</p>
+            </article>
+            <article class="card">
+              <div class="icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16v10H8l-4 3z"/></svg>
+              </div>
+              <h3 data-i18n="feat.chat.h">全局 Chat 写章</h3>
+              <p data-i18n="feat.chat.p">「生成第 N 章 / 精修第 N 章」走 Chat。先读全书与章快照，按细纲扩写，字数、出场、剧情顺序可自检。</p>
+            </article>
+            <article class="card">
+              <div class="icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 7h8M8 12h8M8 17h5"/><rect x="4" y="4" width="16" height="16" rx="3"/></svg>
+              </div>
+              <h3 data-i18n="feat.lib.h">本地知识库</h3>
+              <p data-i18n="feat.lib.p">导入 txt / epub / 网页，本地分段与 MiniLM 检索。密钥加密存在本机，不把全书当设定源灌进提示词。</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="flow">
+        <div class="wrap">
+          <h2 class="sec-title" data-i18n="flow.title">从开书到一章正文</h2>
+          <p class="sec-lead" data-i18n="flow.lead">不必先写设定文档。树就是设定，Chat 是笔。</p>
+          <div class="flow">
+            <div class="step">
+              <em>01</em>
+              <strong data-i18n="flow.1.h">开一本新书</strong>
+              <p data-i18n="flow.1.p">定题材、玩法、风格、受众和每章字数。这些标签会约束后面的世界观。</p>
+            </div>
+            <div class="step">
+              <em>02</em>
+              <strong data-i18n="flow.2.h">生成世界观</strong>
+              <p data-i18n="flow.2.p">一键挂上六张扇形卡和故事规则。可以手改，也可以按槽位用 Chat 补全。</p>
+            </div>
+            <div class="step">
+              <em>03</em>
+              <strong data-i18n="flow.3.h">挂上会写的卡</strong>
+              <p data-i18n="flow.3.p">人物、进行中的剧情、文风或设定知识卡。挂在根上，后面每章都继承。</p>
+            </div>
+            <div class="step">
+              <em>04</em>
+              <strong data-i18n="flow.4.h">Chat 生成章节</strong>
+              <p data-i18n="flow.4.p">先有简纲和细纲，再说「生成第 N 章」。精修只改旧稿，不另起炉灶。</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="wrap">
+          <div class="mcp" id="mcp">
+            <div>
+              <p class="kicker" style="color:#9dceaf">MCP</p>
+              <h2 class="sec-title" data-i18n="mcp.title">同一棵树，给应用内 Chat，也给 Cursor。</h2>
+              <p data-i18n="mcp.p">
+                本机 Streamable HTTP（默认 127.0.0.1:17832/mcp）。读写小说、章节、人物、知识卡与公共库，字段和写作注入同形。
+                树上改了，工作台会刷新。
+              </p>
+            </div>
+            <pre class="code">get_novel_info
+get_chapter_info
+set_chapter_content
+get_character_card
+upsert_knowledge_card
+generate_worldview</pre>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <div class="wrap">
+      <footer>
+        <div>Novel Work · <span data-i18n="foot.line">强约束 AI 小说写作 · 本机优先</span></div>
+        <div>
+          <a href="https://novelwork.net">novelwork.net</a>
+          ·
+          <a href="https://github.com/67yo/novework">GitHub</a>
+        </div>
+      </footer>
+    </div>
+
+    <script>
+      const dict = {
+        "skip": ["跳到正文", "Skip to content"],
+        "nav.features": ["能力", "Features"],
+        "nav.flow": ["怎么写", "Workflow"],
+        "nav.mcp": ["MCP", "MCP"],
+        "nav.source": ["源码", "Source"],
+        "hero.title": ["AI 按你的树写，<br />不按它的默认腔。", "AI writes from your tree,<br />not its default voice."],
+        "hero.lede": [
+          "Novel Work 是本机桌面写作台：世界观、人物、文风、剧情都挂在结构树上。生成章节时，这些卡是硬约束，不是可选参考。",
+          "A local desktop studio. World, characters, style, and plots live on a tree. When a chapter is generated, those cards are hard constraints—not optional flavor."
+        ],
+        "cta.source": ["查看 GitHub", "View GitHub"],
+        "cta.flow": ["看一遍工作流", "See the workflow"],
+        "hero.local": ["<b>数据在本机</b> · SQLite + 本地向量", "<b>Local-first</b> · SQLite + on-device embeddings"],
+        "hero.mcp": ["<b>MCP</b> · Cursor 与 Chat 读写同一棵树", "<b>MCP</b> · Cursor and Chat share the same tree"],
+        "feat.title": ["写长篇时，约束比灵感更值钱。", "For long fiction, constraints beat vibes."],
+        "feat.lead": [
+          "模型很会写「像小说的句子」。Novel Work 要的是：人设不漂、专名不乱、文风不另起、章与章接得上。",
+          "Models already write sentences that sound like fiction. Novel Work keeps canon, names, voice, and continuity from drifting."
+        ],
+        "feat.tree.h": ["结构树工作台", "Story tree"],
+        "feat.tree.p": ["根、分卷、章节排在一张画布上。人物、剧情、知识卡挂到节点上，写哪一章就继承哪一层。", "Root, volumes, and chapters on one canvas. Characters, plots, and knowledge hang on nodes and inherit down."],
+        "feat.world.h": ["世界观扇形", "Worldview fan"],
+        "feat.world.p": ["六张固定槽位：法则、地理、权力、存在、信息、历史文化，外加故事规则。生成必须服从功能选项。", "Six fixed slots—laws, geography, power, existence, information, history—plus story rules. Generation must obey feature tags."],
+        "feat.char.h": ["结构化人物卡", "Character cards"],
+        "feat.char.p": ["世界位置、锚点、关系、信念、深层动机、声线与肢体语言。写章注入的是 formatted 全文，不是一句性格标签。", "Position, anchors, relations, belief, depth, and voice. Writing injects the full formatted card, not a one-line trait."],
+        "feat.know.h": ["知识卡硬约束", "Knowledge as law"],
+        "feat.know.p": ["文风、用词、禁用词、专名替换挂到根，就是全书写作规则。公共库只供提炼，树上的卡才约束正文。", "Style, diction, banned words, and name swaps on the root bind the whole book. The library feeds cards; only tree cards bind prose."],
+        "feat.chat.h": ["全局 Chat 写章", "Global Chat"],
+        "feat.chat.p": ["「生成第 N 章 / 精修第 N 章」走 Chat。先读全书与章快照，按细纲扩写，字数、出场、剧情顺序可自检。", "Generate or refine chapter N in Chat. It reads the novel and chapter snapshot, expands the outline, then checks length and cast."],
+        "feat.lib.h": ["本地知识库", "Local library"],
+        "feat.lib.p": ["导入 txt / epub / 网页，本地分段与 MiniLM 检索。密钥加密存在本机，不把全书当设定源灌进提示词。", "Import txt, epub, or URLs. Chunk and search locally with MiniLM. Keys stay encrypted on disk; books are not dumped into prompts."],
+        "flow.title": ["从开书到一章正文", "From a blank book to a chapter"],
+        "flow.lead": ["不必先写设定文档。树就是设定，Chat 是笔。", "No separate bible doc. The tree is canon. Chat is the pen."],
+        "flow.1.h": ["开一本新书", "Start a novel"],
+        "flow.1.p": ["定题材、玩法、风格、受众和每章字数。这些标签会约束后面的世界观。", "Set genre, gameplay, tone, audience, and chapter length. Those tags bind worldview generation."],
+        "flow.2.h": ["生成世界观", "Grow the world"],
+        "flow.2.p": ["一键挂上六张扇形卡和故事规则。可以手改，也可以按槽位用 Chat 补全。", "One click hangs six fan cards and story rules. Edit by hand or fill a slot in Chat."],
+        "flow.3.h": ["挂上会写的卡", "Hang the cards"],
+        "flow.3.p": ["人物、进行中的剧情、文风或设定知识卡。挂在根上，后面每章都继承。", "Characters, active plots, style or lore. Hang them on the root and every chapter inherits."],
+        "flow.4.h": ["Chat 生成章节", "Write in Chat"],
+        "flow.4.p": ["先有简纲和细纲，再说「生成第 N 章」。精修只改旧稿，不另起炉灶。", "Brief then detailed outline, then “generate chapter N”. Refine edits the existing draft only."],
+        "mcp.title": ["同一棵树，给应用内 Chat，也给 Cursor。", "One tree for in-app Chat and Cursor."],
+        "mcp.p": [
+          "本机 Streamable HTTP（默认 127.0.0.1:17832/mcp）。读写小说、章节、人物、知识卡与公共库，字段和写作注入同形。树上改了，工作台会刷新。",
+          "Local Streamable HTTP (default 127.0.0.1:17832/mcp). Novels, chapters, characters, and knowledge cards share the writing-injection shape. The workspace refreshes when the tree changes."
+        ],
+        "foot.line": ["强约束 AI 小说写作 · 本机优先", "Constrained AI fiction · local-first"]
+      };
+
+      function applyLang(lang) {
+        const i = lang === "en" ? 1 : 0;
+        document.documentElement.lang = lang === "en" ? "en" : "zh-CN";
+        document.querySelectorAll("[data-i18n]").forEach((el) => {
+          const pair = dict[el.getAttribute("data-i18n")];
+          if (pair) el.innerHTML = pair[i];
+        });
+        document.title = i
+          ? "Novel Work — Constrained AI novel writing"
+          : "Novel Work — 强约束 AI 小说写作";
+        document.getElementById("langZh").setAttribute("aria-pressed", String(i === 0));
+        document.getElementById("langEn").setAttribute("aria-pressed", String(i === 1));
+        localStorage.setItem("nw-site-lang", lang);
+      }
+      document.getElementById("langZh").addEventListener("click", () => applyLang("zh"));
+      document.getElementById("langEn").addEventListener("click", () => applyLang("en"));
+      applyLang(localStorage.getItem("nw-site-lang") === "en" ? "en" : "zh");
+    </script>
+  </body>
+</html>
