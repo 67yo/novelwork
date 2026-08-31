@@ -1,5 +1,15 @@
 <script setup lang="ts">
-import { computed, markRaw, nextTick, onMounted, onUnmounted, ref, watch, type Ref } from "vue";
+import {
+  computed,
+  markRaw,
+  nextTick,
+  onMounted,
+  onUnmounted,
+  provide,
+  ref,
+  watch,
+  type Ref,
+} from "vue";
 import {
   VueFlow,
   ConnectionMode,
@@ -18,12 +28,11 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import {
   api,
-  fillKnowledgeCard,
   type ChapterMemoryGroup,
-  type KnowledgeBook,
   type PublicKnowledgeCard,
   type NovelProject,
   type NovelTree,
+  type ChapterShot,
   type TreeEdge,
   type TreeNode,
 } from "@/lib/api";
@@ -34,20 +43,114 @@ import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import StoryNode from "@/components/flow/StoryNode.vue";
 import CharacterCardPanel from "@/components/CharacterCardPanel.vue";
+import CoreLawsPanel from "@/components/CoreLawsPanel.vue";
+import WorldAxiomPanel from "@/components/WorldAxiomPanel.vue";
+import KeyLocationPanel from "@/components/KeyLocationPanel.vue";
+import SocialPowerPanel from "@/components/SocialPowerPanel.vue";
+import WorldRacePanel from "@/components/WorldRacePanel.vue";
+import MajorFactionPanel from "@/components/MajorFactionPanel.vue";
+import SpatiotemporalPanel from "@/components/SpatiotemporalPanel.vue";
+import ExistencePanel from "@/components/ExistencePanel.vue";
+import InfoFlowPanel from "@/components/InfoFlowPanel.vue";
+import HistoryCulturePanel from "@/components/HistoryCulturePanel.vue";
+import WorldReligionPanel from "@/components/WorldReligionPanel.vue";
+import MajorEventPanel from "@/components/MajorEventPanel.vue";
+import WorldviewChatPanel from "@/components/WorldviewChatPanel.vue";
+import StoryRulesHubPanel from "@/components/StoryRulesHubPanel.vue";
+import VolumePanel from "@/components/VolumePanel.vue";
+import StoryRulesBlockPanel from "@/components/StoryRulesBlockPanel.vue";
+import StoryRulesChatPanel from "@/components/StoryRulesChatPanel.vue";
+import WorldviewFanTitle from "@/components/WorldviewFanTitle.vue";
+import NovelFeaturesPicker from "@/components/NovelFeaturesPicker.vue";
+import {
+  emptyNovelFeatures,
+  normalizeNovelFeatures,
+  type NovelFeatures,
+} from "@/lib/novelFeatures";
+import {
+  emptyCharacterCard,
+  normalizeCharacterCard,
+  syncLegacyFields,
+} from "@/lib/characterCard";
 import { useI18n } from "@/i18n";
+import type { CoreLawsData, WorldAxiom } from "@/lib/coreLaws";
+import { isAxiomSlot, normalizeAxiom } from "@/lib/coreLaws";
+import {
+  axiomHostCoreLawsId,
+  axiomsFromLinkedCards,
+  createAxiomCard,
+  linkedAxiomCards,
+  migrateInlineAxiomsToCards,
+  syncCoreLawsExtracted,
+} from "@/lib/axiomCards";
+import type { KeyLocation, SpatiotemporalData } from "@/lib/spatiotemporal";
+import { isLocationSlot, normalizeLocation } from "@/lib/spatiotemporal";
+import {
+  createLocationCard,
+  linkedLocationCards,
+  locationHostSpatiotemporalId,
+  locationsFromLinkedCards,
+  migrateInlineLocationsToCards,
+  syncSpatiotemporalExtracted,
+} from "@/lib/locationCards";
+import {
+  createFactionCard,
+  createRaceCard,
+  factionsFromLinkedCards,
+  isSocialPowerChildSlot,
+  linkedFactionCards,
+  linkedRaceCards,
+  migrateInlineSocialPowerToCards,
+  racesFromLinkedCards,
+  socialPowerHostId,
+  syncSocialPowerExtracted,
+} from "@/lib/socialPowerCards";
+import type { MajorFaction, SocialPowerData, WorldRace } from "@/lib/socialPower";
+import type { ExistenceData } from "@/lib/existence";
+import type { InfoFlowData } from "@/lib/infoFlow";
+import type { HistoryCultureData, MajorEvent, WorldReligion } from "@/lib/historyCulture";
+import {
+  isMajorEventSlot,
+  isReligionSlot,
+  normalizeMajorEvent,
+  normalizeReligion,
+} from "@/lib/historyCulture";
+import {
+  createMajorEventCard,
+  createReligionCard,
+  historyCultureHostId,
+  isHistoryCultureChildSlot,
+  linkedMajorEventCards,
+  linkedReligionCards,
+  majorEventsFromLinkedCards,
+  migrateInlineHistoryCultureToCards,
+  religionsFromLinkedCards,
+  syncHistoryCultureExtracted,
+} from "@/lib/historyCultureCards";
+import {
+  isFactionSlot,
+  isRaceSlot,
+  normalizeFaction,
+  normalizeRace,
+} from "@/lib/socialPower";
 import {
   BookOpen,
   Brain,
+  Clapperboard,
+  ChevronDown,
+  ChevronUp,
   Copy,
   GitBranch,
   Layers,
   LayoutGrid,
   Library,
+  Lightbulb,
   ListTree,
   Loader2,
   PanelBottom,
   PanelRight,
-  Pencil,
+  Pause,
+  Play,
   Plus,
   RefreshCw,
   Share2,
@@ -57,21 +160,64 @@ import {
   User,
   X,
 } from "@lucide/vue";
-import { diffLines } from "@/lib/linediff";
 import { renderChapterMd, stripChapterMeta } from "@/lib/md";
-import { replaceBodyLine, splitBodyLines } from "@/lib/chapterParagraphs";
+import {
+  bodySuggestContext,
+  insertBodySuggestion,
+  replaceBodyLine,
+  splitBodyLines,
+} from "@/lib/chapterParagraphs";
 import {
   applyAutoLayout,
-  chapterEffectiveKnowledgeIds,
   chapterInheritedKnowledgeIds,
   chapterInheritedPlotIds,
+  chapterLocalKnowledgeIds,
   chapterLocalPlotIds,
   chapterParentVolumeId,
+  accordionCollapsedVolumeIds,
+  collapsedVolumeHiddenIds,
   rootLinkedKnowledgeIds,
   rootLinkedPlotIds,
+  volumeChapterIds,
+  volumeLocalKnowledgeIds,
   volumeLocalPlotIds,
-  volumeEffectiveKnowledgeIds,
 } from "@/lib/treeLayout";
+import {
+  ensureWorldviewCards,
+  isFixedRootKnowledgeEdge,
+  isFixedRootKnowledgeSlot,
+  isStoryRulesSlot,
+  isWorldviewFanSlot,
+  knowledgeSlot,
+  missingWorldviewSlots,
+  worldviewComplete,
+  worldviewFanTitle,
+} from "@/lib/worldview";
+import {
+  formatStoryRulesBlockExtracted,
+  normalizeStoryRulesBlock,
+  type ConstraintRedlinesData,
+  type FulfillmentSystemData,
+  type StoryEngineData,
+  type StoryRulesBlockSlot,
+  type SurfaceSettingData,
+} from "@/lib/storyRules";
+import { emptyVolume, normalizeVolume, type VolumeData } from "@/lib/volume";
+import {
+  ensureStoryRulesFanCards,
+  findStoryRulesNode,
+  linkedStoryRulesBlocks,
+  syncStoryRulesParentExtracted,
+} from "@/lib/storyRulesCards";
+import { storyRulesBlockSlotOf } from "@/lib/storyRulesGen";
+import {
+  buildKnowledgeNavItems,
+  filterHostPanelLinkedKnowledge,
+  knowledgeChipShell,
+  knowledgeNodeLabel,
+  mergeRootKnowledgeOrder,
+  orderKnowledgeNodesByIds,
+} from "@/lib/knowledgeListSort";
 
 const props = defineProps<{ id: string }>();
 const { t, locale } = useI18n();
@@ -85,38 +231,59 @@ const flowDeleteKeyCode = null as null;
 const novel = ref<NovelProject | null>(null);
 const tree = ref<NovelTree | null>(null);
 const selected = ref<TreeNode | null>(null);
-const knowledgeBooks = ref<KnowledgeBook[]>([]);
 const publicKnowledgeCards = ref<PublicKnowledgeCard[]>([]);
 const publicPickOpen = ref(false);
 const publicPickFilter = ref("");
 const publicPickBusy = ref(false);
 const publishBusy = ref(false);
-const knowledgeBookFilter = ref("");
-const knowledgeFillBusy = ref(false);
-const pendingKnowledgeFill = ref(false);
 const chapterMd = ref("");
 /** 章节正文手动编辑 */
 const bodyEditing = ref(false);
 const bodyDraft = ref("");
 const bodySaveBusy = ref(false);
 const bodyAutosaved = ref(false);
+/** idle | loading（下模型/推理）| playing */
+const bodyTts = ref<"idle" | "loading" | "playing">("idle");
+/** v1.1 语速为整数 1–3 */
+const ttsSpeed = useLocalStorage("novework.ttsSpeed", 1);
+type TtsDownloadProgress = {
+  phase?: string;
+  file?: string;
+  fileIndex?: number;
+  fileTotal?: number;
+  bytesDownloaded?: number;
+  bytesTotal?: number | null;
+  percent?: number;
+};
+const bodyTtsDownload = ref<TtsDownloadProgress | null>(null);
 const bodyTaEl = ref<HTMLTextAreaElement | null>(null);
 const bodyMirrorEl = ref<HTMLElement | null>(null);
 const bodyScrollTop = ref(0);
-const paraGutterTops = ref<{ index: number; top: number }[]>([]);
+const paraGutterTops = ref<{ index: number; top: number; bottom: number }[]>([]);
+/** 鼠标悬停段落；仅该段显示 AI 改写 icon */
+const hoveredParaIndex = ref<number | null>(null);
 const pendingParaRewrite = ref<{ index: number; text: string } | null>(null);
 const paraRewriteNote = ref("");
 const paraRewriteBusy = ref(false);
 const paraRewriteError = ref("");
+const bodySuggestOn = useLocalStorage("novework.bodySuggestOn", false);
+const bodySuggestBusy = ref(false);
+const bodySuggestError = ref("");
+const bodySuggestItems = ref<string[]>([]);
+let bodySuggestInsertAt = 0;
+let bodySuggestGen = 0;
 /** 上次成功落盘的正文快照；用于跳过无变更的自动保存 */
 let lastSavedBody = "";
-const prevN = ref(10);
 /** 画布浮动导航显隐（章节 / 人物 / 剧情 / 知识） */
 const showChapterNav = useLocalStorage("novework.showChapterNav", true);
 type CanvasNavTab = "chapter" | "volume" | "character" | "plot" | "knowledge";
 const canvasNavTab = useLocalStorage<CanvasNavTab>("novework.canvasNavTab", "chapter");
-/** memory = 章节记忆+大纲；full = 前序章正文（跨会话记住上次选择） */
-const refineMode = useLocalStorage<"memory" | "full">("novework.refineMode", "memory");
+/** 按小说记住折叠的分卷（只藏画布，不改树） */
+const collapsedVolumesByNovel = useLocalStorage<Record<string, string[]>>(
+  "novework.collapsedVolumesByNovel",
+  {},
+);
+const collapsedVolumeIdSet = computed(() => new Set(collapsedVolumesByNovel.value[props.id] ?? []));
 const memoryPanelOpen = ref(false);
 const memoryItems = ref<string[]>([]);
 const memoryBusy = ref(false);
@@ -142,10 +309,34 @@ const pendingMemoryDelete = ref<{
   itemIndex: number | null;
 } | null>(null);
 const deletingMemory = ref(false);
+const shotsPanelOpen = ref(false);
+const shots = ref<ChapterShot[]>([]);
+const shotsBusy = ref(false);
+const shotsError = ref("");
+const shotsNotice = ref("");
+const shotsTotalSec = computed(() =>
+  shots.value.reduce((sum, s) => sum + (Number(s.duration_sec) || 0), 0),
+);
+const shotsPreviewTitle = computed(() =>
+  shotsTotalSec.value > 0
+    ? t("workspace.shotsPreviewWithTotal", { n: shotsTotalSec.value })
+    : t("workspace.shotsPreview"),
+);
+const shotsPanelHeading = computed(() =>
+  shotsTotalSec.value > 0
+    ? t("workspace.shotsPanelTitleWithTotal", { n: shotsTotalSec.value })
+    : t("workspace.shotsPanelTitle"),
+);
+const pendingShotSplit = ref<1 | 2 | null>(null);
 const busy = ref("");
 const notice = ref("");
-/** 预生成/精修等待：当前阶段与进度 */
-const chapterProgress = ref<{ step: string; index: number; total: number } | null>(null);
+/** 章节 AI 任务等待：当前阶段与进度 */
+const chapterProgress = ref<{
+  step: string;
+  index: number;
+  total: number;
+  detail?: string;
+} | null>(null);
 /** 当前 AI 请求已发送（prompt）token；confirmed=API 实值，否则为估算 */
 const chapterTokens = ref<{
   prompt: number;
@@ -153,7 +344,9 @@ const chapterTokens = ref<{
   confirmed: boolean;
 } | null>(null);
 /** 每步耗时（最后一步 done=false 时为进行中） */
-const chapterStepTimings = ref<{ step: string; ms: number; done: boolean }[]>([]);
+const chapterStepTimings = ref<
+  { step: string; ms: number; done: boolean; detail?: string }[]
+>([]);
 let chapterStepStartedAt = 0;
 let chapterTickTimer: ReturnType<typeof setInterval> | null = null;
 /** 驱动进行中步骤的秒表刷新 */
@@ -161,19 +354,16 @@ const chapterTick = ref(0);
 let unlistenChapterProgress: (() => void) | null = null;
 let unlistenChapterTokens: (() => void) | null = null;
 let unlistenTreeChanged: (() => void) | null = null;
-/** 全章自动：预生成 → 精修，可点按钮中止 */
-/** 预生成/精修结束后的结束语（左侧底部独立区） */
+let unlistenChapterTts: (() => void) | null = null;
+let unlistenChapterTtsDownload: (() => void) | null = null;
+let unlistenChapterTtsChunk: (() => void) | null = null;
+/** AI 任务结束后的结束语（左侧底部独立区） */
 const chapterResultNotice = ref("");
 const coverBusy = ref(false);
 const coverPromptBusy = ref(false);
 const coverPrompt = ref("");
 const coverPromptHint = ref("");
-const chapterBodyEl = ref<HTMLElement | null>(null);
 const copyHint = ref("");
-/** 精修前后快照（会话内，按节点） */
-const refineBeforeByNode = ref<Record<string, string>>({});
-const bodyTab = ref<"body" | "diff">("body");
-
 const nodeTypes = { story: markRaw(StoryNode) };
 const flowNodes = ref<Node[]>([]) as Ref<Node[]>;
 const flowEdges = ref<Edge[]>([]) as Ref<Edge[]>;
@@ -193,6 +383,8 @@ function cloneTreeNodeData(n: TreeNode): TreeNode {
         }
       : null,
     side_plot: n.side_plot ? { ...n.side_plot } : null,
+    volume: n.volume ? normalizeVolume(n.volume) : n.volume,
+    detailed_outline: [...(n.detailed_outline ?? [])],
     linked_character_ids: [...(n.linked_character_ids ?? [])],
     linked_side_plot_ids: [...(n.linked_side_plot_ids ?? [])],
     linked_knowledge_ids: [...(n.linked_knowledge_ids ?? [])],
@@ -200,7 +392,7 @@ function cloneTreeNodeData(n: TreeNode): TreeNode {
   };
 }
 
-/** 丢掉指向已删节点的边与 linked_*；章节剥离根/分卷继承剧情（只读，不参与排序）。 */
+/** 丢掉指向已删节点的边与 linked_*；章节/分卷剥离继承剧情与知识（只读，不参与排序）。 */
 function pruneTreeRefs(tr: NovelTree) {
   const alive = new Set(tr.nodes.map((n) => n.id));
   tr.edges = tr.edges.filter((e) => alive.has(e.source) && alive.has(e.target));
@@ -209,14 +401,34 @@ function pruneTreeRefs(tr: NovelTree) {
     n.linked_side_plot_ids = (n.linked_side_plot_ids ?? []).filter((id) => alive.has(id));
     n.linked_knowledge_ids = (n.linked_knowledge_ids ?? []).filter((id) => alive.has(id));
     if (n.kind === "chapter") {
-      const inherited = new Set(chapterInheritedPlotIds(n.id, tr.nodes, tr.edges));
-      n.linked_side_plot_ids = n.linked_side_plot_ids.filter((id) => !inherited.has(id));
+      const inheritedPlots = new Set(chapterInheritedPlotIds(n.id, tr.nodes, tr.edges));
+      n.linked_side_plot_ids = n.linked_side_plot_ids.filter((id) => !inheritedPlots.has(id));
+      const inheritedKnow = new Set(chapterInheritedKnowledgeIds(n.id, tr.nodes, tr.edges));
+      n.linked_knowledge_ids = n.linked_knowledge_ids.filter((id) => !inheritedKnow.has(id));
     } else if (n.kind === "volume") {
-      const rootSet = new Set(rootLinkedPlotIds(tr.nodes, tr.edges));
-      n.linked_side_plot_ids = n.linked_side_plot_ids.filter((id) => !rootSet.has(id));
+      const rootPlots = new Set(rootLinkedPlotIds(tr.nodes, tr.edges));
+      n.linked_side_plot_ids = n.linked_side_plot_ids.filter((id) => !rootPlots.has(id));
+      const rootKnow = new Set(rootLinkedKnowledgeIds(tr.nodes, tr.edges));
+      n.linked_knowledge_ids = n.linked_knowledge_ids.filter((id) => !rootKnow.has(id));
     }
   }
 }
+
+function toggleVolumeCollapse(volumeId: string) {
+  const alive = (tree.value?.nodes ?? []).filter((n) => n.kind === "volume").map((n) => n.id);
+  const cur = collapsedVolumesByNovel.value[props.id] ?? [];
+  const expand = cur.includes(volumeId) ? volumeId : null;
+  collapsedVolumesByNovel.value = {
+    ...collapsedVolumesByNovel.value,
+    [props.id]: accordionCollapsedVolumeIds(alive, cur, expand),
+  };
+  syncFlowFromTree();
+  nextTick(() => {
+    void fitView({ padding: 0.18, duration: 280 });
+  });
+}
+
+provide("novework.toggleVolumeCollapse", toggleVolumeCollapse);
 
 function syncFlowFromTree() {
   const tr = tree.value;
@@ -227,31 +439,65 @@ function syncFlowFromTree() {
     setEdges([]);
     return;
   }
-  const nodes = tr.nodes.map((n) => {
-    const base = cloneTreeNodeData(n);
+  const aliveVols = tr.nodes.filter((n) => n.kind === "volume").map((n) => n.id);
+  const stored = collapsedVolumesByNovel.value[props.id] ?? [];
+  const pruned = accordionCollapsedVolumeIds(aliveVols, stored);
+  const same =
+    pruned.length === stored.length && pruned.every((id) => stored.includes(id));
+  if (!same) {
+    collapsedVolumesByNovel.value = { ...collapsedVolumesByNovel.value, [props.id]: pruned };
+  }
+  const collapsed = new Set(pruned);
+  const hiddenIds = collapsedVolumeHiddenIds(collapsed, tr.nodes, tr.edges);
+  if (selected.value && hiddenIds.has(selected.value.id)) {
+    const vid =
+      selected.value.kind === "chapter"
+        ? chapterParentVolumeId(selected.value.id, tr.nodes, tr.edges)
+        : null;
+    const vol = vid ? tr.nodes.find((n) => n.id === vid) : null;
+    selected.value = vol ?? tr.nodes.find((n) => n.kind === "novel") ?? null;
+    leaveChapterBodyEdit();
+    if (selected.value) void api.setWorkspaceSelection(props.id, selected.value.id);
+    else void api.setWorkspaceSelection(props.id, null);
+  }
+  const visNodes = tr.nodes.filter((n) => !hiddenIds.has(n.id)).map(cloneTreeNodeData);
+  const visEdges = tr.edges.filter((e) => !hiddenIds.has(e.source) && !hiddenIds.has(e.target));
+  // ponytail: display-only pack; freeze drag while collapsed so compact coords aren't persisted
+  if (hiddenIds.size) applyAutoLayout(visNodes, visEdges);
+  const canDrag = hiddenIds.size === 0;
+  const nodes = visNodes.map((n) => {
+    const extra =
+      n.kind === "volume"
+        ? {
+            volumeCollapsed: collapsed.has(n.id),
+            collapsedChapterCount: volumeChapterIds(n.id, tr.nodes, tr.edges).length,
+          }
+        : {};
     const data =
       n.kind === "novel" && novel.value
         ? {
-            ...base,
-            word_count_min: base.word_count_min || novel.value.word_count_min,
-            word_count_max: base.word_count_max || novel.value.word_count_max,
-            chapter_count: base.chapter_count || novel.value.chapter_count,
+            ...n,
+            word_count_min: n.word_count_min || novel.value.word_count_min,
+            word_count_max: n.word_count_max || novel.value.word_count_max,
+            chapter_count: n.chapter_count || novel.value.chapter_count,
             cover_url: novel.value.cover_path
               ? convertFileSrc(novel.value.cover_path)
               : "",
+            ...extra,
           }
-        : base;
+        : { ...n, ...extra };
     return {
       id: n.id,
       type: "story" as const,
       position: { ...n.position },
       data,
       selected: n.id === selected.value?.id,
+      draggable: canDrag,
       // 禁止 Vue Flow 内置删除；统一走 deleteTreeCard
       deletable: false,
     };
   });
-  const edges = tr.edges.map((e) => ({
+  const edges = visEdges.map((e) => ({
     id: e.id,
     source: e.source,
     target: e.target,
@@ -259,7 +505,8 @@ function syncFlowFromTree() {
     targetHandle: e.target_handle ?? edgeDefaultTarget(e.kind),
     // ponytail: animated edges keep WebKit.GPU busy at idle; use color/style instead
     animated: false,
-    updatable: true,
+    // 世界观 / 故事规则连线不可拖改、不可双击切断
+    updatable: !isFixedRootKnowledgeEdge(tr.nodes, e),
     label: edgeDisplayLabel(e),
     style: edgeStyle(e.kind),
   }));
@@ -329,8 +576,14 @@ function kindFromNodes(sourceId: string, targetId: string): string {
 
 async function loadAll() {
   novel.value = await api.getNovel(props.id);
-  tree.value = await api.getTree(props.id);
-  knowledgeBooks.value = (await api.listKnowledge()).filter((b) => !b.archived);
+  let tr = await api.getTree(props.id);
+  // Pin MCP "current novel" before slow migrate — Chat/get_novel_info must not keep the previous book.
+  const rootEarly = tr.nodes.find((n) => n.kind === "novel");
+  const chapterEarly = tr.nodes.find((n) => n.kind === "chapter");
+  const pin = chapterEarly ?? rootEarly;
+  if (pin) await api.setWorkspaceSelection(props.id, pin.id);
+  tr = await maybeMigrateWorldview(tr);
+  tree.value = tr;
   publicKnowledgeCards.value = await api.listPublicKnowledgeCards().catch(() => []);
   syncFlowFromTree();
   const root = tree.value.nodes.find((n) => n.kind === "novel");
@@ -345,12 +598,27 @@ async function loadAll() {
 }
 
 async function reloadTreeFromDisk() {
-  tree.value = await api.getTree(props.id);
+  let tr = await api.getTree(props.id);
+  tr = await maybeMigrateWorldview(tr);
+  tree.value = tr;
   if (selected.value) {
     const n = tree.value.nodes.find((x) => x.id === selected.value!.id);
     if (n) selected.value = n;
   }
   syncFlowFromTree();
+}
+
+async function maybeMigrateWorldview(tr: NovelTree): Promise<NovelTree> {
+  const titleFn = (key: string) => t(key as Parameters<typeof t>[0]);
+  const wv = ensureWorldviewCards(tr, titleFn);
+  const sr = ensureStoryRulesFanCards(tr, titleFn);
+  const ax = migrateInlineAxiomsToCards(tr);
+  const loc = migrateInlineLocationsToCards(tr);
+  const sp = migrateInlineSocialPowerToCards(tr);
+  const hc = migrateInlineHistoryCultureToCards(tr);
+  if (!ax && !loc && !sp && !hc && !wv && !sr) return tr;
+  applyAutoLayout(tr.nodes, tr.edges);
+  return persistTree(tr);
 }
 
 function markFlowSelection() {
@@ -362,42 +630,58 @@ function markFlowSelection() {
 }
 
 async function selectNode(n: TreeNode) {
-  selected.value = n;
+  if (tree.value && n.kind === "chapter") {
+    const vid = chapterParentVolumeId(n.id, tree.value.nodes, tree.value.edges);
+    if (vid && collapsedVolumeIdSet.value.has(vid)) toggleVolumeCollapse(vid);
+  }
+  const resolved = tree.value?.nodes.find((x) => x.id === n.id) ?? n;
+  selected.value = resolved;
   markFlowSelection();
-  void api.setWorkspaceSelection(props.id, n.id);
-  bodyTab.value = "body";
-  bodyEditing.value = false;
-  bodyDraft.value = "";
+  await api.setWorkspaceSelection(props.id, n.id);
   notice.value = "";
   chapterResultNotice.value = "";
   copyHint.value = "";
   memoryPanelOpen.value = false;
+  pendingParaRewrite.value = null;
   if (n.kind === "chapter" || n.kind === "side_plot") {
     chapterMd.value = await api.getChapter(props.id, n.id);
   } else {
     chapterMd.value = "";
   }
+  if (n.kind === "chapter") {
+    enterChapterBodyEdit();
+    void loadChapterShots(n.id, false);
+  } else {
+    leaveChapterBodyEdit();
+    shots.value = [];
+  }
 }
 
-function startEditChapterBody() {
-  if (!selected.value || selected.value.kind !== "chapter" || chapterBusy.value) {
+/** 选中章节后始终进入全文编辑（无 Markdown 预览模式） */
+function enterChapterBodyEdit() {
+  if (!selected.value || selected.value.kind !== "chapter") {
+    leaveChapterBodyEdit();
     return;
   }
+  closeBodySuggest();
   bodyDraft.value = stripChapterMeta(chapterMd.value);
   bodyEditing.value = true;
   bodyAutosaved.value = false;
   lastSavedBody = bodyDraft.value;
-  bodyTab.value = "body";
   nextTick(() => refreshParaGutters());
+  if (bodySuggestOn.value) scheduleBodySuggest();
 }
 
-function cancelEditChapterBody() {
+function leaveChapterBodyEdit() {
   bodyEditing.value = false;
   bodyDraft.value = "";
   bodyAutosaved.value = false;
   lastSavedBody = "";
   paraGutterTops.value = [];
+  hoveredParaIndex.value = null;
   pendingParaRewrite.value = null;
+  closeBodySuggest();
+  void stopChapterTts();
 }
 
 const bodyLines = computed(() => splitBodyLines(bodyDraft.value));
@@ -411,12 +695,13 @@ const refreshParaGutters = useDebounceFn(() => {
   }
   mirror.style.width = `${ta.clientWidth}px`;
   const spans = mirror.querySelectorAll<HTMLElement>("[data-para-i]");
-  const tops: { index: number; top: number }[] = [];
+  const tops: { index: number; top: number; bottom: number }[] = [];
   for (const el of spans) {
     if (el.dataset.nonempty !== "1") continue;
     const i = Number(el.dataset.paraI);
     if (!Number.isFinite(i)) continue;
-    tops.push({ index: i, top: el.offsetTop });
+    const top = el.offsetTop;
+    tops.push({ index: i, top, bottom: top + el.offsetHeight });
   }
   paraGutterTops.value = tops;
 }, 40);
@@ -425,11 +710,34 @@ function onBodyTaScroll() {
   bodyScrollTop.value = bodyTaEl.value?.scrollTop ?? 0;
 }
 
-async function persistChapterBody(exit: boolean) {
+function onBodyEditorPointerMove(ev: PointerEvent) {
+  const ta = bodyTaEl.value;
+  if (!ta || !bodyEditing.value || paraRewriteBusy.value) {
+    hoveredParaIndex.value = null;
+    return;
+  }
+  const rect = ta.getBoundingClientRect();
+  const y = ev.clientY - rect.top + ta.scrollTop;
+  let hit: number | null = null;
+  for (const g of paraGutterTops.value) {
+    if (y >= g.top && y < g.bottom) {
+      hit = g.index;
+      break;
+    }
+  }
+  hoveredParaIndex.value = hit;
+}
+
+function onBodyEditorPointerLeave() {
+  hoveredParaIndex.value = null;
+}
+
+
+async function persistChapterBody() {
   if (!selected.value || selected.value.kind !== "chapter" || bodySaveBusy.value) return;
   const nodeId = selected.value.id;
   const draft = bodyDraft.value;
-  if (!exit && draft === lastSavedBody) return;
+  if (draft === lastSavedBody) return;
   bodySaveBusy.value = true;
   try {
     const words = await api.saveChapter(props.id, nodeId, draft);
@@ -442,20 +750,13 @@ async function persistChapterBody(exit: boolean) {
       const cur = tree.value.nodes.find((x) => x.id === selected.value!.id);
       if (cur) selected.value = cur;
     }
-    if (exit) {
-      bodyEditing.value = false;
-      bodyDraft.value = "";
-      lastSavedBody = "";
-      paraGutterTops.value = [];
-      chapterResultNotice.value = t("workspace.bodySaved", { n: words });
-    }
+    chapterResultNotice.value = t("workspace.bodySaved", { n: words });
   } catch (e) {
     chapterResultNotice.value = String(e);
     bodyAutosaved.value = false;
   } finally {
     bodySaveBusy.value = false;
-    // 保存期间又改过：再排一次自动保存
-    if (bodyEditing.value && !exit && bodyDraft.value !== lastSavedBody) {
+    if (bodyEditing.value && bodyDraft.value !== lastSavedBody) {
       scheduleBodyAutosave();
     }
   }
@@ -463,7 +764,7 @@ async function persistChapterBody(exit: boolean) {
 
 const scheduleBodyAutosave = useDebounceFn(() => {
   if (!bodyEditing.value) return;
-  void persistChapterBody(false);
+  void persistChapterBody();
 }, 3000);
 
 watch(bodyDraft, () => {
@@ -471,15 +772,23 @@ watch(bodyDraft, () => {
   bodyAutosaved.value = false;
   scheduleBodyAutosave();
   nextTick(() => refreshParaGutters());
+  if (!bodySuggestOn.value) return;
+  if (bodySuggestBusy.value) {
+    bodySuggestGen += 1;
+    void api.chatCancel(props.id).catch(() => {});
+  }
+  scheduleBodySuggest();
 });
 
-async function saveChapterBody() {
-  await persistChapterBody(true);
-}
 
 function openParaRewrite(index: number) {
   const line = bodyLines.value[index];
   if (!line?.trim() || paraRewriteBusy.value) return;
+  if (bodySuggestBusy.value) {
+    bodySuggestGen += 1;
+    void api.chatCancel(props.id).catch(() => {});
+    bodySuggestBusy.value = false;
+  }
   pendingParaRewrite.value = { index, text: line };
   paraRewriteNote.value = "";
   paraRewriteError.value = "";
@@ -503,13 +812,76 @@ async function confirmParaRewrite() {
     bodyDraft.value = replaceBodyLine(bodyDraft.value, pending.index, out);
     pendingParaRewrite.value = null;
     paraRewriteNote.value = "";
-    await persistChapterBody(false);
+    await persistChapterBody();
     nextTick(() => refreshParaGutters());
   } catch (e) {
     paraRewriteError.value = String(e);
   } finally {
     paraRewriteBusy.value = false;
   }
+}
+
+function closeBodySuggest() {
+  bodySuggestGen += 1;
+  if (bodySuggestBusy.value) {
+    void api.chatCancel(props.id).catch(() => {});
+  }
+  bodySuggestBusy.value = false;
+  bodySuggestError.value = "";
+  bodySuggestItems.value = [];
+}
+
+function toggleBodySuggest() {
+  bodySuggestOn.value = !bodySuggestOn.value;
+  if (!bodySuggestOn.value) {
+    closeBodySuggest();
+    return;
+  }
+  scheduleBodySuggest();
+}
+
+const scheduleBodySuggest = useDebounceFn(() => {
+  if (!bodySuggestOn.value) return;
+  void requestBodySuggest();
+}, 200);
+
+async function requestBodySuggest() {
+  if (!bodySuggestOn.value || !bodyEditing.value || paraRewriteBusy.value || pendingParaRewrite.value) return;
+  if (!selected.value || selected.value.kind !== "chapter") return;
+  const ta = bodyTaEl.value;
+  bodySuggestInsertAt = ta?.selectionStart ?? bodyDraft.value.length;
+  const { current, prevParagraph } = bodySuggestContext(bodyDraft.value, bodySuggestInsertAt);
+  if (bodySuggestBusy.value) {
+    bodySuggestGen += 1;
+    void api.chatCancel(props.id).catch(() => {});
+  }
+  const gen = ++bodySuggestGen;
+  const nodeId = selected.value.id;
+  bodySuggestBusy.value = true;
+  bodySuggestError.value = "";
+  try {
+    const items = await api.suggestBodyNext(props.id, nodeId, current, prevParagraph);
+    if (gen !== bodySuggestGen) return;
+    bodySuggestItems.value = items;
+  } catch (e) {
+    if (gen !== bodySuggestGen) return;
+    bodySuggestError.value = String(e);
+  } finally {
+    if (gen === bodySuggestGen) bodySuggestBusy.value = false;
+  }
+}
+
+function applyBodySuggest(item: string) {
+  if (!item.trim()) return;
+  const { text, cursor } = insertBodySuggestion(bodyDraft.value, bodySuggestInsertAt, item);
+  bodyDraft.value = text;
+  bodySuggestInsertAt = cursor;
+  nextTick(() => {
+    const ta = bodyTaEl.value;
+    if (!ta) return;
+    ta.focus();
+    ta.setSelectionRange(cursor, cursor);
+  });
 }
 
 function onNodeClick(ev: NodeMouseEvent) {
@@ -519,6 +891,7 @@ function onNodeClick(ev: NodeMouseEvent) {
 
 function unlinkEdgeRefs(e: TreeEdge) {
   if (!tree.value) return;
+  if (isFixedRootKnowledgeEdge(tree.value.nodes, e)) return;
   const src = tree.value.nodes.find((n) => n.id === e.source);
   const tgt = tree.value.nodes.find((n) => n.id === e.target);
   if (!src || !tgt) return;
@@ -658,6 +1031,11 @@ async function onEdgeUpdate(ev: EdgeUpdateEvent) {
   if (!tree.value || !ev.connection.source || !ev.connection.target) return;
   const te = tree.value.edges.find((e) => e.id === ev.edge.id);
   if (!te) return;
+  if (isFixedRootKnowledgeEdge(tree.value.nodes, te)) {
+    notice.value = t("workspace.wv.linkLocked");
+    syncFlowFromTree();
+    return;
+  }
   unlinkEdgeRefs(te);
   const kind = kindFromNodes(ev.connection.source, ev.connection.target);
   te.source = ev.connection.source;
@@ -683,6 +1061,10 @@ async function onEdgeDoubleClick(ev: { edge: { id: string } }) {
   if (!tree.value) return;
   const te = tree.value.edges.find((e) => e.id === ev.edge.id);
   if (!te) return;
+  if (isFixedRootKnowledgeEdge(tree.value.nodes, te)) {
+    notice.value = t("workspace.wv.linkLocked");
+    return;
+  }
   if (relationEdgeId.value === te.id) closeRelationEditor();
   unlinkEdgeRefs(te);
   tree.value.edges = tree.value.edges.filter((e) => e.id !== te.id);
@@ -692,7 +1074,9 @@ async function onEdgeDoubleClick(ev: { edge: { id: string } }) {
 }
 
 const CHAPTER_STEPS: Record<string, MessageKey> = {
+  confirm_model: "workspace.taskStepConfirmModel",
   context: "workspace.taskStepContext",
+  detailed_outline: "workspace.taskStepDetailedOutline",
   writing: "workspace.taskStepWriting",
   refining: "workspace.taskStepRefining",
   check_beats: "workspace.taskStepCheckBeats",
@@ -705,9 +1089,13 @@ const CHAPTER_STEPS: Record<string, MessageKey> = {
   saving: "workspace.taskStepSaving",
 };
 
-function chapterStepLabel(step: string): string {
+function chapterStepLabel(step: string, detail?: string): string {
   const key = CHAPTER_STEPS[step];
-  return key ? t(key) : step;
+  if (!key) return step;
+  if (step === "confirm_model") {
+    return t(key, { model: detail?.trim() || "…" });
+  }
+  return t(key);
 }
 
 function formatStepMs(ms: number): string {
@@ -733,22 +1121,28 @@ function stopChapterTick() {
   }
 }
 
-function beginChapterTask(step: string, index: number, total: number) {
+function beginChapterTask(step: string, index: number, total: number, detail?: string) {
   stopChapterTick();
   chapterStepStartedAt = performance.now();
-  chapterProgress.value = { step, index, total };
+  chapterProgress.value = { step, index, total, detail };
   chapterTokens.value = null;
-  chapterStepTimings.value = [{ step, ms: 0, done: false }];
+  chapterStepTimings.value = [{ step, ms: 0, done: false, detail }];
   startChapterTick();
 }
 
-function applyChapterProgress(step: string, index: number, total: number) {
+function applyChapterProgress(
+  step: string,
+  index: number,
+  total: number,
+  detail?: string,
+) {
   const now = performance.now();
   const list = [...chapterStepTimings.value];
   if (list.length) {
     const last = list[list.length - 1];
     if (!last.done && last.step === step) {
-      chapterProgress.value = { step, index, total };
+      chapterProgress.value = { step, index, total, detail: detail ?? last.detail };
+      if (detail) last.detail = detail;
       return;
     }
     if (!last.done) {
@@ -756,10 +1150,10 @@ function applyChapterProgress(step: string, index: number, total: number) {
       last.done = true;
     }
   }
-  list.push({ step, ms: 0, done: false });
+  list.push({ step, ms: 0, done: false, detail });
   chapterStepTimings.value = list;
   chapterStepStartedAt = now;
-  chapterProgress.value = { step, index, total };
+  chapterProgress.value = { step, index, total, detail };
   startChapterTick();
 }
 
@@ -787,7 +1181,7 @@ function clearChapterTaskUi() {
 const chapterProgressLabel = computed(() => {
   const p = chapterProgress.value;
   if (!p) return "";
-  return chapterStepLabel(p.step);
+  return chapterStepLabel(p.step, p.detail);
 });
 
 const chapterProgressPct = computed(() => {
@@ -802,7 +1196,7 @@ const chapterStepTimingsView = computed(() => {
   const now = performance.now();
   return chapterStepTimings.value.map((s) => ({
     step: s.step,
-    label: chapterStepLabel(s.step),
+    label: chapterStepLabel(s.step, s.detail),
     done: s.done,
     ms: s.done ? s.ms : Math.round(now - chapterStepStartedAt),
   }));
@@ -815,12 +1209,11 @@ const chapterTotalMs = computed(() =>
 watch(busy, (v) => {
   if (
     !v ||
-    (v !== "generate" &&
-      v !== "refine" &&
-      v !== "plan-next" &&
+    (v !== "plan-next" &&
       v !== "gen-plots" &&
       v !== "regen-memory" &&
-      v !== "gen-cards")
+      v !== "gen-cards" &&
+      v !== "consolidate-plots")
   ) {
     clearChapterTaskUi();
   }
@@ -834,9 +1227,15 @@ onMounted(async () => {
     step: string;
     index: number;
     total: number;
+    detail?: string;
   }>("chapter-progress", (ev) => {
     if (ev.payload.novelId !== props.id) return;
-    applyChapterProgress(ev.payload.step, ev.payload.index, ev.payload.total);
+    applyChapterProgress(
+      ev.payload.step,
+      ev.payload.index,
+      ev.payload.total,
+      ev.payload.detail,
+    );
   });
   unlistenChapterTokens = await listen<{
     novelId: string;
@@ -855,6 +1254,26 @@ onMounted(async () => {
     if (ev.payload.novelId !== props.id) return;
     void reloadTreeFromDisk();
   });
+  unlistenChapterTts = await listen<{ status: string }>("chapter-tts-status", (ev) => {
+    if (ev.payload.status === "playing") {
+      bodyTtsDownload.value = null;
+      bodyTts.value = "playing";
+    }
+    if (ev.payload.status === "idle") bodyTts.value = "idle";
+  });
+  unlistenChapterTtsDownload = await listen<TtsDownloadProgress>("chapter-tts-download", (ev) => {
+    const p = ev.payload;
+    if (p?.phase === "done") {
+      bodyTtsDownload.value = null;
+      return;
+    }
+    if (bodyTts.value === "idle") return;
+    bodyTtsDownload.value = p ?? null;
+  });
+  unlistenChapterTtsChunk = await listen<{ start: number; end: number }>("chapter-tts-chunk", (ev) => {
+    if (bodyTts.value === "idle") return;
+    selectBodyTtsRange(ev.payload.start, ev.payload.end);
+  });
   window.addEventListener("resize", refreshParaGutters);
 });
 onUnmounted(() => {
@@ -864,73 +1283,35 @@ onUnmounted(() => {
   unlistenChapterTokens = null;
   unlistenTreeChanged?.();
   unlistenTreeChanged = null;
+  unlistenChapterTts?.();
+  unlistenChapterTts = null;
+  unlistenChapterTtsDownload?.();
+  unlistenChapterTtsDownload = null;
+  unlistenChapterTtsChunk?.();
+  unlistenChapterTtsChunk = null;
   window.removeEventListener("resize", refreshParaGutters);
   stopChapterTick();
-  void api.setWorkspaceSelection(null, null);
+  void stopChapterTts();
+  // Only clear if still this novel — late clear must not wipe the next workspace.
+  void api.setWorkspaceSelection(props.id, null);
 });
 watch(
   () => props.id,
-  async () => {
+  async (_id, prev) => {
+    if (prev) void api.setWorkspaceSelection(prev, null);
     await loadAll();
   },
 );
-watch(locale, () => syncFlowFromTree());
-
-function isCancelledErr(e: unknown): boolean {
-  return String(e).toLowerCase().includes("cancelled");
-}
-
-const generateBrief = useLocalStorage("novework.generateBrief", "");
-
-function factoryGenerateBrief(): string {
-  return t("workspace.generateBriefDefault");
-}
-
-function ensureGenerateBrief() {
-  if (!generateBrief.value.trim()) {
-    generateBrief.value = factoryGenerateBrief();
-  }
-}
-
-async function executeGenerate(
-  nodeId: string,
-  memoryNodeIds: string[],
-  userBrief: string,
-): Promise<boolean> {
-  cancelEditChapterBody();
-  busy.value = "generate";
-  beginChapterTask("context", 1, 6);
-  notice.value = "";
-  chapterResultNotice.value = "";
-  try {
-    const r = await api.generateChapter(props.id, nodeId, memoryNodeIds, userBrief);
-    delete refineBeforeByNode.value[nodeId];
-    refineBeforeByNode.value = { ...refineBeforeByNode.value };
-    chapterMd.value = r.content;
-    bodyTab.value = "body";
-    chapterResultNotice.value = r.message;
-    tree.value = await api.getTree(props.id);
-    syncFlowFromTree();
-    if (selected.value) {
-      const n = tree.value.nodes.find((x) => x.id === selected.value!.id);
-      if (n) selected.value = n;
+watch(locale, () => {
+  if (tree.value) {
+    for (const n of tree.value.nodes) {
+      if (n.kind !== "knowledge") continue;
+      const slot = knowledgeSlot(n);
+      if (isWorldviewFanSlot(slot)) applyWorldviewFanLabel(n, slot);
     }
-    return true;
-  } catch (e) {
-    chapterResultNotice.value = isCancelledErr(e) ? t("workspace.chatStopped") : String(e);
-    return false;
-  } finally {
-    endChapterTask();
-    busy.value = "";
   }
-}
-
-/** 自动全章：跳过确认框，默认不带历史记忆 + 已存条件（靠进行中剧情卡导航） */
-async function generate(): Promise<boolean> {
-  if (!selected.value || selected.value.kind !== "chapter") return false;
-  ensureGenerateBrief();
-  return executeGenerate(selected.value.id, [], generateBrief.value);
-}
+  syncFlowFromTree();
+});
 
 function factoryMemoryExtractNotes(): string {
   return t("workspace.memoryExtractNotesDefault");
@@ -1015,6 +1396,118 @@ function closeChapterMemory() {
   memoryPanelOpen.value = false;
   memoryRefPicks.value = [];
   memoryRefSelectedIds.value = [];
+}
+
+async function loadChapterShots(nodeId: string, showBusy = true) {
+  if (showBusy) shotsBusy.value = true;
+  try {
+    shots.value = await api.getChapterShots(props.id, nodeId);
+  } catch (e) {
+    if (showBusy) shotsError.value = String(e);
+    else shots.value = [];
+  } finally {
+    if (showBusy) shotsBusy.value = false;
+  }
+}
+
+async function openChapterShots() {
+  if (!selected.value || selected.value.kind !== "chapter") return;
+  shotsPanelOpen.value = true;
+  shotsError.value = "";
+  shotsNotice.value = "";
+  await loadChapterShots(selected.value.id, true);
+}
+
+function closeChapterShots() {
+  if (busy.value === "split-shots" || busy.value === "shot-prompts" || busy.value === "submit-comfy") {
+    return;
+  }
+  shotsPanelOpen.value = false;
+  pendingShotSplit.value = null;
+}
+
+function requestSplitShots() {
+  if (shots.value.length) {
+    pendingShotSplit.value = 1;
+    return;
+  }
+  void runSplitShots();
+}
+
+async function runSplitShots() {
+  if (!selected.value || selected.value.kind !== "chapter" || !!busy.value) return;
+  pendingShotSplit.value = null;
+  busy.value = "split-shots";
+  shotsError.value = "";
+  shotsNotice.value = "";
+  try {
+    shots.value = await api.splitChapterShots(props.id, selected.value.id);
+  } catch (e) {
+    shotsError.value = String(e);
+  } finally {
+    busy.value = "";
+  }
+}
+
+async function runShotPrompts() {
+  if (!selected.value || selected.value.kind !== "chapter" || !!busy.value) return;
+  busy.value = "shot-prompts";
+  shotsError.value = "";
+  shotsNotice.value = "";
+  try {
+    shots.value = await api.generateShotComfyPrompts(props.id, selected.value.id);
+  } catch (e) {
+    shotsError.value = String(e);
+  } finally {
+    busy.value = "";
+  }
+}
+
+async function persistShots() {
+  if (!selected.value || selected.value.kind !== "chapter") return;
+  try {
+    shots.value = await api.setChapterShots(props.id, selected.value.id, shots.value);
+  } catch (e) {
+    shotsError.value = String(e);
+  }
+}
+
+function addShot() {
+  shots.value.push({
+    id: "",
+    order: shots.value.length + 1,
+    action: "",
+    camera: "",
+    dialogue: "",
+    duration_sec: 8,
+    comfy_prompt: "",
+  });
+  void persistShots();
+}
+
+function removeShot(i: number) {
+  shots.value.splice(i, 1);
+  void persistShots();
+}
+
+async function runSubmitComfy() {
+  if (!selected.value || selected.value.kind !== "chapter" || !!busy.value) return;
+  await persistShots();
+  busy.value = "submit-comfy";
+  shotsError.value = "";
+  shotsNotice.value = "";
+  try {
+    const r = await api.submitChapterShotsComfyui(props.id, selected.value.id);
+    shotsNotice.value = t("workspace.shotsSubmitted", {
+      n: String(r.queued),
+      mode: r.mode,
+      url: r.url,
+    });
+  } catch (e) {
+    shotsError.value = String(e);
+  } finally {
+    busy.value = "";
+  }
 }
 
 async function regenerateChapterMemory() {
@@ -1152,60 +1645,6 @@ async function confirmPendingMemoryDelete() {
   }
 }
 
-/** 精修条件：用户改过即作为默认（跨会话）；空则打开时填入出厂缺省 */
-const refineBrief = useLocalStorage("novework.refineBrief", "");
-
-function factoryRefineBrief(): string {
-  return t("workspace.refineBriefDefault");
-}
-
-function ensureRefineBrief() {
-  if (!refineBrief.value.trim()) {
-    refineBrief.value = factoryRefineBrief();
-  }
-}
-
-async function executeRefine(nodeId: string, userBrief: string): Promise<boolean> {
-  cancelEditChapterBody();
-  busy.value = "refine";
-  beginChapterTask("context", 1, 2);
-  notice.value = "";
-  chapterResultNotice.value = "";
-  const before = chapterMd.value;
-  try {
-    const r = await api.refineChapter(
-      props.id,
-      nodeId,
-      prevN.value,
-      refineMode.value,
-      userBrief,
-    );
-    refineBeforeByNode.value = { ...refineBeforeByNode.value, [nodeId]: before };
-    chapterMd.value = r.content;
-    bodyTab.value = "diff";
-    chapterResultNotice.value = r.message;
-    tree.value = await api.getTree(props.id);
-    syncFlowFromTree();
-    if (selected.value) {
-      const n = tree.value.nodes.find((x) => x.id === selected.value!.id);
-      if (n) selected.value = n;
-    }
-    return true;
-  } catch (e) {
-    chapterResultNotice.value = isCancelledErr(e) ? t("workspace.chatStopped") : String(e);
-    return false;
-  } finally {
-    endChapterTask();
-    busy.value = "";
-  }
-}
-
-/** 自动全章：跳过确认框，用已存精修条件 */
-async function refine(): Promise<boolean> {
-  if (!selected.value || selected.value.kind !== "chapter") return false;
-  ensureRefineBrief();
-  return executeRefine(selected.value.id, refineBrief.value);
-}
 
 async function stopChapter() {
   if (!chapterBusy.value) return;
@@ -1216,8 +1655,97 @@ async function stopChapter() {
   }
 }
 
+let chapterTtsReq = 0;
+
+async function stopChapterTts() {
+  chapterTtsReq += 1;
+  bodyTts.value = "idle";
+  bodyTtsDownload.value = null;
+  try {
+    await api.stopChapterTts();
+  } catch {
+    /* ignore */
+  }
+}
+
+function formatTtsMb(n: number) {
+  return (n / (1024 * 1024)).toFixed(1);
+}
+
+const ttsDownloadLabel = computed(() => {
+  const p = bodyTtsDownload.value;
+  if (!p?.phase) return "";
+  if (p.phase === "download") return t("workspace.readAloudModelDownloading");
+  if (p.phase === "load") return t("workspace.readAloudModelLoading");
+  return "";
+});
+
+const ttsDownloadPercent = computed(() =>
+  Math.max(0, Math.min(100, Math.round(bodyTtsDownload.value?.percent ?? 0))),
+);
+
+const ttsDownloadDetail = computed(() => {
+  const p = bodyTtsDownload.value;
+  if (!p || p.phase !== "download" || !p.file) return "";
+  const file = p.file.split("/").pop() || p.file;
+  if (p.bytesTotal && p.bytesTotal > 0) {
+    return t("workspace.readAloudModelBytes", {
+      file,
+      done: formatTtsMb(p.bytesDownloaded ?? 0),
+      total: formatTtsMb(p.bytesTotal),
+    });
+  }
+  return t("workspace.readAloudModelFile", {
+    file,
+    index: p.fileIndex ?? 0,
+    total: p.fileTotal ?? 0,
+  });
+});
+
+function selectBodyTtsRange(start: number, end: number) {
+  const ta = bodyTaEl.value;
+  if (!ta || !bodyEditing.value) return;
+  const len = ta.value.length;
+  const s = Math.max(0, Math.min(Math.floor(start), len));
+  const e = Math.max(s, Math.min(Math.floor(end), len));
+  if (e <= s) return;
+  ta.focus({ preventScroll: true });
+  ta.setSelectionRange(s, e);
+  const sh = ta.scrollHeight;
+  const ch = ta.clientHeight;
+  if (sh > ch) {
+    const y = (s / Math.max(len, 1)) * sh - ch * 0.35;
+    ta.scrollTop = Math.max(0, Math.min(sh - ch, y));
+    bodyScrollTop.value = ta.scrollTop;
+  }
+}
+
+async function toggleChapterTts() {
+  if (bodyTts.value !== "idle") {
+    await stopChapterTts();
+    return;
+  }
+  const md = bodyEditing.value ? bodyDraft.value : stripChapterMeta(chapterMd.value);
+  if (!md.trim()) {
+    notice.value = t("workspace.readAloudEmpty");
+    return;
+  }
+  const req = ++chapterTtsReq;
+  bodyTts.value = "loading";
+  try {
+    await api.playChapterTts(md, Number(ttsSpeed.value) || 1);
+  } catch (e) {
+    if (req === chapterTtsReq) notice.value = String(e);
+  } finally {
+    if (req === chapterTtsReq) {
+      bodyTts.value = "idle";
+      bodyTtsDownload.value = null;
+    }
+  }
+}
+
 async function copyChapterBody() {
-  const md = stripChapterMeta(chapterMd.value);
+  const md = stripChapterMeta(bodyEditing.value ? bodyDraft.value : chapterMd.value);
   if (!md) return;
   const el = document.createElement("div");
   el.innerHTML = renderChapterMd(md);
@@ -1239,11 +1767,51 @@ async function copyChapterBody() {
 }
 
 function emptyCharacter(): NonNullable<TreeNode["character"]> {
-  return { role: "", personality: "", motto: "", gender: "", style: "", alignment: "" };
+  return emptyCharacterCard();
 }
 
+const characterLawOptions = computed(() => {
+  const tr = tree.value;
+  if (!tr) return [] as string[];
+  const core = tr.nodes.find(
+    (n) => n.kind === "knowledge" && (n.knowledge?.slot ?? "").trim() === "wv_core_laws",
+  );
+  if (!core) return [];
+  const names = axiomsFromLinkedCards(tr, core.id)
+    .map((a) => a.name.trim())
+    .filter(Boolean);
+  const premise = (core.knowledge?.core_laws?.premise ?? "").trim();
+  if (premise) names.unshift(premise);
+  return [...new Set(names)];
+});
+
+const otherCharacterNames = computed(() => {
+  const selId = selected.value?.id;
+  return (tree.value?.nodes ?? [])
+    .filter((n) => n.kind === "character" && n.id !== selId)
+    .map((n) => n.label.trim())
+    .filter(Boolean);
+});
+
 function emptyKnowledge(): NonNullable<TreeNode["knowledge"]> {
-  return { book_ids: [], extract_prompt: "", extracted: "" };
+  return {
+    book_ids: [],
+    extract_prompt: "",
+    extracted: "",
+    slot: "",
+    core_laws: null,
+    spatiotemporal: null,
+    world_axiom: null,
+    key_location: null,
+    social_power: null,
+    world_race: null,
+    major_faction: null,
+    existence: null,
+    info_flow: null,
+    history_culture: null,
+    world_religion: null,
+    major_event: null,
+  };
 }
 
 function plainTree(tr: NovelTree): NovelTree {
@@ -1295,6 +1863,45 @@ async function reorderHostPlots(
   }
 }
 
+/** 左侧编辑栏拖拽排序 → 写回 linked_knowledge_ids（根固定槽置顶不参与） */
+async function reorderHostKnowledge(
+  hostId: string,
+  hostKind: "chapter" | "volume" | "novel",
+  knowledgeIds: string[],
+) {
+  if (!tree.value) return;
+  const node = tree.value.nodes.find((n) => n.id === hostId && n.kind === hostKind);
+  if (!node) return;
+  let next: string[];
+  if (hostKind === "novel") {
+    next = mergeRootKnowledgeOrder(
+      tree.value.nodes,
+      node.linked_knowledge_ids ?? [],
+      knowledgeIds,
+    );
+  } else if (hostKind === "chapter") {
+    const inherited = new Set(
+      chapterInheritedKnowledgeIds(hostId, tree.value.nodes, tree.value.edges),
+    );
+    next = knowledgeIds.filter((id) => !inherited.has(id));
+  } else {
+    const rootSet = new Set(rootLinkedKnowledgeIds(tree.value.nodes, tree.value.edges));
+    next = knowledgeIds.filter((id) => !rootSet.has(id));
+  }
+  const prev = node.linked_knowledge_ids ?? [];
+  if (prev.length === next.length && prev.every((id, i) => id === next[i])) return;
+  node.linked_knowledge_ids = next;
+  if (selected.value?.id === hostId) {
+    selected.value = { ...selected.value, linked_knowledge_ids: [...next] };
+  }
+  tree.value = await persistTree(tree.value);
+  syncFlowFromTree();
+  if (selected.value?.id === hostId) {
+    const cur = tree.value.nodes.find((x) => x.id === hostId);
+    if (cur) selected.value = cur;
+  }
+}
+
 async function autoLayout() {
   if (!tree.value) return;
   // 从 Vue Flow 取最新坐标 + 实测尺寸（人物卡高度不一，避免叠住）
@@ -1333,9 +1940,11 @@ async function addCard(kind: "chapter" | "volume" | "character" | "side_plot" | 
       kind,
       label: t("workspace.volumeN", { n: vols + 1 }),
       outline: "",
+      detailed_outline: [],
       character: null,
       knowledge: null,
       side_plot: null,
+      volume: emptyVolume(),
       linked_character_ids: [],
       linked_side_plot_ids: [],
       linked_knowledge_ids: [],
@@ -1381,9 +1990,11 @@ async function addCard(kind: "chapter" | "volume" | "character" | "side_plot" | 
       kind,
       label: t("workspace.chapterN", { n: num }),
       outline: "",
+      detailed_outline: [],
       character: null,
       knowledge: null,
       side_plot: null,
+      volume: null,
       linked_character_ids: [],
       linked_side_plot_ids: [],
       linked_knowledge_ids: [],
@@ -1416,6 +2027,7 @@ async function addCard(kind: "chapter" | "volume" | "character" | "side_plot" | 
       kind,
       label: t("workspace.newCharacter"),
       outline: "",
+      detailed_outline: [],
       character: emptyCharacter(),
       knowledge: null,
       side_plot: null,
@@ -1453,6 +2065,7 @@ async function addCard(kind: "chapter" | "volume" | "character" | "side_plot" | 
       kind,
       label: t("workspace.newKnowledge"),
       outline: "",
+      detailed_outline: [],
       character: null,
       knowledge: emptyKnowledge(),
       side_plot: null,
@@ -1495,6 +2108,7 @@ async function addCard(kind: "chapter" | "volume" | "character" | "side_plot" | 
       kind,
       label: t("workspace.newPlot"),
       outline: "",
+      detailed_outline: [],
       character: null,
       knowledge: null,
       side_plot: { status: "active", absorbed: false },
@@ -1574,14 +2188,233 @@ async function copyCoverPrompt() {
 const selectedIsChapter = computed(() => selected.value?.kind === "chapter");
 const selectedIsCharacter = computed(() => selected.value?.kind === "character");
 const selectedIsKnowledge = computed(() => selected.value?.kind === "knowledge");
+const selectedIsCoreLaws = computed(
+  () =>
+    selected.value?.kind === "knowledge" &&
+    knowledgeSlot(selected.value) === "wv_core_laws",
+);
+const selectedIsWorldAxiom = computed(
+  () =>
+    selected.value?.kind === "knowledge" && isAxiomSlot(knowledgeSlot(selected.value)),
+);
+const selectedIsKeyLocation = computed(
+  () =>
+    selected.value?.kind === "knowledge" && isLocationSlot(knowledgeSlot(selected.value)),
+);
+const selectedIsSocialPower = computed(
+  () =>
+    selected.value?.kind === "knowledge" &&
+    knowledgeSlot(selected.value) === "wv_social_power",
+);
+const selectedIsWorldRace = computed(
+  () => selected.value?.kind === "knowledge" && isRaceSlot(knowledgeSlot(selected.value)),
+);
+const selectedIsMajorFaction = computed(
+  () => selected.value?.kind === "knowledge" && isFactionSlot(knowledgeSlot(selected.value)),
+);
+const selectedIsSpatiotemporal = computed(
+  () =>
+    selected.value?.kind === "knowledge" &&
+    knowledgeSlot(selected.value) === "wv_spatiotemporal",
+);
+const selectedIsExistence = computed(
+  () =>
+    selected.value?.kind === "knowledge" &&
+    knowledgeSlot(selected.value) === "wv_existence",
+);
+const selectedIsInfoFlow = computed(
+  () =>
+    selected.value?.kind === "knowledge" &&
+    knowledgeSlot(selected.value) === "wv_info_flow",
+);
+const selectedIsHistoryCulture = computed(
+  () =>
+    selected.value?.kind === "knowledge" &&
+    knowledgeSlot(selected.value) === "wv_history_culture",
+);
+const selectedIsWorldReligion = computed(
+  () => selected.value?.kind === "knowledge" && isReligionSlot(knowledgeSlot(selected.value)),
+);
+const selectedIsMajorEvent = computed(
+  () => selected.value?.kind === "knowledge" && isMajorEventSlot(knowledgeSlot(selected.value)),
+);
+const selectedWorldviewFanSlot = computed(() => {
+  if (!selected.value || selected.value.kind !== "knowledge") return "";
+  const slot = knowledgeSlot(selected.value);
+  return isWorldviewFanSlot(slot) ? slot : "";
+});
+const selectedIsStoryRules = computed(
+  () =>
+    selected.value?.kind === "knowledge" && isStoryRulesSlot(knowledgeSlot(selected.value)),
+);
+const selectedIsStoryRulesBlock = computed(
+  () =>
+    selected.value?.kind === "knowledge" &&
+    !!storyRulesBlockSlotOf(selected.value),
+);
+const selectedStoryRulesBlockSlot = computed((): StoryRulesBlockSlot | null => {
+  if (!selected.value || !selectedIsStoryRulesBlock.value) return null;
+  return storyRulesBlockSlotOf(selected.value) as StoryRulesBlockSlot;
+});
+const storyRulesBlockLinks = computed(() => {
+  if (!tree.value || !selected.value || !selectedIsStoryRules.value) return [];
+  return linkedStoryRulesBlocks(tree.value, selected.value.id).map((n) => ({
+    id: n.id,
+    slot: knowledgeSlot(n),
+    title: knowledgeNodeLabel(n, t),
+  }));
+});
 const selectedIsNovel = computed(() => selected.value?.kind === "novel");
+
+const coreLawsAxiomLinks = computed(() => {
+  if (!tree.value || !selected.value || !selectedIsCoreLaws.value) return [];
+  return linkedAxiomCards(tree.value, selected.value.id).map((n) => ({
+    id: n.id,
+    title: n.knowledge?.world_axiom?.name?.trim() || n.label || "",
+  }));
+});
+
+const coreLawsLinkedAxioms = computed((): WorldAxiom[] => {
+  if (!tree.value || !selected.value || !selectedIsCoreLaws.value) return [];
+  return axiomsFromLinkedCards(tree.value, selected.value.id);
+});
+
+const spatiotemporalLocationLinks = computed(() => {
+  if (!tree.value || !selected.value || !selectedIsSpatiotemporal.value) return [];
+  return linkedLocationCards(tree.value, selected.value.id).map((n) => ({
+    id: n.id,
+    title: n.knowledge?.key_location?.name?.trim() || n.label || "",
+  }));
+});
+
+const spatiotemporalLinkedLocations = computed((): KeyLocation[] => {
+  if (!tree.value || !selected.value || !selectedIsSpatiotemporal.value) return [];
+  return locationsFromLinkedCards(tree.value, selected.value.id);
+});
+
+const socialPowerRaceLinks = computed(() => {
+  if (!tree.value || !selected.value || !selectedIsSocialPower.value) return [];
+  return linkedRaceCards(tree.value, selected.value.id).map((n) => ({
+    id: n.id,
+    title: n.knowledge?.world_race?.name?.trim() || n.label || "",
+  }));
+});
+
+const socialPowerFactionLinks = computed(() => {
+  if (!tree.value || !selected.value || !selectedIsSocialPower.value) return [];
+  return linkedFactionCards(tree.value, selected.value.id).map((n) => ({
+    id: n.id,
+    title:
+      n.knowledge?.major_faction?.name?.trim() ||
+      n.knowledge?.major_faction?.faction_type?.trim() ||
+      n.label ||
+      "",
+  }));
+});
+
+const socialPowerLinkedRaces = computed((): WorldRace[] => {
+  if (!tree.value || !selected.value || !selectedIsSocialPower.value) return [];
+  return racesFromLinkedCards(tree.value, selected.value.id);
+});
+
+const socialPowerLinkedFactions = computed((): MajorFaction[] => {
+  if (!tree.value || !selected.value || !selectedIsSocialPower.value) return [];
+  return factionsFromLinkedCards(tree.value, selected.value.id);
+});
+
+const historyCultureReligionLinks = computed(() => {
+  if (!tree.value || !selected.value || !selectedIsHistoryCulture.value) return [];
+  return linkedReligionCards(tree.value, selected.value.id).map((n) => ({
+    id: n.id,
+    title: n.knowledge?.world_religion?.name?.trim() || n.label || "",
+  }));
+});
+
+const historyCultureEventLinks = computed(() => {
+  if (!tree.value || !selected.value || !selectedIsHistoryCulture.value) return [];
+  return linkedMajorEventCards(tree.value, selected.value.id).map((n) => ({
+    id: n.id,
+    title: n.knowledge?.major_event?.title?.trim() || n.label || "",
+  }));
+});
+
+const historyCultureLinkedReligions = computed((): WorldReligion[] => {
+  if (!tree.value || !selected.value || !selectedIsHistoryCulture.value) return [];
+  return religionsFromLinkedCards(tree.value, selected.value.id);
+});
+
+const historyCultureLinkedEvents = computed((): MajorEvent[] => {
+  if (!tree.value || !selected.value || !selectedIsHistoryCulture.value) return [];
+  return majorEventsFromLinkedCards(tree.value, selected.value.id);
+});
 const selectedIsVolume = computed(() => selected.value?.kind === "volume");
+
+const rootWorldviewComplete = computed(() =>
+  tree.value ? worldviewComplete(tree.value) : false,
+);
+const worldviewBusy = ref(false);
+const worldviewChatOpen = ref(false);
+const worldviewChatSlot = ref<string | null>(null);
+const storyRulesChatOpen = ref(false);
+
+const titleI18n = (key: string) => t(key as Parameters<typeof t>[0]);
+
+async function openWorldviewChat(slot?: string | null) {
+  if (!tree.value || worldviewBusy.value) return;
+  const slotId = typeof slot === "string" && slot.trim() ? slot.trim() : null;
+  worldviewBusy.value = true;
+  try {
+    const before = missingWorldviewSlots(tree.value).length;
+    ensureWorldviewCards(tree.value, titleI18n);
+    ensureStoryRulesFanCards(tree.value, titleI18n);
+    migrateInlineAxiomsToCards(tree.value);
+    migrateInlineLocationsToCards(tree.value);
+    migrateInlineSocialPowerToCards(tree.value);
+    migrateInlineHistoryCultureToCards(tree.value);
+    applyAutoLayout(tree.value.nodes, tree.value.edges);
+    tree.value = await persistTree(tree.value);
+    syncFlowFromTree();
+    if (before > 0) {
+      await nextTick();
+      void fitView({ padding: 0.18, duration: 280 });
+    }
+    worldviewChatSlot.value = slotId;
+    worldviewChatOpen.value = true;
+  } catch (e) {
+    notice.value = String(e);
+  } finally {
+    worldviewBusy.value = false;
+  }
+}
+
+provide("novework.openWorldviewSlotChat", (slot: string) => {
+  void openWorldviewChat(slot);
+});
+
+async function onWorldviewChatApplied() {
+  if (!tree.value) return;
+  try {
+    let tr = await api.getTree(props.id);
+    tr = await maybeMigrateWorldview(tr);
+    tree.value = tr;
+    syncFlowFromTree();
+    if (selected.value?.kind === "novel") {
+      const n = tree.value.nodes.find((x) => x.id === selected.value!.id);
+      if (n) selected.value = n;
+    }
+    notice.value = t("workspace.wv.chatDone");
+    await nextTick();
+    void fitView({ padding: 0.18, duration: 280 });
+  } catch (e) {
+    notice.value = String(e);
+  }
+}
 
 function sortNodesByCanvasPosition<T extends { position: { x: number; y: number } }>(nodes: T[]): T[] {
   return nodes.slice().sort((a, b) => a.position.y - b.position.y || a.position.x - b.position.x);
 }
 
-type CanvasNavItem = { id: string; label: string; kind: TreeNode["kind"] };
+type CanvasNavItem = { id: string; label: string; kind: TreeNode["kind"]; indent?: number };
 
 /** 根 → 章节（按画布 y 排序），供左侧浮动导航 */
 const canvasNavChapterItems = computed((): CanvasNavItem[] => {
@@ -1636,11 +2469,7 @@ const canvasNavPlotItems = computed((): CanvasNavItem[] => {
 const canvasNavKnowledgeItems = computed((): CanvasNavItem[] => {
   const tr = tree.value;
   if (!tr) return [];
-  return sortNodesByCanvasPosition(tr.nodes.filter((n) => n.kind === "knowledge")).map((n) => ({
-    id: n.id,
-    label: n.label?.trim() || t("workspace.knowledgeCard"),
-    kind: "knowledge" as const,
-  }));
+  return buildKnowledgeNavItems(tr, t);
 });
 
 const canvasNavTabDefs = computed(() =>
@@ -1698,8 +2527,10 @@ function toggleChapterNav() {
 }
 
 const canDeleteSelectedCard = computed(() => {
-  const k = selected.value?.kind;
-  return !!k && k !== "novel";
+  const n = selected.value;
+  if (!n || n.kind === "novel") return false;
+  if (n.kind === "knowledge" && isFixedRootKnowledgeSlot(knowledgeSlot(n))) return false;
+  return true;
 });
 
 type PendingCardDelete = {
@@ -1752,24 +2583,64 @@ async function confirmPendingCardDelete() {
 
   deletingCard.value = true;
   const id = p.id;
+  const axiomHost =
+    tree.value && selected.value && isAxiomSlot(knowledgeSlot(selected.value))
+      ? axiomHostCoreLawsId(tree.value, id)
+      : tree.value
+        ? axiomHostCoreLawsId(tree.value, id)
+        : null;
+  const locationHost =
+    tree.value && selected.value && isLocationSlot(knowledgeSlot(selected.value))
+      ? locationHostSpatiotemporalId(tree.value, id)
+      : tree.value
+        ? locationHostSpatiotemporalId(tree.value, id)
+        : null;
+  const socialHost =
+    tree.value && selected.value && isSocialPowerChildSlot(knowledgeSlot(selected.value))
+      ? socialPowerHostId(tree.value, id)
+      : tree.value
+        ? socialPowerHostId(tree.value, id)
+        : null;
+  const historyHost =
+    tree.value && selected.value && isHistoryCultureChildSlot(knowledgeSlot(selected.value))
+      ? historyCultureHostId(tree.value, id)
+      : tree.value
+        ? historyCultureHostId(tree.value, id)
+        : null;
   try {
     tree.value = await api.deleteTreeCard(props.id, id);
     pruneTreeRefs(tree.value);
+    if (axiomHost) {
+      syncCoreLawsExtracted(tree.value, axiomHost);
+      applyAutoLayout(tree.value.nodes, tree.value.edges);
+      tree.value = await persistTree(tree.value);
+    } else if (locationHost) {
+      syncSpatiotemporalExtracted(tree.value, locationHost);
+      applyAutoLayout(tree.value.nodes, tree.value.edges);
+      tree.value = await persistTree(tree.value);
+    } else if (socialHost) {
+      syncSocialPowerExtracted(tree.value, socialHost);
+      applyAutoLayout(tree.value.nodes, tree.value.edges);
+      tree.value = await persistTree(tree.value);
+    } else if (historyHost) {
+      syncHistoryCultureExtracted(tree.value, historyHost);
+      applyAutoLayout(tree.value.nodes, tree.value.edges);
+      tree.value = await persistTree(tree.value);
+    }
     removeNodes([id], true);
     syncFlowFromTree();
 
-    if (refineBeforeByNode.value[id] !== undefined) {
-      const next = { ...refineBeforeByNode.value };
-      delete next[id];
-      refineBeforeByNode.value = next;
-    }
-
     pendingCardDelete.value = null;
-    const root = tree.value.nodes.find((n) => n.kind === "novel");
-    if (root) await selectNode(root);
+    const prefer =
+      (axiomHost && tree.value.nodes.find((n) => n.id === axiomHost)) ||
+      (locationHost && tree.value.nodes.find((n) => n.id === locationHost)) ||
+      (socialHost && tree.value.nodes.find((n) => n.id === socialHost)) ||
+      (historyHost && tree.value.nodes.find((n) => n.id === historyHost)) ||
+      tree.value.nodes.find((n) => n.kind === "novel");
+    if (prefer) await selectNode(prefer);
     else {
       selected.value = null;
-      void api.setWorkspaceSelection(null, null);
+      void api.setWorkspaceSelection(props.id, null);
     }
     notice.value = t("workspace.cardDeleted");
   } catch (e) {
@@ -1801,42 +2672,16 @@ function onCanvasKeydown(ev: KeyboardEvent) {
 
 const knowledgeDraft = computed(() => selected.value?.knowledge ?? emptyKnowledge());
 
-const filteredKnowledgeBooks = computed(() => {
-  const q = knowledgeBookFilter.value.trim().toLowerCase();
-  if (!q) return knowledgeBooks.value;
-  return knowledgeBooks.value.filter(
-    (b) =>
-      b.title.toLowerCase().includes(q) ||
-      b.genres.some((g) => g.toLowerCase().includes(q)),
-  );
-});
-
-watch(
-  () => selected.value?.id,
-  () => {
-    knowledgeBookFilter.value = "";
-  },
-);
-
 function ensureKnowledgePayload() {
   if (!selected.value || selected.value.kind !== "knowledge") return null;
   if (!selected.value.knowledge) selected.value.knowledge = emptyKnowledge();
   return selected.value.knowledge;
 }
 
-function toggleKnowledgeBook(bookId: string) {
-  const k = ensureKnowledgePayload();
-  if (!k) return;
-  if (k.book_ids.includes(bookId)) {
-    k.book_ids = k.book_ids.filter((id) => id !== bookId);
-  } else {
-    k.book_ids = [...k.book_ids, bookId];
-  }
-  void persistSelectedKnowledge();
-}
-
 async function persistSelectedKnowledge() {
   if (!tree.value || !selected.value || selected.value.kind !== "knowledge") return;
+  const slot = knowledgeSlot(selected.value);
+  if (isWorldviewFanSlot(slot)) applyWorldviewFanLabel(selected.value, slot);
   const n = tree.value.nodes.find((x) => x.id === selected.value!.id);
   if (n) {
     n.knowledge = selected.value.knowledge;
@@ -1847,6 +2692,436 @@ async function persistSelectedKnowledge() {
   }
   tree.value = await persistTree(tree.value);
   syncFlowFromTree();
+}
+
+function applyWorldviewFanLabel(node: TreeNode, slot: string) {
+  const title = worldviewFanTitle(t, slot);
+  if (title) node.label = title;
+}
+
+async function persistSelectedCoreLaws(payload: {
+  coreLaws: CoreLawsData;
+  extracted: string;
+}) {
+  if (!tree.value || !selected.value || selected.value.kind !== "knowledge") return;
+  const k = ensureKnowledgePayload();
+  if (!k) return;
+  applyWorldviewFanLabel(selected.value, "wv_core_laws");
+  payload.coreLaws.axioms = [];
+  k.core_laws = payload.coreLaws;
+  k.extracted = payload.extracted;
+  k.slot = "wv_core_laws";
+  await persistSelectedKnowledge();
+}
+
+async function persistSelectedWorldAxiom(payload: {
+  name: string;
+  worldAxiom: WorldAxiom;
+  extracted: string;
+}) {
+  if (!tree.value || !selected.value || selected.value.kind !== "knowledge") return;
+  const k = ensureKnowledgePayload();
+  if (!k) return;
+  selected.value.label = payload.name;
+  k.world_axiom = normalizeAxiom(payload.worldAxiom);
+  k.extracted = payload.extracted;
+  k.slot = "wv_axiom";
+  const hostId = axiomHostCoreLawsId(tree.value, selected.value.id);
+  await persistSelectedKnowledge();
+  if (hostId && tree.value) {
+    syncCoreLawsExtracted(tree.value, hostId);
+    tree.value = await persistTree(tree.value);
+    syncFlowFromTree();
+  }
+}
+
+async function addCoreLawsAxiom() {
+  if (!tree.value || !selected.value || !selectedIsCoreLaws.value) return;
+  const n = linkedAxiomCards(tree.value, selected.value.id).length + 1;
+  const node = createAxiomCard(
+    tree.value,
+    selected.value.id,
+    t("workspace.coreLaws.axiomN", { n }),
+  );
+  if (!node) return;
+  applyAutoLayout(tree.value.nodes, tree.value.edges);
+  tree.value = await persistTree(tree.value);
+  syncFlowFromTree();
+  await selectNode(node);
+  await nextTick();
+  void fitView({ padding: 0.18, duration: 280 });
+}
+
+async function openCoreLawsAxiom(id: string) {
+  if (!tree.value) return;
+  const n = tree.value.nodes.find((x) => x.id === id);
+  if (n) await selectNode(n);
+}
+
+async function persistSelectedSpatiotemporal(payload: {
+  spatiotemporal: SpatiotemporalData;
+  extracted: string;
+}) {
+  if (!tree.value || !selected.value || selected.value.kind !== "knowledge") return;
+  const k = ensureKnowledgePayload();
+  if (!k) return;
+  applyWorldviewFanLabel(selected.value, "wv_spatiotemporal");
+  payload.spatiotemporal.locations = [];
+  k.spatiotemporal = payload.spatiotemporal;
+  k.extracted = payload.extracted;
+  k.slot = "wv_spatiotemporal";
+  await persistSelectedKnowledge();
+}
+
+async function persistSelectedExistence(payload: {
+  existence: ExistenceData;
+  extracted: string;
+}) {
+  if (!tree.value || !selected.value || selected.value.kind !== "knowledge") return;
+  const k = ensureKnowledgePayload();
+  if (!k) return;
+  applyWorldviewFanLabel(selected.value, "wv_existence");
+  k.existence = payload.existence;
+  k.extracted = payload.extracted;
+  k.slot = "wv_existence";
+  await persistSelectedKnowledge();
+}
+
+async function persistSelectedInfoFlow(payload: {
+  infoFlow: InfoFlowData;
+  extracted: string;
+}) {
+  if (!tree.value || !selected.value || selected.value.kind !== "knowledge") return;
+  const k = ensureKnowledgePayload();
+  if (!k) return;
+  applyWorldviewFanLabel(selected.value, "wv_info_flow");
+  k.info_flow = payload.infoFlow;
+  k.extracted = payload.extracted;
+  k.slot = "wv_info_flow";
+  await persistSelectedKnowledge();
+}
+
+async function persistSelectedHistoryCulture(payload: {
+  historyCulture: HistoryCultureData;
+  extracted: string;
+}) {
+  if (!tree.value || !selected.value || selected.value.kind !== "knowledge") return;
+  const k = ensureKnowledgePayload();
+  if (!k) return;
+  applyWorldviewFanLabel(selected.value, "wv_history_culture");
+  k.history_culture = payload.historyCulture;
+  k.extracted = payload.extracted;
+  k.slot = "wv_history_culture";
+  await persistSelectedKnowledge();
+}
+
+async function persistSelectedWorldReligion(payload: {
+  name: string;
+  worldReligion: WorldReligion;
+  extracted: string;
+}) {
+  if (!tree.value || !selected.value || selected.value.kind !== "knowledge") return;
+  const k = ensureKnowledgePayload();
+  if (!k) return;
+  selected.value.label = payload.name;
+  k.world_religion = normalizeReligion(payload.worldReligion);
+  k.extracted = payload.extracted;
+  k.slot = "wv_religion";
+  const hostId = historyCultureHostId(tree.value, selected.value.id);
+  await persistSelectedKnowledge();
+  if (hostId && tree.value) {
+    syncHistoryCultureExtracted(tree.value, hostId);
+    tree.value = await persistTree(tree.value);
+    syncFlowFromTree();
+  }
+}
+
+async function persistSelectedMajorEvent(payload: {
+  name: string;
+  majorEvent: MajorEvent;
+  extracted: string;
+}) {
+  if (!tree.value || !selected.value || selected.value.kind !== "knowledge") return;
+  const k = ensureKnowledgePayload();
+  if (!k) return;
+  selected.value.label = payload.name;
+  k.major_event = normalizeMajorEvent(payload.majorEvent);
+  k.extracted = payload.extracted;
+  k.slot = "wv_major_event";
+  const hostId = historyCultureHostId(tree.value, selected.value.id);
+  await persistSelectedKnowledge();
+  if (hostId && tree.value) {
+    syncHistoryCultureExtracted(tree.value, hostId);
+    tree.value = await persistTree(tree.value);
+    syncFlowFromTree();
+  }
+}
+
+async function addHistoryCultureReligion() {
+  if (!tree.value || !selected.value || !selectedIsHistoryCulture.value) return;
+  const label = t("workspace.hc.religionUntitled");
+  const node = createReligionCard(tree.value, selected.value.id, label);
+  if (!node) return;
+  applyAutoLayout(tree.value.nodes, tree.value.edges);
+  tree.value = await persistTree(tree.value);
+  syncFlowFromTree();
+  await selectNode(node);
+}
+
+async function addHistoryCultureEvent() {
+  if (!tree.value || !selected.value || !selectedIsHistoryCulture.value) return;
+  const label = t("workspace.hc.eventUntitled");
+  const node = createMajorEventCard(tree.value, selected.value.id, label);
+  if (!node) return;
+  applyAutoLayout(tree.value.nodes, tree.value.edges);
+  tree.value = await persistTree(tree.value);
+  syncFlowFromTree();
+  await selectNode(node);
+}
+
+async function openHistoryCultureReligion(id: string) {
+  const n = tree.value?.nodes.find((x) => x.id === id);
+  if (n) await selectNode(n);
+}
+
+async function openHistoryCultureEvent(id: string) {
+  const n = tree.value?.nodes.find((x) => x.id === id);
+  if (n) await selectNode(n);
+}
+
+async function persistSelectedKeyLocation(payload: {
+  name: string;
+  keyLocation: KeyLocation;
+  extracted: string;
+}) {
+  if (!tree.value || !selected.value || selected.value.kind !== "knowledge") return;
+  const k = ensureKnowledgePayload();
+  if (!k) return;
+  selected.value.label = payload.name;
+  k.key_location = normalizeLocation(payload.keyLocation);
+  k.extracted = payload.extracted;
+  k.slot = "wv_location";
+  const hostId = locationHostSpatiotemporalId(tree.value, selected.value.id);
+  await persistSelectedKnowledge();
+  if (hostId && tree.value) {
+    syncSpatiotemporalExtracted(tree.value, hostId);
+    tree.value = await persistTree(tree.value);
+    syncFlowFromTree();
+  }
+}
+
+async function addSpatiotemporalLocation() {
+  if (!tree.value || !selected.value || !selectedIsSpatiotemporal.value) return;
+  const n = linkedLocationCards(tree.value, selected.value.id).length + 1;
+  const node = createLocationCard(
+    tree.value,
+    selected.value.id,
+    t("workspace.st.locationN", { n }),
+  );
+  if (!node) return;
+  applyAutoLayout(tree.value.nodes, tree.value.edges);
+  tree.value = await persistTree(tree.value);
+  syncFlowFromTree();
+  await selectNode(node);
+  await nextTick();
+  void fitView({ padding: 0.18, duration: 280 });
+}
+
+async function openSpatiotemporalLocation(id: string) {
+  if (!tree.value) return;
+  const n = tree.value.nodes.find((x) => x.id === id);
+  if (n) await selectNode(n);
+}
+
+async function addSpatiotemporalLocations(locs: KeyLocation[]) {
+  if (!tree.value || !selected.value || !selectedIsSpatiotemporal.value || !locs.length) return;
+  let last: TreeNode | null = null;
+  for (const loc of locs) {
+    last = createLocationCard(
+      tree.value,
+      selected.value.id,
+      loc.name.trim() || t("workspace.st.locationUntitled"),
+      loc,
+    );
+  }
+  if (!last) return;
+  applyAutoLayout(tree.value.nodes, tree.value.edges);
+  tree.value = await persistTree(tree.value);
+  syncFlowFromTree();
+  await nextTick();
+  void fitView({ padding: 0.18, duration: 280 });
+}
+
+async function persistSelectedSocialPower(payload: {
+  socialPower: SocialPowerData;
+  extracted: string;
+}) {
+  if (!tree.value || !selected.value || selected.value.kind !== "knowledge") return;
+  const k = ensureKnowledgePayload();
+  if (!k) return;
+  applyWorldviewFanLabel(selected.value, "wv_social_power");
+  payload.socialPower.races = [];
+  payload.socialPower.factions = [];
+  k.social_power = payload.socialPower;
+  k.extracted = payload.extracted;
+  k.slot = "wv_social_power";
+  await persistSelectedKnowledge();
+}
+
+async function persistSelectedWorldRace(payload: {
+  name: string;
+  worldRace: WorldRace;
+  extracted: string;
+}) {
+  if (!tree.value || !selected.value || selected.value.kind !== "knowledge") return;
+  const k = ensureKnowledgePayload();
+  if (!k) return;
+  selected.value.label = payload.name;
+  k.world_race = normalizeRace(payload.worldRace);
+  k.extracted = payload.extracted;
+  k.slot = "wv_race";
+  const hostId = socialPowerHostId(tree.value, selected.value.id);
+  await persistSelectedKnowledge();
+  if (hostId && tree.value) {
+    syncSocialPowerExtracted(tree.value, hostId);
+    tree.value = await persistTree(tree.value);
+    syncFlowFromTree();
+  }
+}
+
+async function persistSelectedMajorFaction(payload: {
+  name: string;
+  majorFaction: MajorFaction;
+  extracted: string;
+}) {
+  if (!tree.value || !selected.value || selected.value.kind !== "knowledge") return;
+  const k = ensureKnowledgePayload();
+  if (!k) return;
+  selected.value.label = payload.name;
+  k.major_faction = normalizeFaction(payload.majorFaction);
+  k.extracted = payload.extracted;
+  k.slot = "wv_faction";
+  const hostId = socialPowerHostId(tree.value, selected.value.id);
+  await persistSelectedKnowledge();
+  if (hostId && tree.value) {
+    syncSocialPowerExtracted(tree.value, hostId);
+    tree.value = await persistTree(tree.value);
+    syncFlowFromTree();
+  }
+}
+
+async function addSocialPowerRace() {
+  if (!tree.value || !selected.value || !selectedIsSocialPower.value) return;
+  const n = linkedRaceCards(tree.value, selected.value.id).length + 1;
+  const node = createRaceCard(
+    tree.value,
+    selected.value.id,
+    t("workspace.pow.raceN", { n }),
+  );
+  if (!node) return;
+  applyAutoLayout(tree.value.nodes, tree.value.edges);
+  tree.value = await persistTree(tree.value);
+  syncFlowFromTree();
+  await selectNode(node);
+  await nextTick();
+  void fitView({ padding: 0.18, duration: 280 });
+}
+
+async function addSocialPowerFaction() {
+  if (!tree.value || !selected.value || !selectedIsSocialPower.value) return;
+  const n = linkedFactionCards(tree.value, selected.value.id).length + 1;
+  const node = createFactionCard(
+    tree.value,
+    selected.value.id,
+    t("workspace.pow.factionN", { n }),
+  );
+  if (!node) return;
+  applyAutoLayout(tree.value.nodes, tree.value.edges);
+  tree.value = await persistTree(tree.value);
+  syncFlowFromTree();
+  await selectNode(node);
+  await nextTick();
+  void fitView({ padding: 0.18, duration: 280 });
+}
+
+async function openSocialPowerRace(id: string) {
+  if (!tree.value) return;
+  const n = tree.value.nodes.find((x) => x.id === id);
+  if (n) await selectNode(n);
+}
+
+async function openSocialPowerFaction(id: string) {
+  if (!tree.value) return;
+  const n = tree.value.nodes.find((x) => x.id === id);
+  if (n) await selectNode(n);
+}
+
+async function onStoryRulesChatApplied() {
+  if (!tree.value) return;
+  try {
+    let tr = await api.getTree(props.id);
+    tr = await maybeMigrateWorldview(tr);
+    tree.value = tr;
+    if (selected.value) {
+      const n = tree.value.nodes.find((x) => x.id === selected.value!.id);
+      if (n) selected.value = n;
+    }
+    syncFlowFromTree();
+    await nextTick();
+    void fitView({ padding: 0.18, duration: 280 });
+  } catch (e) {
+    notice.value = String(e);
+  }
+}
+
+function openStoryRulesChat() {
+  storyRulesChatOpen.value = true;
+}
+
+async function openStoryRulesBlock(id: string) {
+  if (!tree.value) return;
+  const n = tree.value.nodes.find((x) => x.id === id);
+  if (n) await selectNode(n);
+}
+
+async function persistSelectedVolume(payload: { volume: VolumeData; nodeId?: string }) {
+  if (!tree.value) return;
+  const id = payload.nodeId ?? selected.value?.id;
+  if (!id) return;
+  const n = tree.value.nodes.find((x) => x.id === id && x.kind === "volume");
+  if (!n) return;
+  const vol = normalizeVolume(payload.volume);
+  n.volume = vol;
+  if (selected.value?.id === id) selected.value.volume = vol;
+  tree.value = await persistTree(tree.value);
+  syncFlowFromTree();
+}
+
+async function persistSelectedStoryRulesBlock(payload: Record<string, unknown>) {
+  if (!tree.value || !selected.value || !selectedStoryRulesBlockSlot.value) return;
+  const slot = selectedStoryRulesBlockSlot.value;
+  const k = ensureKnowledgePayload();
+  if (!k) return;
+  const data = normalizeStoryRulesBlock(slot, payload);
+  const extracted = formatStoryRulesBlockExtracted(slot, data);
+  k.slot = slot;
+  k.surface_setting = null;
+  k.story_engine = null;
+  k.fulfillment_system = null;
+  k.constraint_redlines = null;
+  if (slot === "sr_surface_setting") k.surface_setting = data as SurfaceSettingData;
+  else if (slot === "sr_story_engine") k.story_engine = data as StoryEngineData;
+  else if (slot === "sr_fulfillment_system") k.fulfillment_system = data as FulfillmentSystemData;
+  else k.constraint_redlines = data as ConstraintRedlinesData;
+  k.extracted = extracted;
+  selected.value.outline = extracted.slice(0, 200);
+  await persistSelectedKnowledge();
+  const rules = findStoryRulesNode(tree.value);
+  if (rules) {
+    syncStoryRulesParentExtracted(tree.value, rules.id, titleI18n);
+    tree.value = await persistTree(tree.value);
+    syncFlowFromTree();
+  }
 }
 
 async function publishSelectedKnowledge() {
@@ -1916,6 +3191,21 @@ const filteredPublicCards = computed(() => {
   return live.filter((c) => c.title.toLowerCase().includes(q));
 });
 
+const existingKnowledgeTitles = computed(() => {
+  const titles = new Set<string>();
+  for (const n of tree.value?.nodes ?? []) {
+    if (n.kind !== "knowledge") continue;
+    const title = n.label.trim();
+    if (title) titles.add(title);
+  }
+  return titles;
+});
+
+function publicCardAlreadyOnTree(card: PublicKnowledgeCard): boolean {
+  const title = card.title.trim();
+  return title !== "" && existingKnowledgeTitles.value.has(title);
+}
+
 async function openPublicPick() {
   publicPickFilter.value = "";
   publicKnowledgeCards.value = await api.listPublicKnowledgeCards().catch(() => []);
@@ -1924,6 +3214,8 @@ async function openPublicPick() {
 
 async function addPickedPublicCard(id: string) {
   if (publicPickBusy.value) return;
+  const picked = publicKnowledgeCards.value.find((c) => c.id === id);
+  if (picked && publicCardAlreadyOnTree(picked)) return;
   publicPickBusy.value = true;
   try {
     const before = new Set((tree.value?.nodes ?? []).map((n) => n.id));
@@ -1951,11 +3243,11 @@ async function persistSelectedCharacter(payload: {
   characterSaveBusy.value = true;
   try {
     selected.value.label = payload.name;
-    selected.value.character = { ...payload.card };
+    selected.value.character = syncLegacyFields(normalizeCharacterCard(payload.card));
     const n = tree.value.nodes.find((x) => x.id === selected.value!.id);
     if (n) {
       n.label = payload.name;
-      n.character = { ...payload.card };
+      n.character = syncLegacyFields(normalizeCharacterCard(payload.card));
     }
     tree.value = await persistTree(tree.value);
     syncFlowFromTree();
@@ -1986,7 +3278,15 @@ async function persistSelectedCardText() {
     sel.label = label;
     n.label = label;
   }
-  n.outline = sel.outline;
+  if (sel.kind === "chapter" || sel.kind === "side_plot") {
+    n.outline = sel.outline;
+  }
+  if (sel.kind === "chapter") {
+    n.detailed_outline = [...(sel.detailed_outline ?? [])]
+      .map((s) => String(s ?? "").trim())
+      .filter(Boolean);
+    sel.detailed_outline = [...n.detailed_outline];
+  }
   if (sel.kind === "side_plot") {
     n.side_plot = sel.side_plot
       ? { ...sel.side_plot }
@@ -1994,6 +3294,101 @@ async function persistSelectedCardText() {
   }
   tree.value = await persistTree(tree.value);
   syncFlowFromTree();
+}
+
+/** 单条 AI 重写中的下标；null 表示未在重写 */
+const detailedOutlineItemBusy = ref<number | null>(null);
+/** 细纲单条 AI：先填提示再重写 */
+const pendingDetailedOutlineAi = ref<{ index: number; text: string } | null>(null);
+const detailedOutlineAiNote = ref("");
+const detailedOutlineAiError = ref("");
+
+function ensureSelectedDetailedOutline(): string[] {
+  if (!selected.value || selected.value.kind !== "chapter") return [];
+  if (!Array.isArray(selected.value.detailed_outline)) selected.value.detailed_outline = [];
+  return selected.value.detailed_outline;
+}
+
+function addDetailedOutlineItem() {
+  if (!selected.value || selected.value.kind !== "chapter" || chapterBusy.value) return;
+  ensureSelectedDetailedOutline().push("");
+}
+
+async function removeDetailedOutlineItem(i: number) {
+  if (!selected.value || selected.value.kind !== "chapter" || chapterBusy.value) return;
+  if (detailedOutlineItemBusy.value !== null) return;
+  const list = ensureSelectedDetailedOutline();
+  list.splice(i, 1);
+  await persistSelectedCardText();
+}
+
+async function moveDetailedOutlineItem(i: number, dir: -1 | 1) {
+  if (!selected.value || selected.value.kind !== "chapter" || chapterBusy.value) return;
+  if (detailedOutlineItemBusy.value !== null) return;
+  const list = ensureSelectedDetailedOutline();
+  const j = i + dir;
+  if (j < 0 || j >= list.length) return;
+  const tmp = list[i];
+  list[i] = list[j];
+  list[j] = tmp;
+  await persistSelectedCardText();
+}
+
+function openDetailedOutlineAiItem(i: number) {
+  if (!selected.value || selected.value.kind !== "chapter" || chapterBusy.value) return;
+  if (detailedOutlineItemBusy.value !== null) return;
+  if (!(selected.value.outline ?? "").trim()) {
+    notice.value = t("workspace.chapterDetailedOutlineNeedBrief");
+    return;
+  }
+  const list = ensureSelectedDetailedOutline();
+  if (i < 0 || i >= list.length) return;
+  pendingDetailedOutlineAi.value = {
+    index: i,
+    text: list[i] ?? "",
+  };
+  detailedOutlineAiNote.value = "";
+  detailedOutlineAiError.value = "";
+}
+
+function cancelDetailedOutlineAi() {
+  if (detailedOutlineItemBusy.value !== null) return;
+  pendingDetailedOutlineAi.value = null;
+  detailedOutlineAiNote.value = "";
+  detailedOutlineAiError.value = "";
+}
+
+async function confirmDetailedOutlineAi() {
+  const pending = pendingDetailedOutlineAi.value;
+  if (!pending || !tree.value || !selected.value || selected.value.kind !== "chapter") return;
+  if (chapterBusy.value || detailedOutlineItemBusy.value !== null) return;
+  const notes = detailedOutlineAiNote.value.trim();
+  notice.value = "";
+  detailedOutlineAiError.value = "";
+  try {
+    await persistSelectedCardText();
+    detailedOutlineItemBusy.value = pending.index;
+    const list = ensureSelectedDetailedOutline();
+    const item = await api.regenerateDetailedOutlineItem(
+      props.id,
+      selected.value.id,
+      pending.index,
+      notes,
+    );
+    list[pending.index] = item;
+    const n = tree.value.nodes.find((x) => x.id === selected.value!.id);
+    if (n) n.detailed_outline = [...list];
+    selected.value.detailed_outline = [...list];
+    tree.value = await persistTree(tree.value);
+    syncFlowFromTree();
+    notice.value = t("workspace.chapterDetailedOutlineItemDone");
+    pendingDetailedOutlineAi.value = null;
+    detailedOutlineAiNote.value = "";
+  } catch (e) {
+    detailedOutlineAiError.value = String(e);
+  } finally {
+    detailedOutlineItemBusy.value = null;
+  }
 }
 
 function plotStatusOf(n: TreeNode | null | undefined): string {
@@ -2039,49 +3434,14 @@ async function persistNovelPlan() {
   }
 }
 
-function requestFillKnowledge() {
-  if (!selected.value || selected.value.kind !== "knowledge") return;
-  if (!knowledgeDraft.value.book_ids.length || knowledgeFillBusy.value) return;
-  if ((knowledgeDraft.value.extracted || "").trim()) {
-    pendingKnowledgeFill.value = true;
-    return;
-  }
-  void runFillKnowledge();
-}
-
-async function runFillKnowledge() {
-  if (!selected.value || selected.value.kind !== "knowledge") return;
-  pendingKnowledgeFill.value = false;
-  await persistSelectedKnowledge();
-  knowledgeFillBusy.value = true;
-  notice.value = "";
+async function persistNovelFeatures(next: NovelFeatures) {
+  if (!novel.value) return;
   try {
-    tree.value = await fillKnowledgeCard(props.id, selected.value.id);
-    const updated = tree.value.nodes.find((n) => n.id === selected.value!.id);
-    if (updated) selected.value = updated;
-    syncFlowFromTree();
-    notice.value = t("workspace.knowledgeFilled");
+    novel.value = await api.updateNovelFeatures(props.id, normalizeNovelFeatures(next));
   } catch (e) {
     notice.value = String(e);
-  } finally {
-    knowledgeFillBusy.value = false;
   }
 }
-
-const hasRefineDiff = computed(() => {
-  const id = selected.value?.id;
-  return !!(id && refineBeforeByNode.value[id] != null && chapterMd.value);
-});
-
-const refineDiffHunks = computed(() => {
-  const id = selected.value?.id;
-  if (!id) return [];
-  const before = refineBeforeByNode.value[id];
-  if (before == null) return [];
-  return diffLines(before, chapterMd.value);
-});
-
-const chapterHtml = computed(() => (chapterMd.value ? renderChapterMd(chapterMd.value) : ""));
 
 /** 本章继承的根剧情（只读） */
 const chapterLinkedPlotsFromRoot = computed(() => {
@@ -2209,60 +3569,151 @@ function onHostPlotPointerDown(index: number, ev: PointerEvent) {
   window.addEventListener("pointercancel", onUp);
 }
 
-/** 本章关联知识卡（写作手法/文风等硬约束；linked_* ∪ 边） */
-const chapterLinkedKnowledge = computed(() => {
+/** 本章关联知识卡（写作手法/文风等硬约束；根→卷→章顺序） */
+function mapKnowledgeRow(
+  n: TreeNode,
+  from: "root" | "volume" | "chapter",
+): {
+  id: string;
+  label: string;
+  snippet: string;
+  from: "root" | "volume" | "chapter";
+  chipShell: string;
+} {
+  const kn = n.knowledge;
+  const snippet = (kn?.extracted || kn?.extract_prompt || n.outline || "").trim().slice(0, 120);
+  return {
+    id: n.id,
+    label: knowledgeNodeLabel(n, t),
+    snippet,
+    from,
+    chipShell: knowledgeChipShell(n),
+  };
+}
+
+const chapterLinkedKnowledgeFromRoot = computed(() => {
+  const ch = selected.value;
+  const tr = tree.value;
+  if (!ch || ch.kind !== "chapter" || !tr) return [] as ReturnType<typeof mapKnowledgeRow>[];
+  return filterHostPanelLinkedKnowledge(
+    orderKnowledgeNodesByIds(tr.nodes, rootLinkedKnowledgeIds(tr.nodes, tr.edges)),
+  ).map((n) => mapKnowledgeRow(n, "root"));
+});
+
+const chapterLinkedKnowledgeFromVolume = computed(() => {
+  const ch = selected.value;
+  const tr = tree.value;
+  if (!ch || ch.kind !== "chapter" || !tr) return [] as ReturnType<typeof mapKnowledgeRow>[];
+  const vid = chapterParentVolumeId(ch.id, tr.nodes, tr.edges);
+  if (!vid) return [];
+  return filterHostPanelLinkedKnowledge(
+    orderKnowledgeNodesByIds(tr.nodes, volumeLocalKnowledgeIds(vid, tr.nodes, tr.edges)),
+  ).map((n) => mapKnowledgeRow(n, "volume"));
+});
+
+const chapterLinkedKnowledgeLocal = computed(() => {
   const ch = selected.value;
   const tr = tree.value;
   if (!ch || ch.kind !== "chapter" || !tr) {
-    return [] as { id: string; label: string; snippet: string; from: "root" | "volume" | "chapter" }[];
+    return [] as (ReturnType<typeof mapKnowledgeRow> & { order: number })[];
   }
-  const byId = new Map(tr.nodes.map((n) => [n.id, n]));
-  const rootSet = new Set(rootLinkedKnowledgeIds(tr.nodes, tr.edges));
-  const vid = chapterParentVolumeId(ch.id, tr.nodes, tr.edges);
-  const volSet = new Set(
-    vid
-      ? chapterInheritedKnowledgeIds(ch.id, tr.nodes, tr.edges).filter((id) => !rootSet.has(id))
-      : [],
-  );
-  return chapterEffectiveKnowledgeIds(ch.id, tr.nodes, tr.edges)
-    .map((id) => byId.get(id))
-    .filter((n): n is NonNullable<typeof n> => !!n && n.kind === "knowledge")
-    .map((n) => {
-      const kn = n.knowledge;
-      const snippet =
-        (kn?.extracted || kn?.extract_prompt || n.outline || "").trim().slice(0, 120);
-      const from: "root" | "volume" | "chapter" = rootSet.has(n.id)
-        ? "root"
-        : volSet.has(n.id)
-          ? "volume"
-          : "chapter";
-      return { id: n.id, label: n.label, snippet, from };
-    });
+  return filterHostPanelLinkedKnowledge(
+    orderKnowledgeNodesByIds(tr.nodes, chapterLocalKnowledgeIds(ch.id, tr.nodes, tr.edges)),
+  ).map((n, order) => ({ ...mapKnowledgeRow(n, "chapter"), order }));
 });
 
-const volumeLinkedKnowledge = computed(() => {
+const volumeLinkedKnowledgeFromRoot = computed(() => {
+  const vol = selected.value;
+  const tr = tree.value;
+  if (!vol || vol.kind !== "volume" || !tr) return [] as ReturnType<typeof mapKnowledgeRow>[];
+  return filterHostPanelLinkedKnowledge(
+    orderKnowledgeNodesByIds(tr.nodes, rootLinkedKnowledgeIds(tr.nodes, tr.edges)),
+  ).map((n) => mapKnowledgeRow(n, "root"));
+});
+
+const volumeLinkedKnowledgeLocal = computed(() => {
   const vol = selected.value;
   const tr = tree.value;
   if (!vol || vol.kind !== "volume" || !tr) {
-    return [] as { id: string; label: string; snippet: string; from: "root" | "volume" }[];
+    return [] as (ReturnType<typeof mapKnowledgeRow> & { order: number })[];
   }
-  const byId = new Map(tr.nodes.map((n) => [n.id, n]));
-  const rootSet = new Set(rootLinkedKnowledgeIds(tr.nodes, tr.edges));
-  return volumeEffectiveKnowledgeIds(vol.id, tr.nodes, tr.edges)
-    .map((id) => byId.get(id))
-    .filter((n): n is NonNullable<typeof n> => !!n && n.kind === "knowledge")
-    .map((n) => {
-      const kn = n.knowledge;
-      const snippet =
-        (kn?.extracted || kn?.extract_prompt || n.outline || "").trim().slice(0, 120);
-      return {
-        id: n.id,
-        label: n.label,
-        snippet,
-        from: (rootSet.has(n.id) ? "root" : "volume") as "root" | "volume",
-      };
-    });
+  return filterHostPanelLinkedKnowledge(
+    orderKnowledgeNodesByIds(tr.nodes, volumeLocalKnowledgeIds(vol.id, tr.nodes, tr.edges)),
+  ).map((n, order) => ({ ...mapKnowledgeRow(n, "volume"), order }));
 });
+
+/** 根节点可排序知识（不含六世界观+故事规则） */
+const rootLinkedKnowledgeLocal = computed(() => {
+  const root = selected.value;
+  const tr = tree.value;
+  if (!root || root.kind !== "novel" || !tr) {
+    return [] as (ReturnType<typeof mapKnowledgeRow> & { order: number })[];
+  }
+  return filterHostPanelLinkedKnowledge(
+    orderKnowledgeNodesByIds(tr.nodes, rootLinkedKnowledgeIds(tr.nodes, tr.edges)),
+  ).map((n, order) => ({ ...mapKnowledgeRow(n, "root"), order }));
+});
+
+const knowledgeListEl = ref<HTMLElement | null>(null);
+const knowledgeReorderDragFrom = ref<number | null>(null);
+const knowledgeReorderOver = ref<number | null>(null);
+
+function applyHostKnowledgeOrder(from: number, to: number) {
+  const sel = selected.value;
+  if (!sel || (sel.kind !== "chapter" && sel.kind !== "volume" && sel.kind !== "novel")) return;
+  if (from === to || from < 0 || to < 0) return;
+  const ids =
+    sel.kind === "chapter"
+      ? chapterLinkedKnowledgeLocal.value.map((p) => p.id)
+      : sel.kind === "volume"
+        ? volumeLinkedKnowledgeLocal.value.map((p) => p.id)
+        : rootLinkedKnowledgeLocal.value.map((p) => p.id);
+  if (from >= ids.length || to >= ids.length) return;
+  const [item] = ids.splice(from, 1);
+  ids.splice(to, 0, item);
+  void reorderHostKnowledge(sel.id, sel.kind, ids);
+}
+
+function knowledgeIndexAtClientY(clientY: number): number | null {
+  const root = knowledgeListEl.value;
+  if (!root) return null;
+  const items = [...root.querySelectorAll<HTMLElement>("[data-know-idx]")];
+  if (!items.length) return null;
+  for (const el of items) {
+    const r = el.getBoundingClientRect();
+    if (clientY < r.top + r.height / 2) {
+      const n = Number(el.dataset.knowIdx);
+      return Number.isFinite(n) ? n : null;
+    }
+  }
+  const last = Number(items[items.length - 1]?.dataset.knowIdx);
+  return Number.isFinite(last) ? last : null;
+}
+
+function onHostKnowledgePointerDown(index: number, ev: PointerEvent) {
+  if (ev.button !== 0) return;
+  ev.preventDefault();
+  knowledgeReorderDragFrom.value = index;
+  knowledgeReorderOver.value = index;
+  const onMove = (e: PointerEvent) => {
+    const over = knowledgeIndexAtClientY(e.clientY);
+    if (over !== null) knowledgeReorderOver.value = over;
+  };
+  const onUp = (e: PointerEvent) => {
+    window.removeEventListener("pointermove", onMove);
+    window.removeEventListener("pointerup", onUp);
+    window.removeEventListener("pointercancel", onUp);
+    const from = knowledgeReorderDragFrom.value;
+    const to = knowledgeIndexAtClientY(e.clientY) ?? knowledgeReorderOver.value;
+    knowledgeReorderDragFrom.value = null;
+    knowledgeReorderOver.value = null;
+    if (from === null || to === null) return;
+    applyHostKnowledgeOrder(from, to);
+  };
+  window.addEventListener("pointermove", onMove);
+  window.addEventListener("pointerup", onUp);
+  window.addEventListener("pointercancel", onUp);
+}
 
 /** 章/卷关联人物名：含根（章还含父卷）贯穿人物、剧情卡上挂的人物 */
 function collectHostLinkedCharLabels(
@@ -2343,13 +3794,14 @@ const volumeLinkTags = computed(() => {
 
 const chapterBusy = computed(
   () =>
-    busy.value === "generate" ||
-    busy.value === "refine" ||
     busy.value === "plan-next" ||
     busy.value === "gen-plots" ||
     busy.value === "regen-memory" ||
     busy.value === "gen-cards" ||
-    busy.value === "consolidate-plots",
+    busy.value === "consolidate-plots" ||
+    busy.value === "split-shots" ||
+    busy.value === "shot-prompts" ||
+    busy.value === "submit-comfy",
 );
 /** 三区尺寸比例跨会话记住 */
 const leftW = useLocalStorage("novework.workspaceLeftW", 380);
@@ -2428,7 +3880,7 @@ function startResizeChatH(ev: MouseEvent) {
 }
 
 async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y: number } } }) {
-  if (!tree.value) return;
+  if (!tree.value || collapsedVolumeIdSet.value.size) return;
   const n = tree.value.nodes.find((x) => x.id === ev.node.id);
   if (!n) return;
   n.position = { x: ev.node.position.x, y: ev.node.position.y };
@@ -2439,7 +3891,7 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
 <template>
   <div class="flex h-full flex-col">
     <div class="min-h-0 flex-1" :style="workspaceGridStyle">
-      <!-- 左：章节预览 -->
+      <!-- 左：卡片属性 -->
       <div class="flex min-h-0 min-w-0 flex-col border-r" style="grid-area: left">
         <div class="shrink-0 space-y-2 border-b p-3">
           <div class="flex items-start justify-between gap-2">
@@ -2469,8 +3921,8 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                 @change="persistSelectedCardText"
               />
             </div>
-            <div v-else class="min-w-0 flex-1 text-sm font-medium">
-              {{ selected?.label ?? t("workspace.selectNode") }}
+            <div v-else class="min-w-0 flex-1 truncate text-sm font-medium">
+              {{ selected?.label?.trim() || t("workspace.selectNode") }}
             </div>
             <Button
               v-if="canDeleteSelectedCard"
@@ -2560,9 +4012,11 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
         <div
           class="relative min-h-0 flex-1 p-4"
           :class="
-            selectedIsChapter || selected?.kind === 'side_plot' || selectedIsNovel || selectedIsVolume
-              ? 'flex flex-col overflow-hidden'
-              : 'overflow-auto'
+            selectedIsChapter || selectedIsNovel || selectedIsVolume
+              ? 'overflow-y-auto'
+              : selected?.kind === 'side_plot'
+                ? 'flex flex-col overflow-hidden'
+                : 'overflow-auto'
           "
         >
           <div
@@ -2572,16 +4026,16 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
             <Loader2 class="h-6 w-6 animate-spin text-primary" />
             <p class="text-sm font-medium text-foreground">
               {{
-                busy === "refine"
-                  ? t("workspace.refining")
-                  : busy === "plan-next"
-                    ? t("workspace.planningNext")
-                    : busy === "gen-plots"
-                      ? t("workspace.genPlotsBusy")
-                      : busy === "regen-memory"
-                        ? t("workspace.regenMemoryBusy")
-                        : busy === "gen-cards"
-                          ? t("workspace.rootGenChaptersBusy")
+                busy === "plan-next"
+                  ? t("workspace.planningNext")
+                  : busy === "gen-plots"
+                    ? t("workspace.genPlotsBusy")
+                    : busy === "regen-memory"
+                      ? t("workspace.regenMemoryBusy")
+                      : busy === "gen-cards"
+                        ? t("workspace.rootGenChaptersBusy")
+                        : busy === "consolidate-plots"
+                          ? t("workspace.consolidatePlotsBusy")
                           : t("workspace.generating")
               }}
             </p>
@@ -2641,19 +4095,143 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
           </div>
           <CharacterCardPanel
             v-if="selectedIsCharacter"
+            :novel-id="id"
+            :character-id="selected?.id"
             :name="selected?.label ?? ''"
             :card="selected?.character ?? emptyCharacter()"
             :busy="characterSaveBusy"
+            :law-options="characterLawOptions"
+            :character-names="otherCharacterNames"
             @save="persistSelectedCharacter"
+          />
+          <CoreLawsPanel
+            v-else-if="selectedIsCoreLaws"
+            :novel-id="id"
+            :data="selected?.knowledge?.core_laws"
+            :axiom-links="coreLawsAxiomLinks"
+            :linked-axioms="coreLawsLinkedAxioms"
+            @save="persistSelectedCoreLaws"
+            @add-axiom="addCoreLawsAxiom"
+            @open-axiom="openCoreLawsAxiom"
+          />
+          <WorldAxiomPanel
+            v-else-if="selectedIsWorldAxiom"
+            :novel-id="id"
+            :name="selected?.label ?? ''"
+            :data="selected?.knowledge?.world_axiom"
+            @save="persistSelectedWorldAxiom"
+          />
+          <SocialPowerPanel
+            v-else-if="selectedIsSocialPower"
+            :novel-id="id"
+            :data="selected?.knowledge?.social_power"
+            :race-links="socialPowerRaceLinks"
+            :faction-links="socialPowerFactionLinks"
+            :linked-races="socialPowerLinkedRaces"
+            :linked-factions="socialPowerLinkedFactions"
+            @save="persistSelectedSocialPower"
+            @add-race="addSocialPowerRace"
+            @add-faction="addSocialPowerFaction"
+            @open-race="openSocialPowerRace"
+            @open-faction="openSocialPowerFaction"
+          />
+          <WorldRacePanel
+            v-else-if="selectedIsWorldRace"
+            :novel-id="id"
+            :name="selected?.label ?? ''"
+            :data="selected?.knowledge?.world_race"
+            @save="persistSelectedWorldRace"
+          />
+          <MajorFactionPanel
+            v-else-if="selectedIsMajorFaction"
+            :novel-id="id"
+            :name="selected?.label ?? ''"
+            :data="selected?.knowledge?.major_faction"
+            @save="persistSelectedMajorFaction"
+          />
+          <KeyLocationPanel
+            v-else-if="selectedIsKeyLocation"
+            :novel-id="id"
+            :name="selected?.label ?? ''"
+            :data="selected?.knowledge?.key_location"
+            @save="persistSelectedKeyLocation"
+          />
+          <SpatiotemporalPanel
+            v-else-if="selectedIsSpatiotemporal"
+            :novel-id="id"
+            :data="selected?.knowledge?.spatiotemporal"
+            :location-links="spatiotemporalLocationLinks"
+            :linked-locations="spatiotemporalLinkedLocations"
+            @save="persistSelectedSpatiotemporal"
+            @add-location="addSpatiotemporalLocation"
+            @open-location="openSpatiotemporalLocation"
+            @add-locations="addSpatiotemporalLocations"
+          />
+          <ExistencePanel
+            v-else-if="selectedIsExistence"
+            :novel-id="id"
+            :data="selected?.knowledge?.existence"
+            @save="persistSelectedExistence"
+          />
+          <InfoFlowPanel
+            v-else-if="selectedIsInfoFlow"
+            :novel-id="id"
+            :data="selected?.knowledge?.info_flow"
+            @save="persistSelectedInfoFlow"
+          />
+          <HistoryCulturePanel
+            v-else-if="selectedIsHistoryCulture"
+            :novel-id="id"
+            :data="selected?.knowledge?.history_culture"
+            :religion-links="historyCultureReligionLinks"
+            :event-links="historyCultureEventLinks"
+            :linked-religions="historyCultureLinkedReligions"
+            :linked-events="historyCultureLinkedEvents"
+            @save="persistSelectedHistoryCulture"
+            @add-religion="addHistoryCultureReligion"
+            @add-event="addHistoryCultureEvent"
+            @open-religion="openHistoryCultureReligion"
+            @open-event="openHistoryCultureEvent"
+          />
+          <WorldReligionPanel
+            v-else-if="selectedIsWorldReligion"
+            :novel-id="id"
+            :name="selected?.label ?? ''"
+            :data="selected?.knowledge?.world_religion"
+            @save="persistSelectedWorldReligion"
+          />
+          <MajorEventPanel
+            v-else-if="selectedIsMajorEvent"
+            :novel-id="id"
+            :name="selected?.label ?? ''"
+            :data="selected?.knowledge?.major_event"
+            @save="persistSelectedMajorEvent"
+          />
+          <StoryRulesHubPanel
+            v-else-if="selectedIsStoryRules"
+            :block-links="storyRulesBlockLinks"
+            @open-block="openStoryRulesBlock"
+            @open-chat="openStoryRulesChat"
+          />
+          <StoryRulesBlockPanel
+            v-else-if="selectedIsStoryRulesBlock && selectedStoryRulesBlockSlot"
+            :novel-id="id"
+            :node-id="selected?.id"
+            :slot="selectedStoryRulesBlockSlot"
+            :data="selected?.knowledge"
+            @save="persistSelectedStoryRulesBlock"
           />
           <div v-else-if="selectedIsKnowledge" class="space-y-4 text-sm">
             <div>
-              <div class="mb-1 flex items-center justify-between gap-2">
-                <label class="mb-0 block text-xs text-muted-foreground">{{ t("workspace.knowledgeLabel") }}</label>
+              <div class="mb-1 flex items-start justify-between gap-2">
+                <div class="min-w-0 flex-1">
+                  <WorldviewFanTitle v-if="selectedWorldviewFanSlot" :slot="selectedWorldviewFanSlot" />
+                  <label v-else class="mb-0 block text-xs text-muted-foreground">{{ t("workspace.knowledgeLabel") }}</label>
+                </div>
                 <Button
                   size="sm"
                   variant="outline"
-                  class="h-7 px-2 text-xs"
+                  class="h-7 shrink-0 px-2 text-xs"
                   :disabled="publishBusy"
                   :title="t('workspace.publishKnowledge')"
                   @click="publishSelectedKnowledge"
@@ -2664,6 +4242,7 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                 </Button>
               </div>
               <Input
+                v-if="!selectedWorldviewFanSlot"
                 :model-value="selected?.label ?? ''"
                 class="h-8"
                 @update:model-value="(v) => { if (selected) selected.label = String(v); }"
@@ -2678,7 +4257,6 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                 rows="10"
                 class="min-h-[10rem] text-sm"
                 :placeholder="t('workspace.knowledgeFeaturesPh')"
-                :disabled="knowledgeFillBusy"
                 @update:model-value="(v) => { const k = ensureKnowledgePayload(); if (k) k.extracted = String(v); }"
                 @change="persistSelectedKnowledge"
               />
@@ -2691,66 +4269,8 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                 }}
               </p>
             </div>
-            <div>
-              <div class="mb-1 flex items-center justify-between gap-2">
-                <label class="text-xs text-muted-foreground">{{ t("workspace.knowledgePickBooks") }}</label>
-                <Button
-                  size="sm"
-                  class="h-7 px-2 text-xs"
-                  :disabled="knowledgeFillBusy || !knowledgeDraft.book_ids.length"
-                  @click="requestFillKnowledge"
-                >
-                  <Loader2 v-if="knowledgeFillBusy" class="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                  {{ knowledgeFillBusy ? t("workspace.knowledgeFilling") : t("workspace.knowledgeFill") }}
-                </Button>
-              </div>
-              <p v-if="!knowledgeBooks.length" class="text-xs text-muted-foreground">{{ t("workspace.knowledgeNoBooks") }}</p>
-              <div v-else class="space-y-1.5">
-                <Input
-                  v-model="knowledgeBookFilter"
-                  class="h-7 text-xs"
-                  :placeholder="t('workspace.knowledgeSearchBooks')"
-                />
-                <div class="max-h-44 overflow-y-auto rounded-md border">
-                  <button
-                    v-for="b in filteredKnowledgeBooks"
-                    :key="b.id"
-                    type="button"
-                    class="flex w-full items-center gap-2 border-b border-border/50 px-2 py-1.5 text-left last:border-b-0 hover:bg-muted/50"
-                    :class="knowledgeDraft.book_ids.includes(b.id) ? 'bg-teal-50/90' : ''"
-                    :title="[b.title, ...b.genres].filter(Boolean).join(' · ')"
-                    @click="toggleKnowledgeBook(b.id)"
-                  >
-                    <span
-                      class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border text-[9px] leading-none"
-                      :class="
-                        knowledgeDraft.book_ids.includes(b.id)
-                          ? 'border-teal-700 bg-teal-700 text-white'
-                          : 'border-muted-foreground/40'
-                      "
-                      aria-hidden="true"
-                    >
-                      <span v-if="knowledgeDraft.book_ids.includes(b.id)">✓</span>
-                    </span>
-                    <span class="min-w-0 flex-1 truncate text-xs">
-                      {{ b.title }}
-                      <span v-if="b.genres.length" class="text-muted-foreground">
-                        · {{ b.genres.join("、") }}
-                      </span>
-                    </span>
-                  </button>
-                  <p
-                    v-if="!filteredKnowledgeBooks.length"
-                    class="px-2 py-3 text-center text-xs text-muted-foreground"
-                  >
-                    {{ t("workspace.knowledgeSearchEmpty") }}
-                  </p>
-                </div>
-              </div>
-            </div>
           </div>
-          <div v-else-if="selectedIsNovel" class="flex min-h-0 flex-1 flex-col gap-4">
-            <div class="min-h-0 shrink overflow-y-auto space-y-4">
+          <div v-else-if="selectedIsNovel" class="space-y-4">
             <div class="space-y-2">
               <label class="block text-xs text-muted-foreground">{{ t("workspace.cover") }}</label>
               <div class="flex items-start gap-3">
@@ -2858,23 +4378,78 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
               </div>
               <p class="text-[11px] text-muted-foreground">{{ t("workspace.planHint") }}</p>
             </div>
+            <div class="space-y-2 rounded-md border bg-muted/30 p-3">
+              <label class="block text-xs font-medium text-muted-foreground">{{ t("novels.feat.title") }}</label>
+              <p class="text-[11px] text-muted-foreground">{{ t("novels.feat.hint") }}</p>
+              <NovelFeaturesPicker
+                :model-value="novel?.features ?? emptyNovelFeatures()"
+                @update:model-value="persistNovelFeatures"
+              />
             </div>
-            <div class="flex min-h-[12rem] flex-1 flex-col space-y-2">
-              <label class="block shrink-0 text-xs text-muted-foreground">{{ t("workspace.rootOutline") }}</label>
-              <div class="relative min-h-0 flex-1">
-                <Textarea
-                  :model-value="selected?.outline ?? ''"
-                  class="absolute inset-0 resize-none overflow-y-auto text-sm"
-                  :placeholder="t('workspace.rootOutlinePh')"
-                  @update:model-value="(v) => { if (selected) selected.outline = String(v); }"
-                  @change="persistSelectedCardText"
-                />
+            <div class="space-y-2 rounded-md border bg-muted/30 p-3">
+              <div class="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  class="justify-start"
+                  :disabled="worldviewBusy"
+                  @click="openWorldviewChat"
+                >
+                  <Loader2 v-if="worldviewBusy" class="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  <Sparkles v-else class="mr-1.5 h-3.5 w-3.5" />
+                  {{
+                    worldviewBusy
+                      ? t("workspace.wv.busy")
+                      : rootWorldviewComplete
+                        ? t("workspace.wv.chatOpen")
+                        : t("workspace.wv.generate")
+                  }}
+                </Button>
               </div>
-              <p class="shrink-0 text-xs text-muted-foreground">{{ t("workspace.rootOutlineHint") }}</p>
+              <p class="text-[11px] text-muted-foreground">{{ t("workspace.wv.hint") }}</p>
+            </div>
+            <div class="space-y-1.5 rounded-md border bg-teal-50/50 p-2 dark:bg-teal-950/20">
+              <p class="text-[11px] font-medium text-teal-900 dark:text-teal-100">
+                {{ t("workspace.rootLinkedKnowledge") }}
+              </p>
+              <p class="text-[10px] text-muted-foreground">{{ t("workspace.knowledgeReorderHintRoot") }}</p>
+              <ul v-if="rootLinkedKnowledgeLocal.length" ref="knowledgeListEl" class="space-y-1">
+                <li
+                  v-for="(k, i) in rootLinkedKnowledgeLocal"
+                  :key="k.id"
+                  :data-know-idx="i"
+                  class="flex cursor-grab items-center gap-2 rounded border bg-background px-2 py-1.5 text-xs select-none active:cursor-grabbing"
+                  :class="{
+                    'opacity-40': knowledgeReorderDragFrom === i,
+                    'ring-2 ring-teal-500':
+                      knowledgeReorderDragFrom !== null &&
+                      knowledgeReorderOver === i &&
+                      knowledgeReorderDragFrom !== i,
+                  }"
+                  @pointerdown="onHostKnowledgePointerDown(i, $event)"
+                >
+                  <span
+                    class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-teal-600 text-[10px] font-medium text-white"
+                  >{{ i }}</span>
+                  <span class="min-w-0 flex-1 truncate">{{ k.label }}</span>
+                </li>
+              </ul>
+              <p v-else class="text-[10px] text-muted-foreground">{{ t("workspace.rootLinkedKnowledgeEmpty") }}</p>
+            </div>
+            <div class="space-y-2">
+              <label class="block text-xs text-muted-foreground">{{ t("workspace.rootOutline") }}</label>
+              <Textarea
+                :model-value="selected?.outline ?? ''"
+                rows="4"
+                class="field-sizing-content resize-y text-sm !min-h-24"
+                :placeholder="t('workspace.rootOutlinePh')"
+                @update:model-value="(v) => { if (selected) selected.outline = String(v); }"
+                @change="persistSelectedCardText"
+              />
+              <p class="text-xs text-muted-foreground">{{ t("workspace.rootOutlineHint") }}</p>
             </div>
           </div>
-          <div v-else-if="selectedIsVolume" class="flex min-h-0 flex-1 flex-col gap-2">
-            <div class="min-h-0 shrink overflow-y-auto space-y-2">
+          <div v-else-if="selectedIsVolume" class="space-y-2">
               <div class="space-y-1.5 rounded-md border bg-violet-50/50 p-2 dark:bg-violet-950/20">
                 <p class="text-[11px] font-medium text-violet-900 dark:text-violet-100">
                   {{ t("workspace.volumeLinkedPlots") }}
@@ -2922,28 +4497,44 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                 <p class="text-[11px] font-medium text-teal-900 dark:text-teal-100">
                   {{ t("workspace.volumeLinkedKnowledge") }}
                 </p>
-                <ul v-if="volumeLinkedKnowledge.length" class="space-y-1">
+                <p class="text-[10px] text-muted-foreground">{{ t("workspace.knowledgeReorderHint") }}</p>
+                <ul v-if="volumeLinkedKnowledgeFromRoot.length" class="mb-1.5 space-y-1">
                   <li
-                    v-for="k in volumeLinkedKnowledge"
-                    :key="k.id"
-                    class="flex items-start gap-2 rounded border bg-background px-2 py-1.5 text-xs"
+                    v-for="k in volumeLinkedKnowledgeFromRoot"
+                    :key="'rk-' + k.id"
+                    class="flex items-center gap-2 rounded border border-dashed bg-muted/40 px-2 py-1.5 text-xs"
                   >
                     <span
-                      class="mt-0.5 shrink-0 rounded bg-muted px-1 py-0.5 text-[9px] font-medium text-muted-foreground"
-                    >{{
-                      k.from === "root"
-                        ? t("workspace.chapterPlotInherited")
-                        : t("workspace.volumePlotInherited")
-                    }}</span>
-                    <div class="min-w-0 flex-1">
-                      <span class="font-medium">{{ k.label }}</span>
-                      <p v-if="k.snippet" class="mt-0.5 line-clamp-2 text-[10px] text-muted-foreground">
-                        {{ k.snippet }}
-                      </p>
-                    </div>
+                      class="shrink-0 rounded bg-muted px-1 py-0.5 text-[9px] font-medium text-muted-foreground"
+                    >{{ t("workspace.chapterPlotInherited") }}</span>
+                    <span class="min-w-0 flex-1 truncate">{{ k.label }}</span>
                   </li>
                 </ul>
-                <p v-else class="text-[10px] text-muted-foreground">{{ t("workspace.volumeLinkedKnowledgeEmpty") }}</p>
+                <ul v-if="volumeLinkedKnowledgeLocal.length" ref="knowledgeListEl" class="space-y-1">
+                  <li
+                    v-for="(k, i) in volumeLinkedKnowledgeLocal"
+                    :key="k.id"
+                    :data-know-idx="i"
+                    class="flex cursor-grab items-center gap-2 rounded border bg-background px-2 py-1.5 text-xs select-none active:cursor-grabbing"
+                    :class="{
+                      'opacity-40': knowledgeReorderDragFrom === i,
+                      'ring-2 ring-teal-500':
+                        knowledgeReorderDragFrom !== null &&
+                        knowledgeReorderOver === i &&
+                        knowledgeReorderDragFrom !== i,
+                    }"
+                    @pointerdown="onHostKnowledgePointerDown(i, $event)"
+                  >
+                    <span
+                      class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-teal-600 text-[10px] font-medium text-white"
+                    >{{ i }}</span>
+                    <span class="min-w-0 flex-1 truncate">{{ k.label }}</span>
+                  </li>
+                </ul>
+                <p
+                  v-if="!volumeLinkedKnowledgeFromRoot.length && !volumeLinkedKnowledgeLocal.length"
+                  class="text-[10px] text-muted-foreground"
+                >{{ t("workspace.volumeLinkedKnowledgeEmpty") }}</p>
               </div>
               <div
                 v-if="volumeLinkTags.chars.length"
@@ -2956,23 +4547,14 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                   :title="t('workspace.role')"
                 >{{ name }}</span>
               </div>
-            </div>
-            <div class="flex min-h-[12rem] flex-1 flex-col space-y-2">
-              <label class="block shrink-0 text-xs text-muted-foreground">{{ t("workspace.volumeOutline") }}</label>
-              <div class="relative min-h-0 flex-1">
-                <Textarea
-                  :model-value="selected?.outline ?? ''"
-                  class="absolute inset-0 resize-none overflow-y-auto text-sm"
-                  :placeholder="t('workspace.volumeOutlinePh')"
-                  @update:model-value="(v) => { if (selected) selected.outline = String(v); }"
-                  @change="persistSelectedCardText"
-                />
-              </div>
-              <p class="shrink-0 text-xs text-muted-foreground">{{ t("workspace.volumeOutlineHint") }}</p>
-            </div>
+              <VolumePanel
+                :novel-id="id"
+                :node-id="selected?.id"
+                :data="selected?.volume"
+                @save="persistSelectedVolume"
+              />
           </div>
-          <div v-else-if="selectedIsChapter" class="flex min-h-0 flex-1 flex-col gap-2">
-            <div class="min-h-0 shrink overflow-y-auto space-y-2">
+          <div v-else-if="selectedIsChapter" class="space-y-2">
             <div class="space-y-1.5 rounded-md border bg-sky-50/50 p-2 dark:bg-sky-950/20">
               <p class="text-[11px] font-medium text-sky-900 dark:text-sky-100">
                 {{ t("workspace.chapterLinkedPlots") }}
@@ -3035,35 +4617,60 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
               <p class="text-[11px] font-medium text-teal-900 dark:text-teal-100">
                 {{ t("workspace.chapterLinkedKnowledge") }}
               </p>
-              <p class="text-[10px] text-muted-foreground">{{ t("workspace.chapterLinkedKnowledgeHint") }}</p>
-              <ul v-if="chapterLinkedKnowledge.length" class="space-y-1">
+              <p class="text-[10px] text-muted-foreground">{{ t("workspace.knowledgeReorderHint") }}</p>
+              <ul v-if="chapterLinkedKnowledgeFromRoot.length" class="mb-1.5 space-y-1">
                 <li
-                  v-for="k in chapterLinkedKnowledge"
-                  :key="k.id"
-                  class="flex items-start gap-2 rounded border bg-background px-2 py-1.5 text-xs"
+                  v-for="k in chapterLinkedKnowledgeFromRoot"
+                  :key="'rk-' + k.id"
+                  class="flex items-center gap-2 rounded border border-dashed bg-muted/40 px-2 py-1.5 text-xs"
                 >
                   <span
-                    v-if="k.from !== 'chapter'"
-                    class="mt-0.5 shrink-0 rounded px-1 py-0.5 text-[9px] font-medium"
-                    :class="
-                      k.from === 'volume'
-                        ? 'bg-violet-100 text-violet-800 dark:bg-violet-900 dark:text-violet-100'
-                        : 'bg-muted text-muted-foreground'
-                    "
-                  >{{
-                    k.from === "root"
-                      ? t("workspace.chapterPlotInherited")
-                      : t("workspace.volumePlotInherited")
-                  }}</span>
-                  <div class="min-w-0 flex-1">
-                    <span class="font-medium">{{ k.label }}</span>
-                    <p v-if="k.snippet" class="mt-0.5 line-clamp-2 text-[10px] text-muted-foreground">
-                      {{ k.snippet }}
-                    </p>
-                  </div>
+                    class="shrink-0 rounded bg-muted px-1 py-0.5 text-[9px] font-medium text-muted-foreground"
+                  >{{ t("workspace.chapterPlotInherited") }}</span>
+                  <span class="min-w-0 flex-1 truncate">{{ k.label }}</span>
                 </li>
               </ul>
-              <p v-else class="text-[10px] text-muted-foreground">{{ t("workspace.chapterLinkedKnowledgeEmpty") }}</p>
+              <ul v-if="chapterLinkedKnowledgeFromVolume.length" class="mb-1.5 space-y-1">
+                <li
+                  v-for="k in chapterLinkedKnowledgeFromVolume"
+                  :key="'vk-' + k.id"
+                  class="flex items-center gap-2 rounded border border-dashed bg-muted/40 px-2 py-1.5 text-xs"
+                >
+                  <span
+                    class="shrink-0 rounded bg-violet-100 px-1 py-0.5 text-[9px] font-medium text-violet-800 dark:bg-violet-900 dark:text-violet-100"
+                  >{{ t("workspace.volumePlotInherited") }}</span>
+                  <span class="min-w-0 flex-1 truncate">{{ k.label }}</span>
+                </li>
+              </ul>
+              <ul v-if="chapterLinkedKnowledgeLocal.length" ref="knowledgeListEl" class="space-y-1">
+                <li
+                  v-for="(k, i) in chapterLinkedKnowledgeLocal"
+                  :key="k.id"
+                  :data-know-idx="i"
+                  class="flex cursor-grab items-center gap-2 rounded border bg-background px-2 py-1.5 text-xs select-none active:cursor-grabbing"
+                  :class="{
+                    'opacity-40': knowledgeReorderDragFrom === i,
+                    'ring-2 ring-teal-500':
+                      knowledgeReorderDragFrom !== null &&
+                      knowledgeReorderOver === i &&
+                      knowledgeReorderDragFrom !== i,
+                  }"
+                  @pointerdown="onHostKnowledgePointerDown(i, $event)"
+                >
+                  <span
+                    class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-teal-600 text-[10px] font-medium text-white"
+                  >{{ i }}</span>
+                  <span class="min-w-0 flex-1 truncate">{{ k.label }}</span>
+                </li>
+              </ul>
+              <p
+                v-if="
+                  !chapterLinkedKnowledgeFromRoot.length &&
+                  !chapterLinkedKnowledgeFromVolume.length &&
+                  !chapterLinkedKnowledgeLocal.length
+                "
+                class="text-[10px] text-muted-foreground"
+              >{{ t("workspace.chapterLinkedKnowledgeEmpty") }}</p>
             </div>
             <div
               v-if="chapterLinkTags.chars.length"
@@ -3076,21 +4683,124 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                 :title="t('workspace.role')"
               >{{ name }}</span>
             </div>
+            <div class="space-y-1.5">
+              <label class="block text-xs text-muted-foreground">{{ t("workspace.chapterBriefOutline") }}</label>
+              <Textarea
+                :model-value="selected?.outline ?? ''"
+                rows="2"
+                class="field-sizing-content resize-y text-sm !min-h-12"
+                :placeholder="t('workspace.chapterOutlinePh')"
+                :disabled="chapterBusy"
+                @update:model-value="(v) => { if (selected) selected.outline = String(v); }"
+                @change="persistSelectedCardText"
+              />
+              <p class="text-xs text-muted-foreground">{{ t("workspace.chapterOutlineHint") }}</p>
             </div>
-            <div class="flex min-h-[8rem] flex-1 flex-col space-y-2">
-              <label class="block shrink-0 text-xs text-muted-foreground">{{ t("workspace.chapterOutline") }}</label>
-              <div class="relative min-h-0 flex-1">
-                <Textarea
-                  :model-value="selected?.outline ?? ''"
-                  class="absolute inset-0 resize-none overflow-y-auto text-sm"
-                  :placeholder="t('workspace.chapterOutlinePh')"
-                  :disabled="chapterBusy"
-                  @update:model-value="(v) => { if (selected) selected.outline = String(v); }"
-                  @change="persistSelectedCardText"
-                />
+
+            <div class="space-y-2 border-t pt-2">
+              <div class="flex items-center justify-between gap-2">
+                <label class="text-xs font-medium text-muted-foreground">{{ t("workspace.chapterDetailedOutline") }}</label>
+                <div class="flex items-center gap-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    class="h-7 px-2 text-xs"
+                    :disabled="chapterBusy || detailedOutlineItemBusy !== null"
+                    @click="addDetailedOutlineItem"
+                  >
+                    <Plus class="mr-1 h-3.5 w-3.5" />
+                    {{ t("workspace.chapterDetailedOutlineAdd") }}
+                  </Button>
+                </div>
               </div>
-              <p class="shrink-0 text-xs text-muted-foreground">{{ t("workspace.chapterOutlineHint") }}</p>
-            </div>
+              <ul
+                v-if="(selected?.detailed_outline ?? []).length"
+                class="space-y-1.5"
+              >
+                  <li
+                    v-for="(_, i) in selected!.detailed_outline!"
+                    :key="'do-' + selected!.id + '-' + i"
+                    class="flex items-start gap-1 rounded-md border bg-sky-50/40 p-2 dark:bg-sky-950/20"
+                  >
+                    <div class="mt-0.5 flex w-5 shrink-0 flex-col items-center gap-0">
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        class="h-5 w-5"
+                        :title="t('workspace.chapterDetailedOutlineMoveUp')"
+                        :disabled="
+                          chapterBusy ||
+                          detailedOutlineItemBusy !== null ||
+                          i === 0
+                        "
+                        @click="moveDetailedOutlineItem(i, -1)"
+                      >
+                        <ChevronUp class="h-3 w-3" />
+                      </Button>
+                      <span class="text-[10px] leading-none text-muted-foreground">{{ i + 1 }}</span>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        class="h-5 w-5"
+                        :title="t('workspace.chapterDetailedOutlineMoveDown')"
+                        :disabled="
+                          chapterBusy ||
+                          detailedOutlineItemBusy !== null ||
+                          i >= (selected!.detailed_outline!.length - 1)
+                        "
+                        @click="moveDetailedOutlineItem(i, 1)"
+                      >
+                        <ChevronDown class="h-3 w-3" />
+                      </Button>
+                    </div>
+                    <Textarea
+                      :model-value="selected!.detailed_outline![i]"
+                      rows="1"
+                      class="min-h-8 flex-1 field-sizing-content resize-y py-1.5 text-xs"
+                      :placeholder="t('workspace.chapterDetailedOutlinePh')"
+                      :disabled="chapterBusy || detailedOutlineItemBusy !== null"
+                      @update:model-value="(v) => { if (selected?.detailed_outline) selected.detailed_outline[i] = String(v); }"
+                      @change="persistSelectedCardText"
+                    />
+                    <div class="mt-0.5 flex shrink-0 flex-col gap-0.5">
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        class="h-7 w-7"
+                        :title="t('workspace.chapterDetailedOutlineItemAi')"
+                        :disabled="
+                          chapterBusy ||
+                          detailedOutlineItemBusy !== null ||
+                          !(selected?.outline ?? '').trim()
+                        "
+                        @click="openDetailedOutlineAiItem(i)"
+                      >
+                        <Loader2
+                          v-if="detailedOutlineItemBusy === i"
+                          class="h-3.5 w-3.5 animate-spin"
+                        />
+                        <Sparkles v-else class="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        class="h-7 w-7"
+                        :disabled="chapterBusy || detailedOutlineItemBusy !== null"
+                        @click="removeDetailedOutlineItem(i)"
+                      >
+                        <Trash2 class="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </li>
+                </ul>
+                <p v-else class="text-[11px] text-muted-foreground">{{ t("workspace.chapterDetailedOutlineEmpty") }}</p>
+                <p class="text-[11px] text-muted-foreground">{{ t("workspace.chapterDetailedOutlineHint") }}</p>
+              </div>
           </div>
           <div v-else-if="selected?.kind === 'side_plot'" class="flex min-h-0 flex-1 flex-col space-y-2">
             <label class="block shrink-0 text-xs text-muted-foreground">{{ t("workspace.plotOutline") }}</label>
@@ -3282,18 +4992,19 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                   v-for="item in canvasNavActiveItems"
                   :key="item.id"
                   type="button"
-                  class="block w-full truncate px-2 py-0.5 text-left text-[11px] leading-snug hover:bg-muted/70"
-                  :class="
+                  class="block w-full truncate py-0.5 text-left text-[11px] leading-snug hover:bg-muted/70"
+                  :class="[
+                    item.indent ? 'pl-3 pr-2' : 'px-2',
                     selected?.id === item.id
                       ? 'bg-primary/10 font-medium text-primary'
                       : item.kind === 'novel'
                         ? 'text-muted-foreground'
-                        : 'text-foreground'
-                  "
+                        : 'text-foreground',
+                  ]"
                   :title="item.label"
                   @click="focusCanvasNav(item.id)"
                 >
-                  {{ item.label }}
+                  <span v-if="item.indent" class="text-muted-foreground">|- </span>{{ item.label }}
                 </button>
                 <p
                   v-if="!canvasNavActiveItems.length"
@@ -3398,7 +5109,55 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                 size="sm"
                 variant="outline"
                 class="px-2"
-                :disabled="!!busy || !chapterMd || bodyEditing"
+                :class="bodySuggestOn ? 'border-amber-500/70 bg-amber-50 text-amber-900 dark:bg-amber-950 dark:text-amber-100' : ''"
+                :aria-pressed="bodySuggestOn"
+                :title="bodySuggestOn ? t('workspace.bodySuggestOn') : t('workspace.bodySuggestOff')"
+                :aria-label="bodySuggestOn ? t('workspace.bodySuggestOn') : t('workspace.bodySuggestOff')"
+                @click="toggleBodySuggest"
+              >
+                <Loader2 v-if="bodySuggestBusy" class="h-3.5 w-3.5 animate-spin" />
+                <Lightbulb v-else class="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                class="px-2"
+                :disabled="
+                  bodyTts === 'idle' &&
+                  (!!busy || !(bodyEditing ? bodyDraft : chapterMd).trim())
+                "
+                :title="
+                  bodyTts === 'idle'
+                    ? t('workspace.readAloud')
+                    : t('workspace.readAloudStop')
+                "
+                :aria-label="
+                  bodyTts === 'idle'
+                    ? t('workspace.readAloud')
+                    : t('workspace.readAloudStop')
+                "
+                @click="toggleChapterTts"
+              >
+                <Loader2 v-if="bodyTts === 'loading'" class="h-3.5 w-3.5 animate-spin" />
+                <Pause v-else-if="bodyTts === 'playing'" class="h-3.5 w-3.5" />
+                <Play v-else class="h-3.5 w-3.5" />
+              </Button>
+              <select
+                v-model.number="ttsSpeed"
+                class="h-8 rounded-md border border-input bg-background px-1.5 text-xs outline-none hover:bg-muted disabled:opacity-50"
+                :disabled="bodyTts !== 'idle'"
+                :title="t('workspace.readAloudSpeed')"
+                :aria-label="t('workspace.readAloudSpeed')"
+              >
+                <option :value="1">1×</option>
+                <option :value="2">2×</option>
+                <option :value="3">3×</option>
+              </select>
+              <Button
+                size="sm"
+                variant="outline"
+                class="px-2"
+                :disabled="!!busy || !(bodyEditing ? bodyDraft : chapterMd)"
                 :title="t('workspace.copyBody')"
                 :aria-label="t('workspace.copyBody')"
                 @click="copyChapterBody"
@@ -3409,7 +5168,22 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                 size="sm"
                 variant="outline"
                 class="px-2"
-                :disabled="memoryBusy || (chapterBusy && busy !== 'regen-memory') || bodyEditing"
+                :disabled="shotsBusy || (chapterBusy && !['split-shots','shot-prompts','submit-comfy'].includes(busy))"
+                :title="shotsPreviewTitle"
+                :aria-label="shotsPreviewTitle"
+                @click="openChapterShots"
+              >
+                <Loader2
+                  v-if="shotsBusy || ['split-shots','shot-prompts','submit-comfy'].includes(busy)"
+                  class="h-3.5 w-3.5 animate-spin"
+                />
+                <Clapperboard v-else class="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                class="px-2"
+                :disabled="memoryBusy || (chapterBusy && busy !== 'regen-memory')"
                 :title="t('workspace.memoryPreview')"
                 :aria-label="t('workspace.memoryPreview')"
                 @click="openChapterMemory"
@@ -3422,40 +5196,6 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
               </Button>
               <span v-if="copyHint" class="text-[11px] text-muted-foreground">{{ copyHint }}</span>
             </template>
-            <div
-              v-if="selectedIsChapter"
-              class="inline-flex rounded-md border bg-muted/40 p-0.5"
-              role="group"
-              :aria-label="t('workspace.bodyModeHint')"
-            >
-              <button
-                type="button"
-                class="rounded px-2 py-1 text-xs transition-colors"
-                :class="
-                  !bodyEditing
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                "
-                :aria-pressed="!bodyEditing"
-                @click="cancelEditChapterBody"
-              >
-                {{ t("workspace.bodyPreview") }}
-              </button>
-              <button
-                type="button"
-                class="rounded px-2 py-1 text-xs transition-colors"
-                :class="
-                  bodyEditing
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                "
-                :aria-pressed="bodyEditing"
-                :disabled="!!busy"
-                @click="startEditChapterBody"
-              >
-                {{ t("workspace.editBody") }}
-              </button>
-            </div>
             <div
               class="inline-flex rounded-md border bg-muted/40 p-0.5"
               role="group"
@@ -3494,21 +5234,24 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
             </div>
           </div>
         </div>
-        <div
-          class="min-h-0 flex-1 p-3"
-          :class="bodyEditing ? 'flex flex-col overflow-hidden' : 'overflow-auto'"
-        >
+        <div class="flex min-h-0 flex-1 flex-col overflow-hidden p-3">
           <template v-if="!selectedIsChapter">
             <p class="text-xs text-muted-foreground">{{ t("workspace.bodyDockPickChapter") }}</p>
           </template>
-          <template v-else-if="bodyEditing">
-            <div class="relative flex min-h-0 w-full flex-1">
+          <template v-else>
+            <div class="flex min-h-0 w-full flex-1 flex-col gap-2">
+            <div
+              class="relative flex min-h-0 w-full flex-1"
+              @pointermove="onBodyEditorPointerMove"
+              @pointerleave="onBodyEditorPointerLeave"
+            >
               <div
-                class="relative w-6 shrink-0 overflow-hidden self-stretch"
+                class="relative w-6 shrink-0 self-stretch overflow-hidden"
                 :aria-label="t('workspace.paraRewriteGutter')"
               >
                 <button
                   v-for="g in paraGutterTops"
+                  v-show="hoveredParaIndex === g.index"
                   :key="g.index"
                   type="button"
                   class="absolute left-0.5 z-[1] flex h-5 w-5 items-center justify-center rounded text-amber-800 hover:bg-amber-100 disabled:pointer-events-none disabled:opacity-40 dark:text-amber-200 dark:hover:bg-amber-950"
@@ -3547,88 +5290,69 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                 </div>
               </div>
             </div>
-          </template>
-          <template v-else-if="chapterMd">
             <div
-              v-if="hasRefineDiff"
-              class="mb-3 flex flex-wrap items-center gap-1 border-b pb-2"
+              v-if="bodySuggestOn"
+              class="max-h-36 shrink-0 overflow-y-auto rounded-md border bg-muted/20 px-2 py-1.5"
             >
-              <button
-                type="button"
-                class="rounded px-2 py-1 text-xs"
-                :class="bodyTab === 'body' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'"
-                @click="bodyTab = 'body'"
-              >
-                {{ t("workspace.bodyTab") }}
-              </button>
-              <button
-                type="button"
-                class="rounded px-2 py-1 text-xs"
-                :class="bodyTab === 'diff' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'"
-                @click="bodyTab = 'diff'"
-              >
-                {{ t("workspace.refineDiffTab") }}
-              </button>
-            </div>
-            <div
-              v-if="bodyTab === 'body' || !hasRefineDiff"
-              ref="chapterBodyEl"
-              class="chapter-md text-sm leading-relaxed"
-              :class="chapterBusy ? 'opacity-40' : ''"
-              v-html="chapterHtml"
-            />
-            <div
-              v-else
-              class="space-y-0.5 font-sans text-sm leading-relaxed"
-              :class="chapterBusy ? 'opacity-40' : ''"
-            >
-              <p class="mb-2 text-[11px] text-muted-foreground">{{ t("workspace.refineDiffHint") }}</p>
-              <div
-                v-for="(h, i) in refineDiffHunks"
-                :key="i"
-                class="whitespace-pre-wrap rounded-sm px-1"
-                :class="{
-                  'bg-red-100 text-red-950 dark:bg-red-950/40 dark:text-red-100': h.type === 'del',
-                  'bg-emerald-100 text-emerald-950 dark:bg-emerald-950/40 dark:text-emerald-100': h.type === 'add',
-                }"
-              >
-                <span class="mr-1 select-none opacity-50">{{
-                  h.type === "del" ? "−" : h.type === "add" ? "+" : " "
-                }}</span>{{ h.text || " " }}
+              <p class="mb-1 text-[11px] text-muted-foreground">{{ t("workspace.bodySuggestHint") }}</p>
+              <div v-if="bodySuggestBusy && !bodySuggestItems.length" class="flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 class="h-3.5 w-3.5 animate-spin" />
+                {{ t("workspace.bodySuggestBusy") }}
               </div>
+              <p v-else-if="bodySuggestError && !bodySuggestItems.length" class="text-xs text-destructive">
+                {{ bodySuggestError }}
+              </p>
+              <ol v-else-if="bodySuggestItems.length" class="space-y-1">
+                <li v-for="(item, i) in bodySuggestItems" :key="i">
+                  <button
+                    type="button"
+                    class="w-full rounded px-1.5 py-1 text-left text-xs leading-relaxed hover:bg-muted"
+                    @click="applyBodySuggest(item)"
+                  >
+                    {{ i + 1 }}. {{ item }}
+                  </button>
+                </li>
+              </ol>
+            </div>
             </div>
           </template>
-          <div v-else class="space-y-3">
-            <p class="text-sm text-muted-foreground">{{ t("workspace.noBody") }}</p>
-            <Button
-              size="sm"
-              variant="outline"
-              :disabled="!!busy"
-              @click="startEditChapterBody"
-            >
-              <Pencil class="mr-1.5 h-3.5 w-3.5" />
-              {{ t("workspace.editBody") }}
-            </Button>
-          </div>
         </div>
         <div
-          v-if="selectedIsChapter && bodyEditing"
-          class="flex shrink-0 items-center justify-end gap-2 border-t px-3 py-2"
+          v-if="selectedIsChapter && bodyEditing && (bodySaveBusy || bodyAutosaved)"
+          class="flex shrink-0 items-center border-t px-3 py-1.5"
         >
-          <span
-            v-if="bodySaveBusy"
-            class="mr-auto text-[11px] text-muted-foreground"
-          >{{ t("workspace.bodySaving") }}</span>
-          <span
-            v-else-if="bodyAutosaved"
-            class="mr-auto text-[11px] text-muted-foreground"
-          >{{ t("workspace.bodyAutosaved") }}</span>
-          <Button size="sm" variant="outline" :disabled="bodySaveBusy || paraRewriteBusy" @click="cancelEditChapterBody">
+          <span class="text-[11px] text-muted-foreground">{{
+            bodySaveBusy ? t("workspace.bodySaving") : t("workspace.bodyAutosaved")
+          }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 朗读模型下载进度 -->
+    <div
+      v-if="bodyTtsDownload"
+      class="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+    >
+      <div class="w-full max-w-md rounded-lg border bg-background p-5 shadow-lg" role="dialog" aria-modal="true">
+        <h2 class="text-base font-semibold">{{ t("workspace.readAloudModelTitle") }}</h2>
+        <div class="mt-3 space-y-2">
+          <div class="flex items-center justify-between gap-2 text-sm">
+            <span>{{ ttsDownloadLabel }}</span>
+            <span class="tabular-nums text-muted-foreground">{{ ttsDownloadPercent }}%</span>
+          </div>
+          <div class="h-2 overflow-hidden rounded-full bg-muted">
+            <div
+              class="h-full rounded-full bg-primary transition-[width] duration-200"
+              :style="{ width: `${ttsDownloadPercent}%` }"
+            />
+          </div>
+          <p v-if="ttsDownloadDetail" class="truncate text-xs text-muted-foreground">
+            {{ ttsDownloadDetail }}
+          </p>
+        </div>
+        <div class="mt-4 flex justify-end">
+          <Button size="sm" variant="outline" @click="stopChapterTts">
             {{ t("novels.cancel") }}
-          </Button>
-          <Button size="sm" :disabled="bodySaveBusy || paraRewriteBusy" @click="saveChapterBody">
-            <Loader2 v-if="bodySaveBusy" class="mr-1.5 h-3.5 w-3.5 animate-spin" />
-            {{ bodySaveBusy ? t("workspace.bodySaving") : t("workspace.saveBody") }}
           </Button>
         </div>
       </div>
@@ -3666,6 +5390,64 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
             <Loader2 v-if="paraRewriteBusy" class="mr-1.5 h-3.5 w-3.5 animate-spin" />
             <Sparkles v-else class="mr-1.5 h-3.5 w-3.5" />
             {{ paraRewriteBusy ? t("workspace.paraRewriteBusy") : t("workspace.paraRewriteRun") }}
+          </Button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 细纲单条 AI 重写提示词 -->
+    <div
+      v-if="pendingDetailedOutlineAi"
+      class="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+      @click.self="cancelDetailedOutlineAi"
+    >
+      <div class="w-full max-w-md rounded-lg border bg-background p-5 shadow-lg" role="dialog" aria-modal="true">
+        <h2 class="text-base font-semibold">
+          {{ t("workspace.chapterDetailedOutlineItemAiTitle") }}
+        </h2>
+        <p class="mt-2 text-xs text-muted-foreground">
+          {{ t("workspace.chapterDetailedOutlineItemAiHint") }}
+        </p>
+        <p
+          class="mt-2 max-h-28 overflow-y-auto whitespace-pre-wrap rounded border bg-muted/40 px-2 py-1.5 text-xs text-muted-foreground"
+        >
+          {{ pendingDetailedOutlineAi.text.trim() || t("workspace.chapterDetailedOutlineItemAiEmpty") }}
+        </p>
+        <label class="mt-3 block text-xs text-muted-foreground">{{
+          t("workspace.chapterDetailedOutlineAiNote")
+        }}</label>
+        <Textarea
+          v-model="detailedOutlineAiNote"
+          rows="4"
+          class="mt-1 text-sm"
+          :disabled="detailedOutlineItemBusy !== null"
+          :placeholder="t('workspace.chapterDetailedOutlineItemAiNotePh')"
+        />
+        <p v-if="detailedOutlineAiError" class="mt-2 text-xs text-destructive">{{ detailedOutlineAiError }}</p>
+        <div class="mt-4 flex justify-end gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            :disabled="detailedOutlineItemBusy !== null"
+            @click="cancelDetailedOutlineAi"
+          >
+            {{ t("novels.cancel") }}
+          </Button>
+          <Button
+            size="sm"
+            :disabled="detailedOutlineItemBusy !== null"
+            @click="confirmDetailedOutlineAi"
+          >
+            <Loader2
+              v-if="detailedOutlineItemBusy !== null"
+              class="mr-1.5 h-3.5 w-3.5 animate-spin"
+            />
+            <Sparkles v-else class="mr-1.5 h-3.5 w-3.5" />
+            {{
+              detailedOutlineItemBusy !== null
+                ? t("workspace.chapterDetailedOutlineAiBusy")
+                : t("workspace.chapterDetailedOutlineAiRun")
+            }}
           </Button>
         </div>
       </div>
@@ -3751,26 +5533,19 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
       </div>
     </div>
 
-    <div
-      v-if="pendingKnowledgeFill"
-      class="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
-      @click.self="pendingKnowledgeFill = false"
-    >
-      <div class="w-full max-w-md rounded-lg border bg-background p-5 shadow-lg" role="dialog" aria-modal="true">
-        <h2 class="text-base font-semibold">{{ t("workspace.knowledgeFillOverwriteTitle") }}</h2>
-        <p class="mt-3 text-sm text-muted-foreground">
-          {{ t("workspace.knowledgeFillOverwriteBody") }}
-        </p>
-        <div class="mt-5 flex justify-end gap-2">
-          <Button variant="outline" :disabled="knowledgeFillBusy" @click="pendingKnowledgeFill = false">
-            {{ t("novels.cancel") }}
-          </Button>
-          <Button :disabled="knowledgeFillBusy" @click="runFillKnowledge">
-            {{ t("workspace.knowledgeFillOverwriteConfirm") }}
-          </Button>
-        </div>
-      </div>
-    </div>
+    <WorldviewChatPanel
+      :open="worldviewChatOpen"
+      :novel-id="props.id"
+      :slot="worldviewChatSlot"
+      @close="worldviewChatOpen = false"
+      @applied="onWorldviewChatApplied"
+    />
+    <StoryRulesChatPanel
+      :open="storyRulesChatOpen"
+      :novel-id="props.id"
+      @close="storyRulesChatOpen = false"
+      @applied="onStoryRulesChatApplied"
+    />
 
     <div
       v-if="publicPickOpen"
@@ -3793,11 +5568,19 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
             v-for="c in filteredPublicCards"
             :key="c.id"
             type="button"
-            class="flex w-full flex-col items-start gap-0.5 border-b border-border/50 px-3 py-2 text-left last:border-b-0 hover:bg-muted/50 disabled:opacity-50"
-            :disabled="publicPickBusy"
+            class="flex w-full flex-col items-start gap-0.5 border-b border-border/50 px-3 py-2 text-left last:border-b-0 hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50"
+            :disabled="publicPickBusy || publicCardAlreadyOnTree(c)"
             @click="addPickedPublicCard(c.id)"
           >
-            <span class="text-sm font-medium">{{ c.title }}</span>
+            <span class="flex w-full items-center justify-between gap-2 text-sm font-medium">
+              <span class="min-w-0 truncate">{{ c.title }}</span>
+              <span
+                v-if="publicCardAlreadyOnTree(c)"
+                class="shrink-0 text-[10px] font-normal text-muted-foreground"
+              >
+                {{ t("workspace.pickPublicKnowledgeAlreadyAdded") }}
+              </span>
+            </span>
             <span class="line-clamp-2 text-[11px] text-muted-foreground">{{
               (c.extracted || "").trim() || t("workspace.knowledgePending")
             }}</span>
@@ -3812,6 +5595,160 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
         <div class="mt-4 flex justify-end">
           <Button variant="outline" :disabled="publicPickBusy" @click="publicPickOpen = false">
             {{ t("novels.cancel") }}
+          </Button>
+        </div>
+      </div>
+    </div>
+
+    <div
+      v-if="shotsPanelOpen"
+      class="fixed inset-0 z-50 flex items-stretch justify-center bg-black/30 p-0 sm:p-4 md:p-6"
+      @click.self="closeChapterShots"
+      @keydown.escape="closeChapterShots"
+    >
+      <div
+        class="flex h-full w-full max-w-4xl flex-col border bg-background shadow-lg sm:h-[min(92vh,860px)] sm:rounded-lg"
+        role="dialog"
+        aria-modal="true"
+        :aria-label="shotsPanelHeading"
+      >
+        <div class="flex shrink-0 items-center justify-between gap-2 border-b px-4 py-3">
+          <div class="min-w-0">
+            <h2 class="truncate text-sm font-semibold">{{ shotsPanelHeading }}</h2>
+            <p class="truncate text-xs text-muted-foreground">{{ selected?.label }}</p>
+          </div>
+          <Button size="sm" variant="ghost" class="px-2" @click="closeChapterShots">
+            <X class="h-4 w-4" />
+          </Button>
+        </div>
+        <div class="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+          <p class="text-xs text-muted-foreground">{{ t("workspace.shotsHint") }}</p>
+          <p v-if="shotsError" class="text-xs text-destructive">{{ shotsError }}</p>
+          <p v-if="shotsNotice" class="text-xs text-primary">{{ shotsNotice }}</p>
+          <div v-if="shotsBusy" class="flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 class="h-3.5 w-3.5 animate-spin" />
+            {{ t("workspace.shotsBusy") }}
+          </div>
+          <p v-else-if="!shots.length" class="text-xs text-muted-foreground">
+            {{ t("workspace.shotsEmpty") }}
+          </p>
+          <article
+            v-for="(s, i) in shots"
+            :key="s.id || i"
+            class="space-y-2 rounded-md border p-3"
+          >
+            <div class="flex items-center justify-between gap-2">
+              <p class="text-xs font-medium text-muted-foreground">#{{ s.order || i + 1 }}</p>
+              <Button
+                size="sm"
+                variant="ghost"
+                class="h-7 px-2 text-muted-foreground"
+                :disabled="!!busy"
+                :aria-label="t('workspace.shotsRemove')"
+                @click="removeShot(i)"
+              >
+                <Trash2 class="h-3.5 w-3.5" />
+              </Button>
+            </div>
+            <label class="block text-xs text-muted-foreground">{{ t("workspace.shotsAction") }}</label>
+            <textarea
+              v-model="s.action"
+              rows="2"
+              class="w-full rounded-md border bg-background px-2 py-1 text-sm"
+              @change="persistShots"
+            />
+            <div class="grid gap-2 sm:grid-cols-2">
+              <div>
+                <label class="block text-xs text-muted-foreground">{{ t("workspace.shotsCamera") }}</label>
+                <input
+                  v-model="s.camera"
+                  class="mt-0.5 h-8 w-full rounded-md border px-2 text-sm"
+                  @change="persistShots"
+                />
+              </div>
+              <div>
+                <label class="block text-xs text-muted-foreground">{{ t("workspace.shotsDuration") }}</label>
+                <input
+                  v-model.number="s.duration_sec"
+                  type="number"
+                  min="5"
+                  max="15"
+                  class="mt-0.5 h-8 w-24 rounded-md border px-2 text-sm"
+                  @change="persistShots"
+                />
+              </div>
+            </div>
+            <label class="block text-xs text-muted-foreground">{{ t("workspace.shotsDialogue") }}</label>
+            <input
+              v-model="s.dialogue"
+              class="h-8 w-full rounded-md border px-2 text-sm"
+              @change="persistShots"
+            />
+            <label class="block text-xs text-muted-foreground">{{ t("workspace.shotsPrompt") }}</label>
+            <textarea
+              v-model="s.comfy_prompt"
+              rows="3"
+              class="w-full rounded-md border bg-background px-2 py-1 font-mono text-xs"
+              @change="persistShots"
+            />
+          </article>
+        </div>
+        <div class="flex shrink-0 flex-wrap justify-end gap-2 border-t px-4 py-3">
+          <Button size="sm" variant="ghost" :disabled="!!busy" @click="addShot">
+            <Plus class="mr-1 h-3.5 w-3.5" />
+            {{ t("workspace.shotsAdd") }}
+          </Button>
+          <Button size="sm" variant="outline" :disabled="!!busy" @click="requestSplitShots">
+            <Loader2 v-if="busy === 'split-shots'" class="mr-1.5 h-3.5 w-3.5 animate-spin" />
+            {{ t("workspace.shotsSplit") }}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            :disabled="!!busy || !shots.length"
+            @click="runShotPrompts"
+          >
+            <Loader2 v-if="busy === 'shot-prompts'" class="mr-1.5 h-3.5 w-3.5 animate-spin" />
+            {{ t("workspace.shotsPrompts") }}
+          </Button>
+          <Button
+            size="sm"
+            :disabled="!!busy || !shots.length"
+            @click="runSubmitComfy"
+          >
+            <Loader2 v-if="busy === 'submit-comfy'" class="mr-1.5 h-3.5 w-3.5 animate-spin" />
+            {{ t("workspace.shotsSubmit") }}
+          </Button>
+        </div>
+      </div>
+    </div>
+
+    <div
+      v-if="pendingShotSplit"
+      class="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+      @click.self="pendingShotSplit = null"
+    >
+      <div class="w-full max-w-md rounded-lg border bg-background p-4 shadow-lg" role="dialog">
+        <h3 class="text-sm font-semibold">{{ t("workspace.shotsOverwriteTitle") }}</h3>
+        <p class="mt-2 text-sm text-muted-foreground">{{ t("workspace.shotsOverwriteBody") }}</p>
+        <div class="mt-4 flex justify-end gap-2">
+          <Button size="sm" variant="ghost" @click="pendingShotSplit = null">
+            {{ t("workspace.shotsCancel") }}
+          </Button>
+          <Button
+            v-if="pendingShotSplit === 1"
+            size="sm"
+            @click="pendingShotSplit = 2"
+          >
+            {{ t("workspace.shotsOverwriteContinue") }}
+          </Button>
+          <Button
+            v-else
+            size="sm"
+            variant="destructive"
+            @click="runSplitShots"
+          >
+            {{ t("workspace.shotsOverwriteConfirm") }}
           </Button>
         </div>
       </div>

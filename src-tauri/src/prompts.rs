@@ -258,10 +258,12 @@ pub struct ChapterContextLabels {
     pub name: &'static str,
     pub role: &'static str,
     pub gender: &'static str,
+    pub age: &'static str,
     pub alignment: &'static str,
     pub personality: &'static str,
     pub style: &'static str,
     pub motto: &'static str,
+    pub constraints: &'static str,
     pub card_incomplete: &'static str,
     pub no_characters: &'static str,
     pub empty_plot: &'static str,
@@ -269,6 +271,8 @@ pub struct ChapterContextLabels {
     pub empty_outline: &'static str,
     pub chapter_title: &'static str,
     pub chapter_outline: &'static str,
+    pub chapter_detailed_outline: &'static str,
+    pub empty_detailed_outline: &'static str,
     pub chars_header: &'static str,
     pub relations_header: &'static str,
     pub relation_unset: &'static str,
@@ -284,18 +288,22 @@ pub fn chapter_context_labels(loc: PromptLocale) -> ChapterContextLabels {
             name: "姓名",
             role: "身份",
             gender: "性别",
+            age: "年龄",
             alignment: "阵营",
             personality: "性格",
             style: "行事风格",
             motto: "座右铭",
+            constraints: "约束（写该人物必须遵守）",
             card_incomplete: "（卡面未补全）",
             no_characters: "（本章未链接人物卡）\n",
             empty_plot: "（剧情卡大纲为空）",
             no_plots: "（本章未链接剧情卡）\n",
             empty_outline:
-                "（本章大纲为空，请仅依据已链接人物/剧情与小说简介合理推进，勿偏离已有设定）",
+                "（本章简纲为空，请仅依据已链接人物/剧情与小说简介合理推进，勿偏离已有设定）",
             chapter_title: "章节标题",
-            chapter_outline: "本章章纲（必须遵循的主线走向）",
+            chapter_outline: "本章简纲（主线走向，不可丢关键节拍）",
+            chapter_detailed_outline: "本章细纲（分条场景要点——正文须据此扩充落地）",
+            empty_detailed_outline: "（细纲为空：先由简纲进化细纲，再写正文）",
             chars_header: "【链接人物卡（含根节点贯穿全书人物）——言行必须符合；人物关系见下】",
             relations_header: "【人物关系——互动与称呼须符合；含根节点人物之间及与本章人物的关系】",
             relation_unset: "（关系未标注）",
@@ -309,18 +317,22 @@ pub fn chapter_context_labels(loc: PromptLocale) -> ChapterContextLabels {
             name: "Name",
             role: "Role",
             gender: "Gender",
+            age: "Age",
             alignment: "Alignment",
             personality: "Personality",
             style: "Style",
             motto: "Motto",
+            constraints: "Constraints (must follow when writing this character)",
             card_incomplete: "(card incomplete)",
             no_characters: "(no character cards linked)\n",
             empty_plot: "(plot outline empty)",
             no_plots: "(no plot cards linked)\n",
             empty_outline:
-                "(chapter outline empty — advance only from linked characters/plots and the synopsis; do not invent conflicting lore)",
+                "(brief outline empty — advance only from linked characters/plots and the synopsis; do not invent conflicting lore)",
             chapter_title: "Chapter title",
-            chapter_outline: "Chapter outline (main arc — must follow)",
+            chapter_outline: "Brief outline (main arc — must follow)",
+            chapter_detailed_outline: "Detailed outline (scene beats — expand body from these)",
+            empty_detailed_outline: "(detailed outline empty — evolve from brief outline before writing body)",
             chars_header: "[Linked character cards (incl. root book-wide cast) — speech/actions must match; see relations below]",
             relations_header: "[Character relations — incl. among root cast and with chapter characters]",
             relation_unset: "(relation not set)",
@@ -343,23 +355,23 @@ pub fn generate_chapter_system(
     let wmin_lo = wmin.saturating_sub(60);
     let wmax_hi = wmax.saturating_add(60);
     let conflict = if loc.is_zh() {
-        "未链接到本章的设定不要硬塞；冲突时：前序记忆与大纲定历史事实 → 本章大纲定主线 → 剧情卡补齐本章事件 → 人物约束行为 → **本章知识卡硬约束写作手法/文风/用词** → 简介定调。"
+        "未链接到本章的设定不要硬塞；冲突时：前序记忆与大纲定历史事实 → 本章细纲定场景落地 → 本章简纲定主线 → 剧情卡补齐本章事件 → 人物约束行为 → **本章知识卡硬约束写作手法/文风/用词** → 简介定调。"
     } else {
-        "Do not force unlinked lore. On conflicts: prior memory/outlines = history → this chapter outline drives the arc → plot cards supply events → characters constrain behavior → **chapter knowledge cards hard-constrain craft/style/diction** → synopsis sets tone."
+        "Do not force unlinked lore. On conflicts: prior memory/outlines = history → detailed outline drives scene landings → brief outline drives the arc → plot cards supply events → characters constrain behavior → **chapter knowledge cards hard-constrain craft/style/diction** → synopsis sets tone."
     };
     let body = if loc.is_zh() {
         format!(
             "你是强约束小说写作引擎 Novel Work。生成本章时必须同时遵守：\n\
              1）全书故事简介与根节点关联人物卡（总体设定参考，勿偏离）；\n\
              2）前序章节的大纲与章节记忆（若有）：已是既定事实与因果，本章必须衔接，严禁推翻、改写或无视记忆中的人物状态/承诺/事件结果；\n\
-             3）本章默认大纲（主线走向，不可丢弃关键情节点）；\n\
+             3）本章简纲（主线走向）与本章细纲（分条场景要点）：**正文从细纲扩充**，简纲保主线；细纲每条须在正文中实际发生或明确推进；\n\
              4）本章已链接人物卡（性格、身份、行事风格、关系，言行不得出戏）；\n\
              5）本章已链接剧情卡（含根节点贯穿剧情）：卡内要点/补充正文是本章情节来源之一，须结合大纲写入正文，使事件落地，禁止只点名不推进。\n\
              6）本章已链接知识卡（写作硬约束/知识储备：手法节奏、文风语气、用词与禁用词、关键词与专名替换、视角时态、对话与修辞等；须严格遵守 extracted，空则遵守 extract_prompt/outline；禁止另起风格）。\n\
              7）全书计划共 {chapter_count} 章：本章信息量与悬念投放须符合所处位置，勿按无限连载节奏注水；勿抢写后续章大纲中才应发生的高潮。\n\
              {conflict}\n\
              【契约】用户消息中的「必须落地」列表是硬性验收项：每一项都须在正文中实际发生或明确推进；写完在脑中逐项勾选，缺项则补写后再输出。\n\
-             【预生成禁令】**禁止参考、续写或改写本章已有正文/旧稿**（即使磁盘上已有正文也不注入）；须按大纲、链接卡与前序记忆**重新写出**完整本章。\n\
+             【预生成禁令】**禁止参考、续写或改写本章已有正文/旧稿**（即使磁盘上已有正文也不注入）；须按细纲、链接卡与前序记忆**重新写出**完整本章。\n\
              小说：《{title}》\n简介：{synopsis}\n\
              【硬性篇幅】以树根节点每章目标为准：正文非空白字符数目标 {wmin}–{wmax} 字，允许上下浮动 60 字\
              （有效区间 {wmin_lo}–{wmax_hi}）。上下限相同时按该单点目标 ±60。\
@@ -370,14 +382,14 @@ pub fn generate_chapter_system(
             "You are Novel Work, a strongly constrained novel-writing engine. When generating this chapter you MUST obey:\n\
              1) Novel synopsis and root-linked character cards (global setting — do not contradict);\n\
              2) Prior chapter outlines + chapter memory (if any): established facts/causality—this chapter must continue them; never overturn, rewrite, or ignore remembered states/promises/outcomes;\n\
-             3) The default chapter outline (main arc — do not drop key beats);\n\
+             3) Brief outline (arc) + detailed outline (scene beats): **expand body from the detailed outline**; every detailed beat must land; brief keeps the arc;\n\
              4) Chapter-linked character cards (traits, role, style — stay in character);\n\
              5) Linked plot cards (incl. root book-wide plots): their beats/extra text are chapter plot sources—combine with the outline and make events land in the body; do not name-drop without advancing them.\n\
              6) Chapter-linked knowledge cards (HARD craft constraints: technique/pacing, style/tone, diction/banned words, keyword & proper-noun substitution, POV/tense, dialogue/rhetoric, etc.—follow extracted; else extract_prompt/outline; do not invent another style).\n\
              7) Planned total: {chapter_count} chapters—pace for this place in the arc; do not steal climaxes reserved for later chapter outlines.\n\
              {conflict}\n\
              [Contract] The “Must land” list in the user message is hard acceptance criteria—each item must occur or clearly advance; mentally check every item and fill gaps before outputting.\n\
-             [Generate ban] **Do not reference, continue, or revise any existing body/draft of THIS chapter** (none is injected even if on disk); write a full new chapter from outline, linked cards, and prior memory only.\n\
+             [Generate ban] **Do not reference, continue, or revise any existing body/draft of THIS chapter** (none is injected even if on disk); write a full new chapter from detailed outline, linked cards, and prior memory only.\n\
              Novel: “{title}”\nSynopsis: {synopsis}\n\
              [Hard length] Root per-chapter target: {wmin}–{wmax} non-whitespace chars, ±60 float allowed \
              (valid band {wmin_lo}–{wmax_hi}). If min=max, that single target ±60. \
@@ -1250,6 +1262,24 @@ pub fn cover_t2i_prompt_user(
     )
 }
 
+pub fn character_sheet_t2i_system() -> &'static str {
+    "You write ONE English text-to-image prompt for a character turnaround sheet.\n\
+     Rules:\n\
+     - Output ONLY the prompt (no quotes, no markdown, no labels, no Chinese).\n\
+     - One dense paragraph, 40–90 words.\n\
+     - Must be a single image showing FOUR full-body views of the SAME person: front, left profile, back, right profile, evenly spaced.\n\
+     - Plain light-gray studio background, consistent face / clothes / proportions, head-to-toe, no cropped legs.\n\
+     - No readable text, no extra people, no NSFW, no artist names."
+}
+
+pub fn character_sheet_t2i_user(name: &str, card_md: &str) -> String {
+    format!(
+        "Character name: {name}\n\n\
+         Character notes (visual cues only; ignore secrets and plot):\n{card_md}\n\n\
+         Write the English four-view full-body turnaround prompt now."
+    )
+}
+
 /// 整理近 N 章 → 根上跨章剧情卡（进行中/已收束/搁置）。
 pub fn consolidate_plots_system(loc: PromptLocale) -> &'static str {
     if loc.is_zh() {
@@ -1338,5 +1368,538 @@ pub fn rewrite_paragraph_user(loc: PromptLocale, paragraph: &str, instruction: &
         format!(
             "[Original paragraph]\n{paragraph}\n\n[Revision notes]\n{instruction}\n\nOutput only the rewritten paragraph:"
         )
+    }
+}
+
+/// 正文手动编辑：细纲 + 上一段 + 当前段已写，给 6 条下一步怎么写。
+pub fn suggest_body_next_system(loc: PromptLocale) -> String {
+    if loc.is_zh() {
+        "你是 Novel Work 续写提示助手。根据本章细纲、上一段，以及当前段落已经写下的文字，给出下一步怎么写的推荐。\n\
+         硬性规则：只输出一个 JSON 对象 {\"suggestions\":[...]}，数组必须恰好 6 条字符串；\
+         每条 1～2 句，是可立刻接下写的具体方向（动作/对话/感官/信息差），不要解释、不要编号前缀、不要 markdown 围栏；\
+         六条互不重复；须接上当前段已写文字并推进细纲尚未落地的要点；不跳章、不发明未出现的关键设定；不要写成整段正文。"
+            .into()
+    } else {
+        "You are Novel Work's next-beat assistant. From this chapter's detailed outline, the previous paragraph, and the current paragraph already written, recommend what to write next.\n\
+         Hard rules: output one JSON object {\"suggestions\":[...]} with exactly 6 strings; \
+         each item is 1–2 sentences, a concrete next beat (action/dialogue/sense/info-gap); no explanation, no numbering, no markdown fences; \
+         six distinct directions; continue the current paragraph and advance outline beats not yet on the page; do not skip chapters or invent unseen lore; do not write a full paragraph."
+            .into()
+    }
+}
+
+pub fn suggest_body_next_user(
+    loc: PromptLocale,
+    outline: &str,
+    current: &str,
+    prev_paragraph: &str,
+) -> String {
+    let empty = if loc.is_zh() { "（无）" } else { "(none)" };
+    let outline = if outline.trim().is_empty() { empty } else { outline };
+    let current = if current.trim().is_empty() { empty } else { current };
+    let prev = if prev_paragraph.trim().is_empty() {
+        empty
+    } else {
+        prev_paragraph
+    };
+    if loc.is_zh() {
+        format!(
+            "【本章细纲】\n{outline}\n\n【上一段】\n{prev}\n\n【当前段落已写】\n{current}\n\n请输出恰好 6 条下一步怎么写的 JSON："
+        )
+    } else {
+        format!(
+            "[Chapter detailed outline]\n{outline}\n\n[Previous paragraph]\n{prev}\n\n[Current paragraph already written]\n{current}\n\nOutput JSON with exactly 6 next-beat suggestions:"
+        )
+    }
+}
+
+/// 人物卡整卡 AI 改写：输出完整 JSON，填满所有字段。
+pub fn rewrite_character_card_system(loc: PromptLocale) -> String {
+    if loc.is_zh() {
+        "你是 Novel Work 人物设定助手。按用户提示词改写或生成整张人物卡。\n\
+         硬性规则：只输出一个 JSON 对象；必须包含提示词列出的全部字段且每一项都有具体、可写作的内容；\
+         禁止留空、禁止省略键、禁止写「待定」「暂无」「未知」；不要解释、不要 markdown 代码围栏。\n\
+         若提供【参考书】（世界观、其他人物/剧情/知识卡），人设须与其中设定一致、可引用世界锚点中的法则名。\n\
+         relations 至少一条且每条字段齐全；author_verdict 须为 prove|disprove|unresolved；\
+         catchphrases 为至少一个非空字符串的数组。"
+            .into()
+    } else {
+        "You are Novel Work's character-profile assistant. Rewrite or draft the full character card per the prompt.\n\
+         Hard rules: output one JSON object only; every listed field must be filled with concrete, writable detail; \
+         no empty values, no omitted keys, no placeholders like TBD/N/A; no explanation, no markdown fences.\n\
+         If [Reference] materials (worldview, other character/plot/knowledge cards) are provided, stay consistent and \
+         you may cite axiom names from world anchors.\n\
+         relations: at least one complete entry; author_verdict: prove|disprove|unresolved; \
+         catchphrases: array with at least one non-empty string."
+            .into()
+    }
+}
+
+pub fn is_character_whole_rewrite_label(label: &str) -> bool {
+    label.trim() == "__character_card_whole__"
+}
+
+pub fn parse_story_rules_block_whole_label(label: &str) -> Option<&str> {
+    const P: &str = "__story_rules_block__:";
+    let s = label.trim();
+    if !s.starts_with(P) {
+        return None;
+    }
+    let slot = s[P.len()..].trim();
+    if crate::story_rules_fmt::is_story_rules_fan_slot(slot) {
+        Some(slot)
+    } else {
+        None
+    }
+}
+
+pub fn is_story_rules_block_whole_label(label: &str) -> bool {
+    parse_story_rules_block_whole_label(label).is_some()
+}
+
+pub fn rewrite_story_rules_block_system(loc: PromptLocale) -> String {
+    if loc.is_zh() {
+        "你是 Novel Work 故事规则助手。按提示词改写或生成整张故事规则子卡。\n\
+         硬性规则：只输出一个 JSON 对象；必须包含提示词列出的全部字段且每一项都有具体、可写作的内容；\
+         禁止留空、禁止省略键、禁止写「待定」；列表字段为非空字符串数组；不要解释、不要 markdown 围栏。\n\
+         若提供【参考书】（世界观、人物、剧情、其他知识卡、章节），须与其中设定一致。"
+            .into()
+    } else {
+        "You are Novel Work's story-rules assistant. Rewrite or draft the full story-rules sub-card per the prompt.\n\
+         Hard rules: one JSON object only; every listed field filled with concrete detail; \
+         no empty values or omitted keys; list fields are non-empty string arrays; no fences or explanation.\n\
+         If [Reference] (worldview, characters, plots, knowledge, chapters) is provided, stay consistent."
+            .into()
+    }
+}
+
+/// 故事规则 Chat：生成四张右侧子卡 JSON。
+pub fn generate_story_rules_chat_system(loc: PromptLocale) -> String {
+    if loc.is_zh() {
+        "你是 Novel Work 故事架构师。根据对话生成或改写故事规则四卡（表层设定、故事引擎、兑现系统、约束红线）。\n\
+         硬性规则：只输出一个 JSON；含 reply（2–4 句中文）与 blocks 对象。\n\
+         blocks 含 surface_setting、story_engine、fulfillment_system、constraint_redlines，字段名用英文键。\n\
+         surface_setting: premise, core_conflict, reader_promise, target_audience, tone_reference, commercial_tags, extended_premise\n\
+         story_engine: premise, bright_line, dark_line, suspense_setup, conflict_engine, external_conflict, internal_conflict, relational_conflict, progression_cycle, protagonist_dilemma\n\
+         fulfillment_system: premise, growth_path, ending_texture, payoff_syntax[], emotional_rhythm, tension_archetypes[]\n\
+         constraint_redlines: premise, redlines[]\n\
+         须服从【功能选项】与【世界观快照】；用户要求参考章节时以【已有章节】为准。\n\
+         输出示例：{\"reply\":\"…\",\"blocks\":{\"surface_setting\":{…},\"story_engine\":{…},\"fulfillment_system\":{…},\"constraint_redlines\":{…}}}"
+            .into()
+    } else {
+        "You are Novel Work's story architect. From chat, generate or rewrite the four story-rules cards.\n\
+         Output one JSON with reply and blocks (surface_setting, story_engine, fulfillment_system, constraint_redlines). \
+         Use English keys as in the schema; list fields as non-empty string arrays. Obey [Story tags] and worldview snapshot."
+            .into()
+    }
+}
+
+pub fn generate_story_rules_chat_user(
+    loc: PromptLocale,
+    novel_title: &str,
+    synopsis: &str,
+    features_block: &str,
+    worldview_snapshot: &str,
+    blocks_snapshot: &str,
+    chapter_context: &str,
+    novel_reference: &str,
+    history: &str,
+    latest_user: &str,
+) -> String {
+    if loc.is_zh() {
+        format!(
+            "【小说】{novel_title}\n【简介】{synopsis}\n\n【功能选项】\n{features_block}\n\n\
+             【已有章节（标题 + 大纲）】\n{chapter_context}\n\n\
+             【全书卡面参考书】\n{novel_reference}\n\n\
+             【世界观快照 JSON】\n{worldview_snapshot}\n\n【当前故事规则四卡 JSON】\n{blocks_snapshot}\n\n\
+             【对话历史】\n{history}\n\n【用户最新消息】\n{latest_user}\n\n请输出 JSON（含 reply 与 blocks）："
+        )
+    } else {
+        format!(
+            "[Novel] {novel_title}\n[Synopsis] {synopsis}\n\n[Story tags]\n{features_block}\n\n\
+             [Existing chapters (title + outline)]\n{chapter_context}\n\n\
+             [Novel cards reference]\n{novel_reference}\n\n\
+             [Worldview snapshot JSON]\n{worldview_snapshot}\n\n[Current four cards JSON]\n{blocks_snapshot}\n\n\
+             [Chat history]\n{history}\n\n[Latest user message]\n{latest_user}\n\nOutput JSON with reply and blocks:"
+        )
+    }
+}
+
+/// 世界观字段改写 / 生成（一句话立意、公理字段、禁忌、力量体系等）。
+pub fn rewrite_text_field_system(loc: PromptLocale) -> String {
+    if loc.is_zh() {
+        "你是 Novel Work 世界观设定助手。按用户提示词改写或生成指定字段。\n\
+         硬性规则：只输出该字段的最终正文；不要解释、不要标题、不要用 markdown 代码围栏；\
+         保持设定自洽、简洁可注入写作；若原文为空则按提示词新写。"
+            .into()
+    } else {
+        "You are Novel Work's worldbuilding assistant. Rewrite or draft the named field per the user's prompt.\n\
+         Hard rules: output only the final field text; no explanation, no title, no markdown fences; \
+         keep settings coherent and concise; if current text is empty, draft from the prompt."
+            .into()
+    }
+}
+
+pub fn rewrite_text_field_user(
+    loc: PromptLocale,
+    field_label: &str,
+    current: &str,
+    instruction: &str,
+    context: &str,
+) -> String {
+    let cur = if current.trim().is_empty() {
+        if loc.is_zh() {
+            "（空，请新写）"
+        } else {
+            "(empty — draft new)"
+        }
+    } else {
+        current
+    };
+    let ctx = context.trim();
+    if loc.is_zh() {
+        if ctx.is_empty() {
+            format!(
+                "【字段】{field_label}\n\n【当前内容】\n{cur}\n\n【提示词】\n{instruction}\n\n请只输出该字段的最终正文："
+            )
+        } else {
+            format!(
+                "【字段】{field_label}\n\n【相关上下文】\n{ctx}\n\n【当前内容】\n{cur}\n\n【提示词】\n{instruction}\n\n请只输出该字段的最终正文："
+            )
+        }
+    } else if ctx.is_empty() {
+        format!(
+            "[Field] {field_label}\n\n[Current]\n{cur}\n\n[Prompt]\n{instruction}\n\nOutput only the final field text:"
+        )
+    } else {
+        format!(
+            "[Field] {field_label}\n\n[Context]\n{ctx}\n\n[Current]\n{cur}\n\n[Prompt]\n{instruction}\n\nOutput only the final field text:"
+        )
+    }
+}
+
+/// 根节点世界观 Chat：一次输出六卡 + 故事规则 JSON。
+pub fn generate_worldview_chat_system(loc: PromptLocale) -> String {
+    if loc.is_zh() {
+        "你是 Novel Work 世界观架构师。根据用户对话，生成或重写整套世界观设定。\n\
+         硬性规则：\n\
+         1) 只输出一个 JSON 对象，不要 markdown 围栏、不要其它文字。\n\
+         2) 顶层含 reply（给用户看的简短中文说明，2–4 句）与 worldview 对象。\n\
+         3) worldview 各块要自洽、可注入写作；子项 2–5 条为宜。\n\
+         4) 用户要求「随机/全新/重来」时，忽略现有世界观快照，但仍必须严格服从【功能选项】（题材/核心玩法/风格/关系/受众）；未配置时才可自由发挥。\n\
+         5) 用户给出基础/种子时，在其上扩展并保持内部一致，且不得违背【功能选项】。\n\
+         6) 用户要求微调时，在现有快照上修改，仍须符合【功能选项】。\n\
+         7) 【功能选项】是硬约束：生成的世界、冲突、爽点、人物关系与受众口吻必须贴合这些标签，禁止写成无关题材或相反调性。\n\
+         JSON 结构：\n\
+         {\"reply\":\"…\",\"worldview\":{\n\
+           \"core_laws\":{\"premise\":\"\",\"taboos\":[\"\"],\"power_system\":\"\",\"power_expression\":\"\",\n\
+             \"axioms\":[{\"name\":\"\",\"statement\":\"\",\"boundary\":\"\",\"cost\":\"\",\"mechanism\":\"\"}]},\n\
+           \"spatiotemporal\":{\"premise\":\"\",\"era\":\"\",\"ecology\":\"\",\"world_pattern\":\"\",\"atmosphere\":\"\",\n\
+             \"locations\":[{\"name\":\"\",\"features\":\"\",\"terrain\":\"\",\"faction\":\"\"}]},\n\
+           \"social_power\":{\"premise\":\"\",\"class_structure\":\"\",\"political_system\":\"\",\"power_visibility\":\"\",\n\
+             \"races\":[{\"name\":\"\",\"features\":\"\",\"population\":\"\",\"social_status\":\"\"}],\n\
+             \"factions\":[{\"name\":\"\",\"faction_type\":\"\",\"goal\":\"\",\"means\":\"\",\"power_base\":\"\"}]},\n\
+           \"existence\":{\"premise\":\"\",\"death\":\"\",\"calendar\":\"\",\"lifespan\":\"\",\"disease_reproduction\":\"\"},\n\
+           \"info_flow\":{\"premise\":\"\",\"info_speed\":\"\",\"info_barrier\":\"\",\"rumor_truth\":\"\",\"knowledge_carrier\":\"\"},\n\
+           \"history_culture\":{\"premise\":\"\",\"customs\":\"\",\"economy\":\"\",\"daily_slices\":\"\",\n\
+             \"religions\":[{\"name\":\"\",\"core_belief\":\"\",\"followers_scope\":\"\"}],\n\
+             \"major_events\":[{\"title\":\"\",\"event\":\"\",\"long_term_impact\":\"\"}]},\n\
+           \"story_rules\":{\"extracted\":\"…\"}\n\
+         }}\n\
+         必须包含全部六块世界观（core_laws / spatiotemporal / social_power / existence / info_flow / history_culture）以及 story_rules，不可省略 history_culture。"
+            .into()
+    } else {
+        "You are Novel Work's worldbuilding architect. From the chat, generate or rewrite the full worldview.\n\
+         Hard rules:\n\
+         1) Output one JSON object only — no markdown fences, no extra text.\n\
+         2) Top level: reply (2–4 sentences for the user) and worldview.\n\
+         3) Keep sections coherent and injectable; prefer 2–5 items per list.\n\
+         4) On random/reset: ignore the current worldview snapshot, but you MUST still obey [Story tags] (genre/gameplay/tone/romance/audience). Only invent freely if tags are empty.\n\
+         5) When the user gives a seed/basis, expand it consistently without violating [Story tags].\n\
+         6) On tweak requests, edit the snapshot while staying within [Story tags].\n\
+         7) [Story tags] are hard constraints for genre, core gameplay, tone, relationships, and audience.\n\
+         8) worldview MUST include all six blocks: core_laws, spatiotemporal, social_power, existence, info_flow, history_culture, plus story_rules.extracted.\n\
+         history_culture shape: premise, customs, economy, daily_slices,\n\
+         religions[{name,core_belief,followers_scope}], major_events[{title,event,long_term_impact}]."
+            .into()
+    }
+}
+
+pub fn generate_worldview_chat_user(
+    loc: PromptLocale,
+    novel_title: &str,
+    synopsis: &str,
+    root_outline: &str,
+    features_block: &str,
+    snapshot_json: &str,
+    history: &str,
+    latest_user: &str,
+    slot_json_key: Option<&str>,
+) -> String {
+    let scope = match slot_json_key {
+        Some(key) if loc.is_zh() => format!(
+            "本次只改 worldview.{key}：必须填满该对象的每一个字段（含数组子项 2–5 条）。其它卡只作上下文，禁止写入 JSON。\n\n"
+        ),
+        Some(key) => format!(
+            "This turn only writes worldview.{key}: fill EVERY field of that object (including list items, 2–5). Other cards are context only — do not output them.\n\n"
+        ),
+        None => String::new(),
+    };
+    if loc.is_zh() {
+        format!(
+            "【小说】{novel_title}\n【简介】{synopsis}\n【根大纲】{root_outline}\n\n\
+             【功能选项】（硬约束，必须体现）\n{features_block}\n\n\
+             【当前世界观快照 JSON】\n{snapshot_json}\n\n\
+             【对话历史】\n{history}\n\n\
+             【用户最新消息】\n{latest_user}\n\n\
+             {scope}请输出 JSON（含 reply 与 worldview）："
+        )
+    } else {
+        format!(
+            "[Novel] {novel_title}\n[Synopsis] {synopsis}\n[Root outline] {root_outline}\n\n\
+             [Story tags] (hard constraints)\n{features_block}\n\n\
+             [Current worldview snapshot JSON]\n{snapshot_json}\n\n\
+             [Chat history]\n{history}\n\n\
+             [Latest user message]\n{latest_user}\n\n\
+             {scope}Output JSON with reply and worldview:"
+        )
+    }
+}
+
+fn worldview_slot_schema(json_key: &str) -> &'static str {
+    match json_key {
+        "core_laws" => {
+            "{\"premise\":\"\",\"taboos\":[\"\"],\"power_system\":\"\",\"power_expression\":\"\",\
+             \"axioms\":[{\"name\":\"\",\"statement\":\"\",\"boundary\":\"\",\"cost\":\"\",\"mechanism\":\"\"}]}"
+        }
+        "spatiotemporal" => {
+            "{\"premise\":\"\",\"era\":\"\",\"ecology\":\"\",\"world_pattern\":\"\",\"atmosphere\":\"\",\
+             \"locations\":[{\"name\":\"\",\"features\":\"\",\"terrain\":\"\",\"faction\":\"\"}]}"
+        }
+        "social_power" => {
+            "{\"premise\":\"\",\"class_structure\":\"\",\"political_system\":\"\",\"power_visibility\":\"\",\
+             \"races\":[{\"name\":\"\",\"features\":\"\",\"population\":\"\",\"social_status\":\"\"}],\
+             \"factions\":[{\"name\":\"\",\"faction_type\":\"\",\"goal\":\"\",\"means\":\"\",\"power_base\":\"\"}]}"
+        }
+        "existence" => {
+            "{\"premise\":\"\",\"death\":\"\",\"calendar\":\"\",\"lifespan\":\"\",\"disease_reproduction\":\"\"}"
+        }
+        "info_flow" => {
+            "{\"premise\":\"\",\"info_speed\":\"\",\"info_barrier\":\"\",\"rumor_truth\":\"\",\"knowledge_carrier\":\"\"}"
+        }
+        "history_culture" => {
+            "{\"premise\":\"\",\"customs\":\"\",\"economy\":\"\",\"daily_slices\":\"\",\
+             \"religions\":[{\"name\":\"\",\"core_belief\":\"\",\"followers_scope\":\"\"}],\
+             \"major_events\":[{\"title\":\"\",\"event\":\"\",\"long_term_impact\":\"\"}]}"
+        }
+        _ => "{}",
+    }
+}
+
+fn worldview_slot_label(loc: PromptLocale, json_key: &str) -> &str {
+    if loc.is_zh() {
+        match json_key {
+            "core_laws" => "核心法则",
+            "spatiotemporal" => "时空地理",
+            "social_power" => "社会权力",
+            "existence" => "存在基础",
+            "info_flow" => "信息传播",
+            "history_culture" => "历史文化",
+            _ => json_key,
+        }
+    } else {
+        match json_key {
+            "core_laws" => "Core laws",
+            "spatiotemporal" => "Space & time",
+            "social_power" => "Society & power",
+            "existence" => "Existence",
+            "info_flow" => "Information flow",
+            "history_culture" => "History & culture",
+            _ => json_key,
+        }
+    }
+}
+
+/// 单张世界观卡 Chat：只输出该 JSON 键的全部字段。
+pub fn generate_worldview_slot_chat_system(loc: PromptLocale, json_key: &str) -> String {
+    let label = worldview_slot_label(loc, json_key);
+    let schema = worldview_slot_schema(json_key);
+    if loc.is_zh() {
+        format!(
+            "你是 Novel Work 世界观架构师。用户正在补全单张世界观卡「{label}」（JSON 键 {json_key}）。\n\
+             硬性规则：\n\
+             1) 只输出一个 JSON 对象，不要 markdown 围栏、不要其它文字。\n\
+             2) 顶层含 reply（给用户看的简短中文说明，2–4 句）与 worldview 对象。\n\
+             3) worldview 只允许含 {json_key} 这一块；禁止其它世界观块，禁止 story_rules。\n\
+             4) 必须填满 {json_key} 的全部字段（含数组子项，2–5 条为宜），不可只写 extracted 或只写立意。\n\
+             5) 用户要求「随机/全新/重来」时，忽略该卡现有内容，但仍必须严格服从【功能选项】。\n\
+             6) 用户给出基础/种子或要求微调时，在现有快照上补全并保持内部一致，且不得违背【功能选项】。\n\
+             7) 【功能选项】是硬约束。\n\
+             JSON 结构：{{\"reply\":\"…\",\"worldview\":{{\"{json_key}\":{schema}}}}}"
+        )
+    } else {
+        format!(
+            "You are Novel Work's worldbuilding architect. The user is filling one card: {label} (JSON key {json_key}).\n\
+             Hard rules:\n\
+             1) Output one JSON object only — no markdown fences, no extra text.\n\
+             2) Top level: reply (2–4 sentences) and worldview.\n\
+             3) worldview may contain ONLY {json_key}. No other worldview blocks, no story_rules.\n\
+             4) Fill EVERY field of {json_key} (including list items, 2–5). Do not emit extracted-only.\n\
+             5) On random/reset: ignore this card's current content, but still obey [Story tags].\n\
+             6) On seed/tweak: expand the snapshot consistently without violating [Story tags].\n\
+             7) [Story tags] are hard constraints.\n\
+             Shape: {{\"reply\":\"…\",\"worldview\":{{\"{json_key}\":{schema}}}}}"
+        )
+    }
+}
+
+/// 简纲 → 细纲（分条场景要点）
+pub fn generate_detailed_outline_system(loc: PromptLocale) -> String {
+    let body = if loc.is_zh() {
+        "你是 Novel Work 细纲引擎。任务：把本章**简纲**进化为可直接扩写正文的**细纲**列表。\n\
+         规则：\n\
+         1）细纲每条是一个可落地的场景/节拍（谁、做什么、结果或转折），按时间顺序；\n\
+         2）覆盖简纲全部关键点，可合理拆细，但禁止另起无关主线或推翻简纲；\n\
+         3）结合已链接人物/剧情/知识卡，使细纲可写、可验收；\n\
+         4）条数通常 5–12；过短则拆，过碎则合并；\n\
+         5）只输出 JSON：{\"detailed_outline\":[\"…\",\"…\"]}，不要 Markdown 围栏或其它字段。"
+    } else {
+        "You are Novel Work’s detailed-outline engine. Evolve the chapter **brief outline** into a **detailed outline** list ready for body expansion.\n\
+         Rules:\n\
+         1) Each item is a landable scene/beat (who, does what, result/turn), in order;\n\
+         2) Cover every key beat of the brief outline; split as needed; do not invent a conflicting arc;\n\
+         3) Honor linked characters/plots/knowledge so beats are writable and checkable;\n\
+         4) Typically 5–12 items;\n\
+         5) Output JSON only: {\"detailed_outline\":[\"…\",\"…\"]} — no markdown fences or extra fields."
+    };
+    format!("{body}\n{}", loc.language_rule())
+}
+
+pub fn generate_detailed_outline_user(
+    loc: PromptLocale,
+    root_ref: &str,
+    chapter_info: &str,
+    cards: &str,
+    user_notes: &str,
+) -> String {
+    let notes = if user_notes.trim().is_empty() {
+        String::new()
+    } else if loc.is_zh() {
+        format!("——— 补充要求 ——\n{user_notes}\n\n")
+    } else {
+        format!("——— Extra notes ——\n{user_notes}\n\n")
+    };
+    if loc.is_zh() {
+        format!(
+            "{root_ref}\n\n{notes}{chapter_info}\n\n{cards}\n\n\
+             请根据本章简纲（及链接卡）输出细纲 JSON：{{\"detailed_outline\":[\"…\"]}}"
+        )
+    } else {
+        format!(
+            "{root_ref}\n\n{notes}{chapter_info}\n\n{cards}\n\n\
+             From the brief outline (and linked cards), output detailed outline JSON: {{\"detailed_outline\":[\"…\"]}}"
+        )
+    }
+}
+
+/// 重写细纲中的单条节拍（保留前后条与简纲一致）
+pub fn regenerate_detailed_outline_item_system(loc: PromptLocale) -> String {
+    let body = if loc.is_zh() {
+        "你是 Novel Work 细纲引擎。任务：只重写本章细纲中的**一条**场景节拍。\n\
+         规则：\n\
+         1）输出须与前后相邻细纲条衔接，不推翻简纲主线，不另起无关支线；\n\
+         2）本条仍是可落地的场景要点（谁、做什么、结果或转折），长度与相邻条相近；\n\
+         3）只改指定下标那一条；不要输出整份细纲列表；\n\
+         4）只输出 JSON：{\"item\":\"…\"}，不要 Markdown 围栏或其它字段。"
+    } else {
+        "You are Novel Work’s detailed-outline engine. Rewrite **one** beat of the chapter detailed outline.\n\
+         Rules:\n\
+         1) Keep continuity with neighboring beats; do not overturn the brief outline or invent a side arc;\n\
+         2) One landable scene beat (who, does what, result/turn), similar length to neighbors;\n\
+         3) Rewrite only the indexed item — do not return the full list;\n\
+         4) Output JSON only: {\"item\":\"…\"} — no markdown fences or extra fields."
+    };
+    format!("{body}\n{}", loc.language_rule())
+}
+
+pub fn regenerate_detailed_outline_item_user(
+    loc: PromptLocale,
+    root_ref: &str,
+    chapter_info: &str,
+    cards: &str,
+    index: usize,
+    current: &str,
+    neighbors: &str,
+    user_notes: &str,
+) -> String {
+    let notes = if user_notes.trim().is_empty() {
+        String::new()
+    } else if loc.is_zh() {
+        format!("——— 补充要求 ——\n{user_notes}\n\n")
+    } else {
+        format!("——— Extra notes ——\n{user_notes}\n\n")
+    };
+    let idx1 = index + 1;
+    if loc.is_zh() {
+        format!(
+            "{root_ref}\n\n{notes}{chapter_info}\n\n{cards}\n\n\
+             ——— 当前细纲（含序号）———\n{neighbors}\n\n\
+             请只重写第 {idx1} 条（0-based index={index}）。\n\
+             当前文案：{current}\n\n\
+             输出 JSON：{{\"item\":\"…\"}}"
+        )
+    } else {
+        format!(
+            "{root_ref}\n\n{notes}{chapter_info}\n\n{cards}\n\n\
+             ——— Current detailed outline (numbered) ——\n{neighbors}\n\n\
+             Rewrite only item #{idx1} (0-based index={index}).\n\
+             Current text: {current}\n\n\
+             Output JSON: {{\"item\":\"…\"}}"
+        )
+    }
+}
+
+pub fn split_chapter_shots_system(loc: PromptLocale) -> String {
+    let body = if loc.is_zh() {
+        "你是分镜师。把一章正文切成多条可拍的连续镜头（一章多镜），供 MiniMax 文生视频。\n\
+         规则：每镜 5–15 秒；按场面/对白/机位切开，一场戏也要切多镜；禁止把整章收成 1 条；不发明正文没有的情节；对话原句保留。\n\
+         只输出 JSON：{\"shots\":[{\"action\":\"画面里发生什么\",\"camera\":\"机位/运动\",\"dialogue\":\"对白可空\",\"duration_sec\":8},…]}\n\
+         通常 6–20 镜，短章至少 2 镜。不要 Markdown 围栏。"
+    } else {
+        "You are a storyboard artist. Split one chapter into many consecutive shots for MiniMax text-to-video.\n\
+         Each shot 5–15s; cut on scene/dialogue/camera changes; never collapse the chapter into one shot; do not invent plot; keep spoken lines verbatim.\n\
+         JSON only: {\"shots\":[{\"action\":\"what happens\",\"camera\":\"framing/move\",\"dialogue\":\"or empty\",\"duration_sec\":8},…]}\n\
+         Typically 6–20 shots, at least 2. No markdown fences."
+    };
+    format!("{body}\n{}", loc.language_rule())
+}
+
+pub fn split_chapter_shots_user(loc: PromptLocale, label: &str, body: &str, chars: &str) -> String {
+    if loc.is_zh() {
+        format!("【章】{label}\n【人物外观（保持一致）】\n{chars}\n\n【正文】\n{body}\n")
+    } else {
+        format!("[Chapter] {label}\n[Look (keep consistent)]\n{chars}\n\n[Body]\n{body}\n")
+    }
+}
+
+pub fn shot_comfy_prompts_system(loc: PromptLocale) -> String {
+    let body = if loc.is_zh() {
+        "你为 MiniMax（ComfyUI Desktop）写文生视频提示词。每镜一条英文为主、专名可中文的 cinematic prompt。\n\
+         必须含：主体外貌（与人物卡一致）、环境、动作、镜头运动、光线、对白（若有，写成 spoken line）。\n\
+         禁止网文腔与抽象情绪堆砌。不要写分镜以外的情节。\n\
+         只输出 JSON：{\"shots\":[{\"order\":1,\"comfy_prompt\":\"…\"}]} ，order 对应已有镜头编号。"
+    } else {
+        "Write MiniMax (ComfyUI Desktop) text-to-video prompts. One cinematic prompt per shot, English preferred, names may stay original.\n\
+         Include: consistent character looks, setting, action, camera move, light, spoken line if any.\n\
+         JSON only: {\"shots\":[{\"order\":1,\"comfy_prompt\":\"…\"}]}"
+    };
+    format!("{body}\n{}", loc.language_rule())
+}
+
+pub fn shot_comfy_prompts_user(loc: PromptLocale, label: &str, chars: &str, shots_json: &str) -> String {
+    if loc.is_zh() {
+        format!("【章】{label}\n【人物外观】\n{chars}\n\n【分镜头】\n{shots_json}\n")
+    } else {
+        format!("[Chapter] {label}\n[Looks]\n{chars}\n\n[Shots]\n{shots_json}\n")
     }
 }

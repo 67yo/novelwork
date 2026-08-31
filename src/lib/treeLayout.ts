@@ -5,6 +5,7 @@ export type LayoutNode = {
   linked_side_plot_ids?: string[];
   linked_character_ids?: string[];
   linked_knowledge_ids?: string[];
+  knowledge?: { slot?: string } | null;
 };
 
 export type LayoutEdge = {
@@ -45,6 +46,31 @@ const MIN_CHAPTER_GAP_TIGHT = 72;
 const MIN_CHAPTER_GAP = 200;
 /** 剧情块下方再留一点再放下章 */
 const CH_PAD = 48;
+/** 根上方世界观扇形半径（卡中心相对根顶） */
+const WV_FAN_R = 280;
+/** 故事规则右侧四卡扇形 */
+const STORY_RULES_FAN_R = 200;
+const STORY_RULES_FAN_SPAN_DEG = 72;
+/** 核心法则上方公理扇形半径 */
+const AXIOM_FAN_R = 200;
+/** 时空地理上方关键地点扇形半径 */
+const LOCATION_FAN_R = 200;
+/** 社会权力上方种族/势力扇形半径 */
+const SOCIAL_EXT_FAN_R = 200;
+/** 扇形总张角（度，相对竖直向上） */
+const WV_FAN_SPAN_DEG = 110;
+/** 扩展子卡扇形张角（更窄，减少与相邻主卡重叠） */
+const EXT_FAN_SPAN_DEG = 56;
+const MIN_EXT_FAN_SPAN_DEG = 28;
+const WV_FIX_MAX_PASSES = 12;
+/** 扇形相邻卡最小弧长间隙 */
+const WV_CARD_GAP = 16;
+const MAX_FAN_R = 520;
+const MAX_FAN_SPAN_DEG = 168;
+/** 种族/势力双半扇中间留白（度） */
+const SOCIAL_HALF_GAP_DEG = 24;
+/** 根卡视觉宽度估算（用于扇形圆心） */
+const ROOT_CARD_W = 200;
 
 function defaultNodeH(kind: string): number {
   if (kind === "character") return 96;
@@ -150,6 +176,733 @@ function placeKnowLeftOfChars(
     -1,
     sizes,
   );
+}
+
+function knowledgeSlotOf(n: LayoutNode): string {
+  return (n.knowledge?.slot ?? "").trim();
+}
+
+const WV_FAN_ORDER = [
+  "wv_core_laws",
+  "wv_spatiotemporal",
+  "wv_social_power",
+  "wv_history_culture",
+  "wv_existence",
+  "wv_info_flow",
+];
+
+/** 按卡宽与张角估算半径/张角，避免扇形内卡压卡 */
+function resolveFanGeometry(
+  count: number,
+  baseRadius: number,
+  baseSpanDeg: number,
+  cardW = SIDE_CARD_W,
+  gap = WV_CARD_GAP,
+): { radius: number; spanDeg: number } {
+  if (count <= 1) return { radius: baseRadius, spanDeg: 0 };
+  const minArc = cardW + gap;
+  let spanDeg = baseSpanDeg;
+  let radius = Math.max(
+    baseRadius,
+    ((count - 1) * minArc * 180) / (Math.PI * spanDeg),
+  );
+  if (radius > MAX_FAN_R) {
+    radius = MAX_FAN_R;
+    spanDeg = ((count - 1) * minArc * 180) / (Math.PI * radius);
+  }
+  spanDeg = Math.min(MAX_FAN_SPAN_DEG, Math.max(baseSpanDeg, spanDeg));
+  radius = Math.max(
+    radius,
+    ((count - 1) * minArc * 180) / (Math.PI * spanDeg),
+  );
+  return { radius, spanDeg };
+}
+
+type FanBBox = { id: string; x: number; y: number; w: number; h: number };
+
+function fanBBox(n: LayoutNode, sizes?: Map<string, LayoutSize>): FanBBox {
+  const w = sizes?.get(n.id)?.w ?? SIDE_CARD_W;
+  const h = nodeH(n, sizes);
+  return { id: n.id, x: n.position.x, y: n.position.y, w, h };
+}
+
+function fanRectsOverlap(a: FanBBox, b: FanBBox, pad = WV_CARD_GAP / 2): boolean {
+  return !(
+    a.x + a.w + pad <= b.x ||
+    b.x + b.w + pad <= a.x ||
+    a.y + a.h + pad <= b.y ||
+    b.y + b.h + pad <= a.y
+  );
+}
+
+const WORLDVIEW_LAYOUT_SLOTS = new Set([
+  ...WV_FAN_ORDER,
+  "wv_axiom",
+  "wv_location",
+  "wv_race",
+  "wv_faction",
+  "wv_religion",
+  "wv_major_event",
+]);
+
+function isWorldviewLayoutNode(n: LayoutNode): boolean {
+  return n.kind === "knowledge" && WORLDVIEW_LAYOUT_SLOTS.has(knowledgeSlotOf(n));
+}
+
+/** 六张世界观卡扇形排在根上方；圆心取根顶中心。也可用于公理挂核心法则。 */
+function placeHalfFan(
+  cards: LayoutNode[],
+  anchor: LayoutNode,
+  baseRadius: number,
+  degMin: number,
+  degMax: number,
+  sizes?: Map<string, LayoutSize>,
+) {
+  const n = cards.length;
+  if (!n) return;
+  const span = Math.max(degMax - degMin, 1);
+  const { radius } = resolveFanGeometry(n, baseRadius, span);
+  const cx = anchor.position.x + ROOT_CARD_W / 2;
+  const cy = anchor.position.y;
+  cards.forEach((card, i) => {
+    const deg = n === 1 ? (degMin + degMax) / 2 : degMin + ((degMax - degMin) * i) / (n - 1);
+    const rad = (deg * Math.PI) / 180;
+    const h = nodeH(card, sizes);
+    card.position = {
+      x: cx + radius * Math.sin(rad) - SIDE_CARD_W / 2,
+      y: cy - radius * Math.cos(rad) - h,
+    };
+  });
+}
+
+function placeFanAbove(
+  cards: LayoutNode[],
+  anchor: LayoutNode,
+  baseRadius: number,
+  sizes?: Map<string, LayoutSize>,
+  spanDeg = WV_FAN_SPAN_DEG,
+) {
+  const n = cards.length;
+  if (!n) return;
+  const geo = resolveFanGeometry(n, baseRadius, spanDeg);
+  const cx = anchor.position.x + ROOT_CARD_W / 2;
+  const cy = anchor.position.y;
+  const start = -geo.spanDeg / 2;
+  cards.forEach((card, i) => {
+    const deg = n === 1 ? 0 : start + (geo.spanDeg * i) / (n - 1);
+    const rad = (deg * Math.PI) / 180;
+    const h = nodeH(card, sizes);
+    card.position = {
+      x: cx + geo.radius * Math.sin(rad) - SIDE_CARD_W / 2,
+      y: cy - geo.radius * Math.cos(rad) - h,
+    };
+  });
+  return geo.radius;
+}
+
+/** 锚点右侧水平扇形（故事规则四卡） */
+function placeFanRight(
+  cards: LayoutNode[],
+  anchor: LayoutNode,
+  baseRadius: number,
+  spanDeg = STORY_RULES_FAN_SPAN_DEG,
+  sizes?: Map<string, LayoutSize>,
+) {
+  const n = cards.length;
+  if (!n) return 0;
+  const geo = resolveFanGeometry(n, baseRadius, spanDeg);
+  const cx = anchor.position.x + ROOT_CARD_W;
+  const cy = anchor.position.y;
+  const start = -geo.spanDeg / 2;
+  cards.forEach((card, i) => {
+    const deg = n === 1 ? 0 : start + (geo.spanDeg * i) / (n - 1);
+    const rad = (deg * Math.PI) / 180;
+    const h = nodeH(card, sizes);
+    card.position = {
+      x: cx + geo.radius * Math.cos(rad) - SIDE_CARD_W / 2,
+      y: cy + geo.radius * Math.sin(rad) - h / 2,
+    };
+  });
+  return geo.radius;
+}
+
+function placeWorldviewFan(
+  cards: LayoutNode[],
+  root: LayoutNode,
+  sizes?: Map<string, LayoutSize>,
+  radius = WV_FAN_R,
+  spanDeg = WV_FAN_SPAN_DEG,
+): number {
+  return placeFanAbove(cards, root, radius, sizes, spanDeg) ?? radius;
+}
+
+type WvLayoutRadii = {
+  mainR?: number;
+  mainSpanDeg?: number;
+  axiomR?: number;
+  locationR?: number;
+  socialR?: number;
+  historyR?: number;
+  extSpanDeg?: number;
+};
+
+function extensionSpanCap(
+  childCount: number,
+  mainSpanDeg: number,
+  mainCount: number,
+  baseSpan = EXT_FAN_SPAN_DEG,
+): number {
+  if (childCount <= 1) return 0;
+  const slotDeg = mainCount > 1 ? mainSpanDeg / (mainCount - 1) : mainSpanDeg;
+  const maxSpan = Math.min(
+    baseSpan,
+    Math.max(MIN_EXT_FAN_SPAN_DEG, slotDeg * 0.85 * Math.max(1, childCount - 1) + 8),
+  );
+  return resolveFanGeometry(childCount, AXIOM_FAN_R, maxSpan).spanDeg;
+}
+
+function layoutWorldviewExtensions(
+  fanBySlot: Map<string, LayoutNode>,
+  axiomCards: LayoutNode[],
+  locationCards: LayoutNode[],
+  raceCards: LayoutNode[],
+  factionCards: LayoutNode[],
+  religionCards: LayoutNode[],
+  majorEventCards: LayoutNode[],
+  sizes?: Map<string, LayoutSize>,
+  radii: WvLayoutRadii = {},
+) {
+  const mainSpan = radii.mainSpanDeg ?? WV_FAN_SPAN_DEG;
+  const mainCount = fanCardsCount(fanBySlot);
+  const extBase = radii.extSpanDeg ?? EXT_FAN_SPAN_DEG;
+  const axR = radii.axiomR ?? AXIOM_FAN_R;
+  const locR = radii.locationR ?? LOCATION_FAN_R;
+  const socR = radii.socialR ?? SOCIAL_EXT_FAN_R;
+  const histR = radii.historyR ?? SOCIAL_EXT_FAN_R;
+
+  const coreLaws = fanBySlot.get("wv_core_laws");
+  if (coreLaws && axiomCards.length) {
+    const order = new Map((coreLaws.linked_knowledge_ids ?? []).map((id, i) => [id, i]));
+    axiomCards.sort((a, b) => {
+      const ia = order.has(a.id) ? order.get(a.id)! : 9999;
+      const ib = order.has(b.id) ? order.get(b.id)! : 9999;
+      return ia - ib || byY(a, b);
+    });
+    placeFanAbove(
+      axiomCards,
+      coreLaws,
+      axR,
+      sizes,
+      extensionSpanCap(axiomCards.length, mainSpan, mainCount, extBase),
+    );
+  }
+  const spatiotemporal = fanBySlot.get("wv_spatiotemporal");
+  if (spatiotemporal && locationCards.length) {
+    const order = new Map(
+      (spatiotemporal.linked_knowledge_ids ?? []).map((id, i) => [id, i]),
+    );
+    locationCards.sort((a, b) => {
+      const ia = order.has(a.id) ? order.get(a.id)! : 9999;
+      const ib = order.has(b.id) ? order.get(b.id)! : 9999;
+      return ia - ib || byY(a, b);
+    });
+    placeFanAbove(
+      locationCards,
+      spatiotemporal,
+      locR,
+      sizes,
+      extensionSpanCap(locationCards.length, mainSpan, mainCount, extBase),
+    );
+  }
+  const socialPower = fanBySlot.get("wv_social_power");
+  if (socialPower && (raceCards.length || factionCards.length)) {
+    const order = new Map(
+      (socialPower.linked_knowledge_ids ?? []).map((id, i) => [id, i]),
+    );
+    const sortExt = (a: LayoutNode, b: LayoutNode) => {
+      const ia = order.has(a.id) ? order.get(a.id)! : 9999;
+      const ib = order.has(b.id) ? order.get(b.id)! : 9999;
+      return ia - ib || byY(a, b);
+    };
+    raceCards.sort(sortExt);
+    factionCards.sort(sortExt);
+    const raceSpan = extensionSpanCap(raceCards.length, mainSpan, mainCount, extBase);
+    const facSpan = extensionSpanCap(factionCards.length, mainSpan, mainCount, extBase);
+    const both = raceCards.length > 0 && factionCards.length > 0;
+    const fullSpan = Math.max(raceSpan, facSpan, extBase);
+    const half = both ? (fullSpan - SOCIAL_HALF_GAP_DEG) / 2 : fullSpan / 2;
+    const gapHalf = SOCIAL_HALF_GAP_DEG / 2;
+    if (raceCards.length) {
+      placeHalfFan(
+        raceCards,
+        socialPower,
+        socR,
+        both ? -fullSpan / 2 : -half,
+        both ? -gapHalf : half,
+        sizes,
+      );
+    }
+    if (factionCards.length) {
+      placeHalfFan(
+        factionCards,
+        socialPower,
+        socR,
+        both ? gapHalf : -half,
+        both ? fullSpan / 2 : half,
+        sizes,
+      );
+    }
+  }
+  const historyCulture = fanBySlot.get("wv_history_culture");
+  if (historyCulture && (religionCards.length || majorEventCards.length)) {
+    const order = new Map(
+      (historyCulture.linked_knowledge_ids ?? []).map((id, i) => [id, i]),
+    );
+    const sortExt = (a: LayoutNode, b: LayoutNode) => {
+      const ia = order.has(a.id) ? order.get(a.id)! : 9999;
+      const ib = order.has(b.id) ? order.get(b.id)! : 9999;
+      return ia - ib || byY(a, b);
+    };
+    religionCards.sort(sortExt);
+    majorEventCards.sort(sortExt);
+    const relSpan = extensionSpanCap(religionCards.length, mainSpan, mainCount, extBase);
+    const evSpan = extensionSpanCap(majorEventCards.length, mainSpan, mainCount, extBase);
+    const both = religionCards.length > 0 && majorEventCards.length > 0;
+    const fullSpan = Math.max(relSpan, evSpan, extBase);
+    const half = both ? (fullSpan - SOCIAL_HALF_GAP_DEG) / 2 : fullSpan / 2;
+    const gapHalf = SOCIAL_HALF_GAP_DEG / 2;
+    if (religionCards.length) {
+      placeHalfFan(
+        religionCards,
+        historyCulture,
+        histR,
+        both ? -fullSpan / 2 : -half,
+        both ? -gapHalf : half,
+        sizes,
+      );
+    }
+    if (majorEventCards.length) {
+      placeHalfFan(
+        majorEventCards,
+        historyCulture,
+        histR,
+        both ? gapHalf : -half,
+        both ? fullSpan / 2 : half,
+        sizes,
+      );
+    }
+  }
+}
+
+function fanCardsCount(fanBySlot: Map<string, LayoutNode>): number {
+  return WV_FAN_ORDER.filter((s) => fanBySlot.has(s)).length;
+}
+
+function cardWidth(n: LayoutNode, sizes?: Map<string, LayoutSize>): number {
+  const w = sizes?.get(n.id)?.w;
+  return typeof w === "number" && w > 8 ? w : SIDE_CARD_W;
+}
+
+function cardCenterX(n: LayoutNode, sizes?: Map<string, LayoutSize>): number {
+  return n.position.x + cardWidth(n, sizes) / 2;
+}
+
+/** 主卡 → 其子卡列表（按槽位） */
+function childrenByMainSlot(
+  axiomCards: LayoutNode[],
+  locationCards: LayoutNode[],
+  raceCards: LayoutNode[],
+  factionCards: LayoutNode[],
+  religionCards: LayoutNode[],
+  majorEventCards: LayoutNode[],
+): Map<string, LayoutNode[]> {
+  return new Map([
+    ["wv_core_laws", axiomCards],
+    ["wv_spatiotemporal", locationCards],
+    ["wv_social_power", [...raceCards, ...factionCards]],
+    ["wv_history_culture", [...religionCards, ...majorEventCards]],
+    ["wv_existence", []],
+    ["wv_info_flow", []],
+  ]);
+}
+
+/**
+ * 主卡中心线向 dir（+1 右 / -1 左）到「自身+子卡」外缘的延伸距离。
+ * 两主卡横向中心距至少应为：左卡右伸 + 右卡左伸 + 间隙。
+ */
+function reachFromCenter(
+  main: LayoutNode,
+  kids: LayoutNode[],
+  dir: 1 | -1,
+  sizes?: Map<string, LayoutSize>,
+): number {
+  const mc = cardCenterX(main, sizes);
+  let reach = cardWidth(main, sizes) / 2;
+  for (const k of kids) {
+    const w = cardWidth(k, sizes);
+    if (dir > 0) reach = Math.max(reach, k.position.x + w - mc);
+    else reach = Math.max(reach, mc - k.position.x);
+  }
+  return reach;
+}
+
+/** 相邻主卡中心距是否小于「相对方向子卡外伸之和」 */
+function adjacentMainsTooClose(
+  fanBySlot: Map<string, LayoutNode>,
+  kidsByMain: Map<string, LayoutNode[]>,
+  sizes?: Map<string, LayoutSize>,
+): boolean {
+  const mains = WV_FAN_ORDER.map((s) => fanBySlot.get(s)).filter(
+    (n): n is LayoutNode => !!n,
+  );
+  mains.sort(
+    (a, b) =>
+      cardCenterX(a, sizes) - cardCenterX(b, sizes) || a.id.localeCompare(b.id),
+  );
+  for (let i = 0; i < mains.length - 1; i++) {
+    const left = mains[i]!;
+    const right = mains[i + 1]!;
+    const leftKids = kidsByMain.get(knowledgeSlotOf(left)) ?? [];
+    const rightKids = kidsByMain.get(knowledgeSlotOf(right)) ?? [];
+    const need =
+      reachFromCenter(left, leftKids, 1, sizes) +
+      reachFromCenter(right, rightKids, -1, sizes) +
+      WV_CARD_GAP;
+    const have = cardCenterX(right, sizes) - cardCenterX(left, sizes);
+    if (have + 0.5 < need) return true;
+  }
+  return false;
+}
+
+function worldviewHasOverlap(nodes: LayoutNode[], sizes?: Map<string, LayoutSize>): boolean {
+  const wv = nodes.filter(isWorldviewLayoutNode);
+  for (let i = 0; i < wv.length; i++) {
+    for (let j = i + 1; j < wv.length; j++) {
+      if (fanRectsOverlap(fanBBox(wv[i]!, sizes), fanBBox(wv[j]!, sizes))) return true;
+    }
+  }
+  return false;
+}
+
+/** 仍有重叠时微调位置（保扇形为主，必要时略横向错开） */
+function nudgeWorldviewOverlaps(nodes: LayoutNode[], sizes?: Map<string, LayoutSize>) {
+  const wv = nodes.filter(isWorldviewLayoutNode);
+  for (let pass = 0; pass < 8; pass++) {
+    let moved = false;
+    for (let i = 0; i < wv.length; i++) {
+      for (let j = i + 1; j < wv.length; j++) {
+        const a = wv[i]!;
+        const b = wv[j]!;
+        const ba = fanBBox(a, sizes);
+        const bb = fanBBox(b, sizes);
+        if (!fanRectsOverlap(ba, bb, 0)) continue;
+        const upper = a.position.y <= b.position.y ? a : b;
+        const lower = upper === a ? b : a;
+        const bu = fanBBox(upper, sizes);
+        const bl = fanBBox(lower, sizes);
+        const overlapY = bu.y + bu.h - bl.y;
+        if (overlapY > 0) {
+          upper.position.y -= overlapY + WV_CARD_GAP;
+          moved = true;
+        }
+        const bu2 = fanBBox(upper, sizes);
+        const bl2 = fanBBox(lower, sizes);
+        if (fanRectsOverlap(bu2, bl2, 0)) {
+          const pushX = (bu2.x + bu2.w - bl2.x) / 2 + WV_CARD_GAP / 2;
+          if (pushX > 0 && bu2.x <= bl2.x) {
+            upper.position.x -= pushX;
+            lower.position.x += pushX;
+            moved = true;
+          }
+        }
+      }
+    }
+    if (!moved) break;
+  }
+}
+
+function relayoutWorldview(
+  fanCards: LayoutNode[],
+  root: LayoutNode,
+  fanBySlot: Map<string, LayoutNode>,
+  axiomCards: LayoutNode[],
+  locationCards: LayoutNode[],
+  raceCards: LayoutNode[],
+  factionCards: LayoutNode[],
+  religionCards: LayoutNode[],
+  majorEventCards: LayoutNode[],
+  radii: WvLayoutRadii,
+  sizes?: Map<string, LayoutSize>,
+) {
+  const mainGeo = resolveFanGeometry(
+    fanCards.length,
+    radii.mainR ?? WV_FAN_R,
+    radii.mainSpanDeg ?? WV_FAN_SPAN_DEG,
+  );
+  placeWorldviewFan(fanCards, root, sizes, mainGeo.radius, mainGeo.spanDeg);
+  layoutWorldviewExtensions(
+    fanBySlot,
+    axiomCards,
+    locationCards,
+    raceCards,
+    factionCards,
+    religionCards,
+    majorEventCards,
+    sizes,
+    {
+      ...radii,
+      mainR: mainGeo.radius,
+      mainSpanDeg: mainGeo.spanDeg,
+    },
+  );
+}
+
+/**
+ * 按「相邻主卡中心距 = 左卡右伸 + 右卡左伸 + 间隙」重排主卡 X，
+ * 再把整组平移到根中心对齐。子卡相对偏移不变时，一次即可消交叉。
+ */
+function separateMainsByChildReach(
+  fanBySlot: Map<string, LayoutNode>,
+  kidsByMain: Map<string, LayoutNode[]>,
+  root: LayoutNode,
+  sizes?: Map<string, LayoutSize>,
+): boolean {
+  const mains = WV_FAN_ORDER.map((s) => fanBySlot.get(s)).filter(
+    (n): n is LayoutNode => !!n,
+  );
+  if (mains.length < 2) return false;
+  mains.sort(
+    (a, b) =>
+      cardCenterX(a, sizes) - cardCenterX(b, sizes) || a.id.localeCompare(b.id),
+  );
+
+  const reachR = mains.map((m) =>
+    reachFromCenter(m, kidsByMain.get(knowledgeSlotOf(m)) ?? [], 1, sizes),
+  );
+  const reachL = mains.map((m) =>
+    reachFromCenter(m, kidsByMain.get(knowledgeSlotOf(m)) ?? [], -1, sizes),
+  );
+
+  const targetCx: number[] = [cardCenterX(mains[0]!, sizes)];
+  for (let i = 1; i < mains.length; i++) {
+    targetCx.push(targetCx[i - 1]! + reachR[i - 1]! + reachL[i]! + WV_CARD_GAP);
+  }
+
+  // 平移使整组中心对齐根中心
+  const midBefore =
+    (targetCx[0]! + targetCx[targetCx.length - 1]!) / 2;
+  const rootCx = root.position.x + ROOT_CARD_W / 2;
+  const shift = rootCx - midBefore;
+  for (let i = 0; i < targetCx.length; i++) targetCx[i]! += shift;
+
+  let changed = false;
+  for (let i = 0; i < mains.length; i++) {
+    const m = mains[i]!;
+    const w = cardWidth(m, sizes);
+    const nx = targetCx[i]! - w / 2;
+    if (Math.abs(nx - m.position.x) > 0.5) {
+      m.position.x = nx;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+function placeWorldviewChildrenOnly(
+  fanBySlot: Map<string, LayoutNode>,
+  axiomCards: LayoutNode[],
+  locationCards: LayoutNode[],
+  raceCards: LayoutNode[],
+  factionCards: LayoutNode[],
+  religionCards: LayoutNode[],
+  majorEventCards: LayoutNode[],
+  radii: WvLayoutRadii,
+  sizes?: Map<string, LayoutSize>,
+) {
+  const mainGeo = resolveFanGeometry(
+    fanCardsCount(fanBySlot),
+    radii.mainR ?? WV_FAN_R,
+    radii.mainSpanDeg ?? WV_FAN_SPAN_DEG,
+  );
+  layoutWorldviewExtensions(
+    fanBySlot,
+    axiomCards,
+    locationCards,
+    raceCards,
+    factionCards,
+    religionCards,
+    majorEventCards,
+    sizes,
+    {
+      ...radii,
+      mainR: mainGeo.radius,
+      mainSpanDeg: mainGeo.spanDeg,
+    },
+  );
+}
+
+/** 世界观主卡 + 子卡：先扇形，再按子卡外伸拉开相邻主卡横向间距 */
+function fixWorldviewOverlaps(
+  nodes: LayoutNode[],
+  fanCards: LayoutNode[],
+  root: LayoutNode,
+  fanBySlot: Map<string, LayoutNode>,
+  axiomCards: LayoutNode[],
+  locationCards: LayoutNode[],
+  raceCards: LayoutNode[],
+  factionCards: LayoutNode[],
+  religionCards: LayoutNode[],
+  majorEventCards: LayoutNode[],
+  sizes?: Map<string, LayoutSize>,
+) {
+  const wvNodes = nodes.filter(isWorldviewLayoutNode);
+  if (wvNodes.length < 2 || fanCards.length === 0) return;
+
+  const radii: WvLayoutRadii = {
+    mainR: WV_FAN_R,
+    mainSpanDeg: WV_FAN_SPAN_DEG,
+    axiomR: AXIOM_FAN_R,
+    locationR: LOCATION_FAN_R,
+    socialR: SOCIAL_EXT_FAN_R,
+    historyR: SOCIAL_EXT_FAN_R,
+    extSpanDeg: EXT_FAN_SPAN_DEG,
+  };
+
+  const kidsByMain = childrenByMainSlot(
+    axiomCards,
+    locationCards,
+    raceCards,
+    factionCards,
+    religionCards,
+    majorEventCards,
+  );
+
+  // 初始等角扇形 + 子扇
+  relayoutWorldview(
+    fanCards,
+    root,
+    fanBySlot,
+    axiomCards,
+    locationCards,
+    raceCards,
+    factionCards,
+    religionCards,
+    majorEventCards,
+    radii,
+    sizes,
+  );
+
+  for (let pass = 0; pass < WV_FIX_MAX_PASSES; pass++) {
+    // 核心：主卡横向间距 = 相对方向子卡外伸之和
+    separateMainsByChildReach(fanBySlot, kidsByMain, root, sizes);
+    placeWorldviewChildrenOnly(
+      fanBySlot,
+      axiomCards,
+      locationCards,
+      raceCards,
+      factionCards,
+      religionCards,
+      majorEventCards,
+      radii,
+      sizes,
+    );
+
+    const tight = adjacentMainsTooClose(fanBySlot, kidsByMain, sizes);
+    const hasOverlap = worldviewHasOverlap(nodes, sizes);
+    if (!tight && !hasOverlap) break;
+
+    // 同主卡子卡仍叠 → 拉高子扇半径、略收张角；不同主交叉则再走一轮间距分离即可
+    let bumpAx = false;
+    let bumpLoc = false;
+    let bumpSoc = false;
+    let bumpHist = false;
+    for (let i = 0; i < wvNodes.length; i++) {
+      for (let j = i + 1; j < wvNodes.length; j++) {
+        const a = wvNodes[i]!;
+        const b = wvNodes[j]!;
+        if (!fanRectsOverlap(fanBBox(a, sizes), fanBBox(b, sizes))) continue;
+        const sa = knowledgeSlotOf(a);
+        const sb = knowledgeSlotOf(b);
+        if (sa === "wv_axiom" && sb === "wv_axiom") bumpAx = true;
+        if (sa === "wv_location" && sb === "wv_location") bumpLoc = true;
+        if (
+          (sa === "wv_race" || sa === "wv_faction") &&
+          (sb === "wv_race" || sb === "wv_faction")
+        ) {
+          bumpSoc = true;
+        }
+        if (
+          (sa === "wv_religion" || sa === "wv_major_event") &&
+          (sb === "wv_religion" || sb === "wv_major_event")
+        ) {
+          bumpHist = true;
+        }
+      }
+    }
+    if (bumpAx) radii.axiomR = (radii.axiomR ?? AXIOM_FAN_R) + 24;
+    if (bumpLoc) radii.locationR = (radii.locationR ?? LOCATION_FAN_R) + 24;
+    if (bumpSoc) radii.socialR = (radii.socialR ?? SOCIAL_EXT_FAN_R) + 24;
+    if (bumpHist) radii.historyR = (radii.historyR ?? SOCIAL_EXT_FAN_R) + 24;
+    if (bumpAx || bumpLoc || bumpSoc || bumpHist) {
+      radii.extSpanDeg = Math.max(
+        MIN_EXT_FAN_SPAN_DEG,
+        (radii.extSpanDeg ?? EXT_FAN_SPAN_DEG) - 3,
+      );
+    } else if (!tight) {
+      break;
+    }
+  }
+
+  // 最后再按外伸钉一次间距，避免子扇微调后回弹交叉
+  separateMainsByChildReach(fanBySlot, kidsByMain, root, sizes);
+  placeWorldviewChildrenOnly(
+    fanBySlot,
+    axiomCards,
+    locationCards,
+    raceCards,
+    factionCards,
+    religionCards,
+    majorEventCards,
+    radii,
+    sizes,
+  );
+  separateMainsByChildReach(fanBySlot, kidsByMain, root, sizes);
+  placeWorldviewChildrenOnly(
+    fanBySlot,
+    axiomCards,
+    locationCards,
+    raceCards,
+    factionCards,
+    religionCards,
+    majorEventCards,
+    radii,
+    sizes,
+  );
+
+  nudgeWorldviewOverlaps(nodes, sizes);
+}
+
+function placeStoryRulesCard(card: LayoutNode, root: LayoutNode) {
+  card.position = { x: PLOT_X, y: root.position.y };
+}
+
+function placeStoryRulesFan(
+  rules: LayoutNode,
+  children: LayoutNode[],
+  sizes?: Map<string, LayoutSize>,
+) {
+  if (!children.length) return 0;
+  const order = new Map(
+    ["sr_surface_setting", "sr_story_engine", "sr_fulfillment_system", "sr_constraint_redlines"].map(
+      (s, i) => [s, i],
+    ),
+  );
+  const sorted = children.slice().sort((a, b) => {
+    const sa = order.get(knowledgeSlotOf(a)) ?? 99;
+    const sb = order.get(knowledgeSlotOf(b)) ?? 99;
+    return sa - sb || byY(a, b);
+  });
+  return placeFanRight(sorted, rules, STORY_RULES_FAN_R, STORY_RULES_FAN_SPAN_DEG, sizes) ?? 0;
 }
 
 /** 与已占剧情格是否重叠（按排版间距估） */
@@ -562,22 +1315,139 @@ export function applyAutoLayout(
   for (const n of nodes.filter((n) => n.kind === "character")) {
     pushHosted(n, charHost.get(n.id), charsByHost, orphanChars);
   }
+
+  const fanBySlot = new Map<string, LayoutNode>();
+  let storyRules: LayoutNode | undefined;
+  const storyRulesFan: LayoutNode[] = [];
+  const axiomCards: LayoutNode[] = [];
+  const locationCards: LayoutNode[] = [];
+  const raceCards: LayoutNode[] = [];
+  const factionCards: LayoutNode[] = [];
+  const religionCards: LayoutNode[] = [];
+  const majorEventCards: LayoutNode[] = [];
   for (const n of nodes.filter((n) => n.kind === "knowledge")) {
+    const slot = knowledgeSlotOf(n);
+    if (slot === "story_rules") {
+      storyRules = n;
+      continue;
+    }
+    if (
+      slot === "sr_surface_setting" ||
+      slot === "sr_story_engine" ||
+      slot === "sr_fulfillment_system" ||
+      slot === "sr_constraint_redlines"
+    ) {
+      storyRulesFan.push(n);
+      continue;
+    }
+    if (slot === "wv_axiom") {
+      axiomCards.push(n);
+      continue;
+    }
+    if (slot === "wv_location") {
+      locationCards.push(n);
+      continue;
+    }
+    if (slot === "wv_race") {
+      raceCards.push(n);
+      continue;
+    }
+    if (slot === "wv_faction") {
+      factionCards.push(n);
+      continue;
+    }
+    if (slot === "wv_religion") {
+      religionCards.push(n);
+      continue;
+    }
+    if (slot === "wv_major_event") {
+      majorEventCards.push(n);
+      continue;
+    }
+    if (WV_FAN_ORDER.includes(slot)) {
+      fanBySlot.set(slot, n);
+      continue;
+    }
     pushHosted(n, knowHost.get(n.id), knowsByHost, orphanKnows);
   }
+  const fanCards = WV_FAN_ORDER.map((s) => fanBySlot.get(s)).filter(
+    (n): n is LayoutNode => !!n,
+  );
+
   for (const list of charsByHost.values()) list.sort(byY);
   for (const list of knowsByHost.values()) list.sort(byY);
 
   const occupiedPlots: { x: number; y: number }[] = [];
 
+  // 根上有扇形 / 公理扇形时，主轴下移给上方留空
   let y = TOP;
+  const mainFanGeo =
+    fanCards.length > 0
+      ? resolveFanGeometry(fanCards.length, WV_FAN_R, WV_FAN_SPAN_DEG)
+      : null;
+  const extFanGeo = (count: number, baseR: number) =>
+    count > 0 ? resolveFanGeometry(count, baseR, EXT_FAN_SPAN_DEG) : null;
+  if (mainFanGeo) {
+    y += mainFanGeo.radius + defaultNodeH("knowledge") + SIDE_GAP;
+  }
+  const axGeo = extFanGeo(axiomCards.length, AXIOM_FAN_R);
+  if (axGeo) y += axGeo.radius + defaultNodeH("knowledge") + SIDE_GAP;
+  const locGeo = extFanGeo(locationCards.length, LOCATION_FAN_R);
+  if (locGeo) y += locGeo.radius + defaultNodeH("knowledge") + SIDE_GAP;
+  const raceGeo = extFanGeo(raceCards.length, SOCIAL_EXT_FAN_R);
+  const facGeo = extFanGeo(factionCards.length, SOCIAL_EXT_FAN_R);
+  const relGeo = extFanGeo(religionCards.length, SOCIAL_EXT_FAN_R);
+  const evGeo = extFanGeo(majorEventCards.length, SOCIAL_EXT_FAN_R);
+  if (raceGeo || facGeo) {
+    y +=
+      Math.max(raceGeo?.radius ?? 0, facGeo?.radius ?? 0) +
+      defaultNodeH("knowledge") +
+      SIDE_GAP;
+  }
+  if (relGeo || evGeo) {
+    y +=
+      Math.max(relGeo?.radius ?? 0, evGeo?.radius ?? 0) +
+      defaultNodeH("knowledge") +
+      SIDE_GAP;
+  }
   for (const host of spine) {
     host.position = { x: MAIN_X, y };
     const plots = sortPlotsForHost(host, plotsByHost.get(host.id) ?? []);
     plotsByHost.set(host.id, plots);
     const chars = charsByHost.get(host.id) ?? [];
     const knows = knowsByHost.get(host.id) ?? [];
-    placeGrid(plots, PLOT_X, y, PLOT_DX, PLOT_DY, MAX_PLOT_COL, 1);
+
+    if (host.kind === "novel") {
+      fixWorldviewOverlaps(
+        nodes,
+        fanCards,
+        host,
+        fanBySlot,
+        axiomCards,
+        locationCards,
+        raceCards,
+        factionCards,
+        religionCards,
+        majorEventCards,
+        sizes,
+      );
+      if (storyRules) {
+        placeStoryRulesCard(storyRules, host);
+        occupiedPlots.push({ ...storyRules.position });
+        if (storyRulesFan.length) {
+          placeStoryRulesFan(storyRules, storyRulesFan, sizes);
+          for (const c of storyRulesFan) occupiedPlots.push({ ...c.position });
+        }
+      }
+    }
+
+    const srFanReach =
+      storyRules && storyRulesFan.length
+        ? STORY_RULES_FAN_R + SIDE_CARD_W + PLOT_DX * 0.5
+        : 0;
+    const plotOriginX =
+      host.kind === "novel" && storyRules ? PLOT_X + PLOT_DX + srFanReach : PLOT_X;
+    placeGrid(plots, plotOriginX, y, PLOT_DX, PLOT_DY, MAX_PLOT_COL, 1);
     for (const p of plots) occupiedPlots.push({ ...p.position });
     const charSpan = placeSideByHeight(
       chars,
@@ -589,10 +1459,13 @@ export function applyAutoLayout(
       sizes,
     );
     const knowSpan = placeKnowLeftOfChars(knows, chars, y, sizes);
+    const storySpan =
+      host.kind === "novel" && storyRules ? PLOT_DY : 0;
     const span = Math.max(
       gridSpan(plots.length, PLOT_DY, MAX_PLOT_COL),
       charSpan,
       knowSpan,
+      storySpan,
     );
     const linked = hostHasLinkedCards(host, plotHosts, plotsByHost, charsByHost, knowsByHost);
     const step = linked
@@ -683,6 +1556,61 @@ export function chapterParentVolumeId(
   return null;
 }
 
+/** 挂在该分卷 spine 下的章节 id（含经中间章节相连） */
+export function volumeChapterIds(
+  volumeId: string,
+  nodes: LayoutNode[],
+  edges: LayoutEdge[],
+): string[] {
+  return nodes
+    .filter((n) => n.kind === "chapter" && chapterParentVolumeId(n.id, nodes, edges) === volumeId)
+    .map((n) => n.id);
+}
+
+/** 多个分卷时最多展开一个：返回应折叠的卷 id。expandId 指定展开哪张；null 表示全折。 */
+export function accordionCollapsedVolumeIds(
+  volumeIds: string[],
+  collapsedStored: Iterable<string>,
+  expandId?: string | null,
+): string[] {
+  if (volumeIds.length === 0) return [];
+  if (expandId === null) return [...volumeIds];
+  const stored = new Set(collapsedStored);
+  const keep =
+    typeof expandId === "string" && volumeIds.includes(expandId)
+      ? expandId
+      : (volumeIds.find((id) => !stored.has(id)) ?? null);
+  if (!keep) return [...volumeIds];
+  return volumeIds.filter((id) => id !== keep);
+}
+
+/** 折叠分卷时隐藏：卷下章节，以及只挂在这些章上的人物/剧情/知识卡 */
+export function collapsedVolumeHiddenIds(
+  collapsedVolumeIds: Iterable<string>,
+  nodes: LayoutNode[],
+  edges: LayoutEdge[],
+): Set<string> {
+  const hidden = new Set<string>();
+  for (const vid of collapsedVolumeIds) {
+    for (const cid of volumeChapterIds(vid, nodes, edges)) hidden.add(cid);
+  }
+  if (hidden.size === 0) return hidden;
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  for (const n of nodes) {
+    if (n.kind === "novel" || n.kind === "volume" || n.kind === "chapter") continue;
+    const hosts: string[] = [];
+    for (const e of edges) {
+      const other = e.target === n.id ? e.source : e.source === n.id ? e.target : null;
+      if (!other) continue;
+      const o = byId.get(other);
+      if (!o) continue;
+      if (o.kind === "novel" || o.kind === "volume" || o.kind === "chapter") hosts.push(o.id);
+    }
+    if (hosts.length && hosts.every((id) => hidden.has(id))) hidden.add(n.id);
+  }
+  return hidden;
+}
+
 function hostLinked(
   hostId: string,
   nodes: LayoutNode[],
@@ -717,7 +1645,7 @@ export function chapterInheritedKnowledgeIds(
   const ids = [...rootLinkedKnowledgeIds(nodes, edges)];
   const vid = chapterParentVolumeId(chapterId, nodes, edges);
   if (vid) {
-    for (const kid of hostLinked(vid, nodes, edges, "linked_knowledge_ids", "knowledge")) {
+    for (const kid of volumeLocalKnowledgeIds(vid, nodes, edges)) {
       if (!ids.includes(kid)) ids.push(kid);
     }
   }
@@ -743,21 +1671,14 @@ export function chapterLocalPlotIds(
   return ids;
 }
 
-/** 章节有效知识：本章 + 根/分卷继承 */
+/** 章节有效知识：根排序 ∪ 卷排序 ∪ 本章排序（去重） */
 export function chapterEffectiveKnowledgeIds(
   chapterId: string,
   nodes: LayoutNode[],
   edges: LayoutEdge[],
 ): string[] {
-  const ch = nodes.find((n) => n.id === chapterId);
-  const ids = unionLinkedIds(
-    nodes,
-    edges,
-    chapterId,
-    ch?.linked_knowledge_ids ?? [],
-    "knowledge",
-  );
-  for (const kid of chapterInheritedKnowledgeIds(chapterId, nodes, edges)) {
+  const ids = [...chapterInheritedKnowledgeIds(chapterId, nodes, edges)];
+  for (const kid of chapterLocalKnowledgeIds(chapterId, nodes, edges)) {
     if (!ids.includes(kid)) ids.push(kid);
   }
   return ids;
@@ -775,16 +1696,45 @@ export function volumeLocalPlotIds(
   );
 }
 
+/** 分卷本机知识（不含根） */
+export function volumeLocalKnowledgeIds(
+  volumeId: string,
+  nodes: LayoutNode[],
+  edges: LayoutEdge[],
+): string[] {
+  const rootSet = new Set(rootLinkedKnowledgeIds(nodes, edges));
+  return hostLinked(volumeId, nodes, edges, "linked_knowledge_ids", "knowledge").filter(
+    (id) => !rootSet.has(id),
+  );
+}
+
 export function volumeEffectiveKnowledgeIds(
   volumeId: string,
   nodes: LayoutNode[],
   edges: LayoutEdge[],
 ): string[] {
-  const ids = hostLinked(volumeId, nodes, edges, "linked_knowledge_ids", "knowledge");
-  for (const kid of rootLinkedKnowledgeIds(nodes, edges)) {
+  const ids = [...rootLinkedKnowledgeIds(nodes, edges)];
+  for (const kid of volumeLocalKnowledgeIds(volumeId, nodes, edges)) {
     if (!ids.includes(kid)) ids.push(kid);
   }
   return ids;
+}
+
+/** 章节本机知识（不含根/分卷继承） */
+export function chapterLocalKnowledgeIds(
+  chapterId: string,
+  nodes: LayoutNode[],
+  edges: LayoutEdge[],
+): string[] {
+  const inherited = new Set(chapterInheritedKnowledgeIds(chapterId, nodes, edges));
+  const ch = nodes.find((n) => n.id === chapterId);
+  return unionLinkedIds(
+    nodes,
+    edges,
+    chapterId,
+    ch?.linked_knowledge_ids ?? [],
+    "knowledge",
+  ).filter((id) => !inherited.has(id));
 }
 
 export const __layoutConsts = {
@@ -805,4 +1755,7 @@ export const __layoutConsts = {
   MIN_CHAPTER_GAP,
   MIN_CHAPTER_GAP_TIGHT,
   CH_PAD,
+  WV_FAN_R,
+  WV_FAN_SPAN_DEG,
+  AXIOM_FAN_R,
 };

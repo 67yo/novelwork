@@ -1,0 +1,65 @@
+---
+description: Keep MCP tools, API.md, and novel skill in sync when payloads or writing injection change
+alwaysApply: true
+---
+
+# MCP sync (Novel Work)
+
+MCP 是外部 Agent 读写小说数据的**对外契约**。`models.rs` / 前端载荷 / 写作注入格式一旦变化，必须在**同一 PR** 同步 MCP，避免 Chat/ADK 仍按旧字段读写。
+
+权威接口文档：`API.md`。实现：`src-tauri/src/mcp.rs`。Agent 指引：`src-tauri/skills/novel/SKILL.md`。
+
+## 何时必须同步 MCP
+
+- `src-tauri/src/models.rs` 中任意**树上载荷**增删改字段（`CharacterCard`、`KnowledgeCardPayload` 及嵌套、`NovelFeatures`、`SidePlotMeta` 等）
+- 对应前端 `src/lib/*.ts` 结构化类型（如 `characterCard.ts`、`coreLaws.ts`…）与 `normalize` / `format*Extracted` 变更
+- `*_fmt.rs` 写作注入正文拼装变更（`character_fmt`、`core_laws_fmt`、`spatiotemporal_fmt`…）
+- `commands.rs` 章节上下文里人物/知识/剧情注入形状变更
+- 新增/删除/改名 MCP 工具，或工具参数/返回 JSON 形状变更
+- `worldview_ops.rs` / `generate_worldview_chat` 返回的 worldview JSON 形状变更
+
+仅改 UI 文案 → `i18n-sync.mdc`。仅改章节 AI 策略 → `project-md-sync.mdc`。两者兼有时**都要**更新。
+
+## 同一 PR 检查清单
+
+### 1. `src-tauri/src/mcp.rs`
+
+| 区域 | 做什么 |
+|------|--------|
+| `tools/list` 里 `tool(...)` | 更新 `description`、`properties`、样例字段名 |
+| `json_linked_*` / `character_json_entry` / `patch_*_from_args` | 读写与 `models` 一致；人物/知识卡返回 `formatted`（与写作注入同形） |
+| `get_*` / `upsert_*` 处理器 | 返回结构与文档一致 |
+| `ai_guidance` 文案 | 说明 Agent 须遵守的字段（如人物 `formatted`、知识 `extracted`） |
+
+### 2. 文档与 Skill
+
+- `API.md`：工具章节 + §8 维护表；请求/返回 JSON 样例
+- `src-tauri/skills/novel/SKILL.md`：「何时用哪个工具」一行说明
+- `Project.md` §6 / §7：若用户可见能力或总检查清单受影响
+
+### 3. 测试（最小）
+
+- `src-tauri/src/skills.rs`：`bundled_dir_ships_novel_skill` 工具名列表含新增工具
+- 载荷逻辑：在对应 `*.selfcheck.ts` 或 `mcp.rs` / `*_fmt.rs` 测例中覆盖新字段或 `formatted`
+
+### 4. 前端 `invoke`（非 MCP，但常同改）
+
+- `src/lib/api.ts` 类型与 `invoke` 命令
+- 若 MCP 与 UI 共用载荷，避免只改一端
+
+## 按载荷速查
+
+| 载荷 | MCP 读写入口 | 注入/格式化 |
+|------|----------------|-------------|
+| 人物卡 `CharacterCard` | `get_character_card`、`upsert_character_card`；`linked_characters` | `character_fmt`；`patch_character_card_from_args` |
+| 知识卡 `KnowledgeCardPayload` + slot 子结构 | `upsert_knowledge_card`、`linked_knowledge` | `core_laws_fmt` 等 `knowledge_card_inject_body` |
+| 世界观快照 | `get_worldview` / `apply_worldview` / `generate_worldview` | `worldview_ops` |
+| 小说 `NovelFeatures` | `create_novel` / `update_novel` / `get_novel_info` | `novel_features` |
+| 剧情卡 | `upsert_plot_card`、`linked_plots` | `outline` 字段 |
+| 章节记忆 | `get/set/regenerate_chapter_memory` | — |
+
+## 禁止
+
+- 只改 `models.rs` 或 Vue 表单，不更新 MCP `tools/list` schema 与 `json_linked_*`
+- 在 MCP 返回里继续只暴露旧扁平字段，而写作已用结构化 + `formatted`
+- 在 `API.md` 留过期样例（如人物卡仅 `role/constraints`）

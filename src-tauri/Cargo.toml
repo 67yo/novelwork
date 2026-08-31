@@ -28,7 +28,7 @@ anyhow = "1"
 parking_lot = "0.12"
 dirs = "6"
 rig-core = "0.41"
-adk-rust = { version = "2.0.0", default-features = false, features = [
+adk-rust = { version = "2.1.0", default-features = false, features = [
   "agents",
   "openai",
   "runner",
@@ -52,3 +52,6 @@ whoami = "2.1.2"
 epub = "2.1.5"
 once_cell = "1"
 fastembed = "5"
+# crates.io 版写死 CUDA EP，与当前 ort 不兼容；本地副本走 CPU。
+kokoro-tts = { path = "vendor/kokoro-tts" }
+voxudio = { version = "0.6.3", features = ["device"] }

@@ -189,6 +189,13 @@ Accept: application/json, text/event-stream
   "word_count_min": 2000,
   "word_count_max": 3000,
   "chapter_count": 20,
+  "features": {
+    "genres": ["urban"],
+    "core_play": ["system"],
+    "styles": ["cool"],
+    "relationships": ["single_heroine"],
+    "audiences": ["male"]
+  },
   "created_at": "2026-08-11T12:00:00+00:00",
   "updated_at": "2026-08-11T12:00:00+00:00"
 }
@@ -206,6 +213,7 @@ Accept: application/json, text/event-stream
 | `archived` | boolean | 是否归档 |
 | `word_count_min` / `word_count_max` | number | 每章目标字数区间 |
 | `chapter_count` | number | 全书计划章数（1–500） |
+| `features` | object | 功能选项：题材 / 核心玩法 / 风格 / 关系 / 受众（均为 string[]；预设 id + 可选自定义文本） |
 | `created_at` / `updated_at` | string | RFC3339 |
 
 ### 3.3 NovelTree / TreeNode / TreeEdge
@@ -246,31 +254,38 @@ Accept: application/json, text/event-stream
 }
 ```
 
-**`kind`（节点）**：`novel` \| `chapter` \| `character` \| `side_plot` \| `knowledge`
+**`kind`（节点）**：`novel` \| `volume` \| `chapter` \| `character` \| `side_plot` \| `knowledge`
 
-**`kind`（边）**：`chapter` \| `character` \| `side_plot` \| `knowledge` 等
+**`kind`（边）**：`chapter` \| `volume` \| `character` \| `side_plot` \| `knowledge` 等
 
 | TreeNode 字段 | 说明 |
 |---------------|------|
 | `label` | 显示名 / 章标题 |
-| `outline` | 大纲或简介文本 |
+| `outline` | 简纲（章节）/ 大纲或简介文本 |
+| `detailed_outline` | 细纲分条（`string[]`，章节；缺省 `[]`） |
+| `volume` | 分卷载荷 `VolumePayload`（仅 `volume`；**不写** `outline`） |
 | `character` | 人物卡载荷（仅 `character`） |
 | `knowledge` | 树上知识卡载荷（仅 `knowledge`） |
 | `side_plot` | 剧情卡元数据（仅 `side_plot`） |
-| `linked_*_ids` | 挂在本章/根上的卡 id |
+| `linked_*_ids` | 挂在本章/根/分卷上的卡 id |
 | `word_count` | 本章已写正文非空白字数 |
 | `word_count_min/max`、`chapter_count` | 根节点计划字段 |
 
-**CharacterCard**
+**CharacterCard**（`get_character_card` / `linked_characters[].character` 完整序列化）
 
 | 字段 | 说明 |
 |------|------|
-| `role` | 身份 |
-| `gender` | 性别 |
-| `alignment` | 阵营 |
-| `personality` | 性格 |
-| `style` | 行事风格 |
-| `motto` | 座右铭 |
+| `role` / `gender` / `age` / `alignment` / `style` / `motto` | 基础信息（扁平；可与结构化并存）。MCP **不读写** `personality`（遗留画布摘要，由深层字段生成） |
+| `aliases` | 别称 |
+| `constraints` | 写该人物时的硬约束长文本（常与 `formatted` 同步） |
+| `world_position` | 出身阶层 / 势力 / 社会角色 / 冲突立场 |
+| `world_anchors` | 世界锚点：`embodies_law`/`embodies_note`、`shaped_by_law`/`shaped_by_note`、`will_challenge` |
+| `relations[]` | 关系网：`name`/`relation`/`definition`/`default_attitude`/`hidden_tension` |
+| `core_belief` | 核心信念：`belief`/`author_verdict`/`source` |
+| `deep` | 深层弧光（创伤、矛盾、成长等） |
+| `voice` | 角色声线：`positioning`/`cognitive_filter`/`body_language`（肢体语言）、`sentence_length`/`pause`/`patterns`、`catchphrases[]`（口头禅）、`emotion_anger`/`emotion_tense`/`emotion_mask`/`emotion_sad`/`emotion_happy`（情绪变化）、`banned` |
+
+MCP 条目另含：`formatted`（写作注入 Markdown，与 `character_fmt` 同形）、`character_relations`（画布人物↔人物边）、列表/关联时的 `order`。
 
 **SidePlotMeta**
 
@@ -285,8 +300,24 @@ Accept: application/json, text/event-stream
 |------|------|
 | `book_ids` | 关联公共库 id |
 | `extract_prompt` | 检索/提取需求 |
-| `extracted` | 可编辑特征文本 |
+| `extracted` | 可编辑特征文本（槽位卡写作注入常由 fmt 动态拼装） |
 | `from_canon` | 遗留标记（旧「同步设定卡」）；写作不再按此注入公共库 |
+| `slot` | 根固定槽位 id（空=普通知识卡）。世界观：`wv_core_laws` / `wv_spatiotemporal` / `wv_social_power` / `wv_history_culture` / `wv_existence` / `wv_info_flow`；子卡：`wv_axiom` / `wv_location` / `wv_race` / `wv_faction` / `wv_religion` / `wv_major_event`；故事规则父：`story_rules`；子：`sr_surface_setting` / `sr_story_engine` / `sr_fulfillment_system` / `sr_constraint_redlines` |
+| `core_laws` | 仅 `wv_core_laws`：`premise`、`taboos[]`、`power_system`、`power_expression` |
+| `world_axiom` | 仅 `wv_axiom`：{name,statement,boundary,cost,mechanism} |
+| `spatiotemporal` | 仅 `wv_spatiotemporal`：`premise`、`era`、`ecology`、`world_pattern`、`atmosphere` |
+| `key_location` | 仅 `wv_location`：{name,features,terrain,faction} |
+| `social_power` | 仅 `wv_social_power`：`premise`、`class_structure`、`political_system`、`power_visibility` |
+| `world_race` | 仅 `wv_race`：{name,features,population,social_status} |
+| `major_faction` | 仅 `wv_faction`：{name,faction_type,goal,means,power_base} |
+| `existence` | 仅 `wv_existence`：`premise`、`death`、`calendar`、`lifespan`、`disease_reproduction` |
+| `info_flow` | 仅 `wv_info_flow`：`premise`、`info_speed`、`info_barrier`、`rumor_truth`（旧键 `message_truth` 仍可读）、`knowledge_carrier` |
+| `history_culture` | 仅 `wv_history_culture`：`premise`、`customs`、`economy`、`daily_slices` 等 |
+| `world_religion` | 仅 `wv_religion` |
+| `major_event` | 仅 `wv_major_event` |
+| `surface_setting` / `story_engine` / `fulfillment_system` / `constraint_redlines` | 故事规则四卡结构化载荷。兑现系统含 `tension_archetypes[]`（旧键 `tension_circles` 仍可读） |
+
+写作/大纲注入：挂在根或章上的世界观/故事规则槽不以可能过期的 `extracted` 截断为准，而由对应 `*_fmt` 拼完整正文（含子卡列表，若有）。MCP `linked_knowledge[].extracted` / `.formatted` 同此规则；有结构化载荷时一并摊到同级字段（如 `core_laws`、`world_axiom`、`surface_setting` 等）。
 
 ---
 
@@ -452,8 +483,17 @@ Accept: application/json, text/event-stream
 | `chapter_count` | integer | 否 | `20` |
 | `word_count_min` | integer | 否 | `2000` |
 | `word_count_max` | integer | 否 | `3000` |
+| `features` | object | 否 | 空对象（各数组 `[]`） |
 
 **返回**：新建的 `NovelProject`（同时写入初始树，通常仅根节点）
+
+---
+
+### 5.2a `update_novel_features`
+
+**请求**：`novel_id` + `features`（同 `NovelProject.features`）
+
+**返回**：更新后的 `NovelProject`
 
 ---
 
@@ -475,9 +515,57 @@ Accept: application/json, text/event-stream
 | 字段 | 必填 | 说明 |
 |------|------|------|
 | `novel_id` | 否 | 工作台已选中时可省略 |
-| `title` / `synopsis` / `chapter_count` / `word_count_*` | 否 | 只传要改的字段 |
+| `title` / `synopsis` / `chapter_count` / `word_count_*` / `features` | 否 | 只传要改的字段；`features` 为整对象替换 |
 
 **返回**：更新后的 `NovelProject`（根节点 label/outline/字数计划会同步）
+
+---
+
+### 5.3a `get_worldview` / `ensure_worldview` / `apply_worldview` / `generate_worldview`
+
+| 工具 | 作用 |
+|------|------|
+| `get_worldview` | 返回 `features` + `features_text` + 六卡/故事规则 `snapshot`（含 `story_rules_blocks`） |
+| `ensure_worldview` | 补齐根上六张世界观卡 + 故事规则主卡与右侧四子卡空壳（不覆盖已有内容） |
+| `apply_worldview` | 写入 `worldview` JSON（与 Chat 同结构）；支持 `story_rules_blocks` 四卡；落盘后排版 |
+| `generate_worldview` | LLM 生成；**必须服从** `novel.features`；可选 `slot` 只补一张六卡的全部字段；默认 `apply=true` 落盘 |
+| `get_story_rules` | 读取故事规则四卡 `blocks` + 各卡 `node_id`/`formatted` + 父卡；缺卡先 `ensure_worldview` |
+| `apply_story_rules` | 写入四卡 `blocks` JSON（与 Chat / `generate_story_rules` 同形）；返回同 `get_story_rules` |
+| `generate_story_rules` | LLM 生成故事规则四卡；默认 `apply=true` 落盘 |
+
+`generate_worldview` 请求示例：
+
+```json
+{
+  "novel_id": "n-uuid",
+  "instruction": "按现有功能选项随机全新设定",
+  "apply": true
+}
+```
+
+只补一张卡（六卡之一，全部字段含子项）时加 `slot`（`wv_core_laws` 或 JSON 键 `core_laws` 等均可）：
+
+```json
+{
+  "novel_id": "n-uuid",
+  "slot": "wv_existence",
+  "instruction": "补全存在基础全部字段",
+  "apply": true
+}
+```
+
+返回的 `worldview` 只含该键，`apply` 时不会覆盖其它卡。
+
+**返回摘要（与实现一致）**
+
+| 工具 | 返回 |
+|------|------|
+| `get_worldview` | `{ features, features_text, snapshot, story_rules_blocks }`（`snapshot` 含各 `wv_*` 与 `story_rules`；顶层另有一份 `story_rules_blocks`） |
+| `ensure_worldview` | `{ ok, created }` |
+| `apply_worldview` | `{ ok: true }` |
+| `generate_worldview` | `{ assistant, applied, worldview }` |
+| `get_story_rules` / `apply_story_rules` | `{ blocks, formatted, parent, cards[], ai_guidance }` |
+| `generate_story_rules` | `{ assistant, applied, blocks }`（非完整 `get_story_rules`） |
 
 ---
 
@@ -503,20 +591,23 @@ Accept: application/json, text/event-stream
 ```json
 {
   "ai_guidance": {
+    "features": "novel.features 为根节点功能选项……生成世界观必须遵守。",
     "plots": "linked_plots 为根节点关联的跨章剧情卡……分卷可选，见 volumes。",
-    "characters": "linked_characters 为根上贯穿人物……",
+    "characters": "linked_characters 含完整结构化 character（world_position / world_anchors / relations / core_belief / deep / voice.body_language 等）与 formatted 全文……无 personality",
     "knowledge": "linked_knowledge 为根上知识卡……公共知识库不是小说设定源。"
   },
   "novel": {
     "id": "n-uuid",
     "title": "夜航船",
     "synopsis": "港口与记忆。",
+    "features": { "genres": ["urban"] },
     "word_count_min": 2000,
     "word_count_max": 3000,
     "chapter_count": 20
   },
+  "features_text": "题材：都市",
   "node": {
-    "id": "root",
+    "id": "root-uuid",
     "kind": "novel",
     "label": "夜航船",
     "outline": "港口与记忆。",
@@ -528,7 +619,12 @@ Accept: application/json, text/event-stream
   "linked_side_plot_ids": ["plot-a"],
   "linked_knowledge_ids": ["kn-1"],
   "volumes": [
-    { "id": "vol-1", "label": "第一卷", "outline": "启程…" }
+    {
+      "id": "vol-1",
+      "label": "第一卷",
+      "volume": { "positioning": "启程…", "layer_setup": { "chapters": "1-10 章", "description": "…" } },
+      "formatted": "## 本卷定位\n启程…\n…"
+    }
   ],
   "linked_plots": [
     {
@@ -545,7 +641,29 @@ Accept: application/json, text/event-stream
       "order": 0,
       "id": "char-1",
       "label": "林晚",
-      "character": { "role": "女主", "personality": "…", "motto": "", "gender": "女", "style": "", "alignment": "" }
+      "true_name": "林晚",
+      "character": {
+        "gender": "女",
+        "age": "24",
+        "aliases": "",
+        "world_anchors": { "embodies_law": "…", "shaped_by_law": "…", "will_challenge": "…" },
+        "voice": {
+          "catchphrases": ["这账不对"],
+          "body_language": "说话时转笔",
+          "emotion_anger": "…",
+          "emotion_tense": "…",
+          "emotion_mask": "…",
+          "emotion_sad": "…",
+          "emotion_happy": "…"
+        },
+        "core_belief": { "belief": "…", "author_verdict": "disprove", "source": "…" },
+        "deep": {},
+        "world_position": {},
+        "relations": [],
+        "constraints": "…"
+      },
+      "formatted": "## 真名\n林晚\n## 世界锚点\n…\n## 角色声线\n…",
+      "character_relations": [{ "peer_id": "char-2", "peer_label": "张三", "relation": "旧识" }]
     }
   ],
   "linked_knowledge": [
@@ -554,8 +672,10 @@ Accept: application/json, text/event-stream
       "id": "kn-1",
       "label": "冷硬文风",
       "outline": "",
+      "slot": "",
       "extract_prompt": "短句、少形容词",
       "extracted": "叙述用短句……",
+      "formatted": "叙述用短句……",
       "book_ids": ["kb-uuid"]
     }
   ]
@@ -564,10 +684,11 @@ Accept: application/json, text/event-stream
 
 | 字段 | 说明 |
 |------|------|
-| `novel` | 小说快照（简介、字数/章数计划；不含 `knowledge_ids` / `canon_mode`） |
+| `novel` | 小说快照（简介、字数/章数计划、`features`；不含公共库绑定） |
+| `features_text` | `novel.features` 可读摘要 |
 | `node` | 根节点完整 `TreeNode` |
-| `volumes` | 分卷摘要列表（按画布 y；无分卷时为空数组） |
-| `linked_plots` / `linked_characters` / `linked_knowledge` | 根上关联卡，结构同 `get_chapter_info` |
+| `volumes` | 分卷摘要：`id`/`label`/`volume`（`VolumePayload`）/`formatted`（无分卷时为 `[]`；**不含** `outline`） |
+| `linked_plots` / `linked_characters` / `linked_knowledge` | 根上关联卡；人物/知识条目形状同 §6.1 / `json_linked_knowledge` |
 
 ---
 
@@ -610,6 +731,8 @@ Accept: application/json, text/event-stream
 |------|------|
 | `node` | 完整 `TreeNode`（人物/知识卡字段在 `character` / `knowledge`） |
 | `content` | 仅 `chapter` / `side_plot` 且 `include_content` 时为正文；否则 `""` |
+
+人物写章注入请另调 `get_character_card`（含 `formatted` / `character_relations`）；本工具不额外包装。
 
 ---
 
@@ -676,33 +799,50 @@ Accept: application/json, text/event-stream
 
 ---
 
-### 5.5b `add_volume`
+### 5.5b `add_volume` / `get_volume` / `upsert_volume`
 
 在根下追加**分卷**节点（可选）。边为根 **bottom → 分卷 top**，`kind: "volume"`。分卷可挂人物/剧情/知识卡；其下章节写作继承「根 ∪ 本卷」。
 
-**请求**
+结构化字段（`VolumePayload`，深度合并，不打断关联）：
+
+| 字段 | 说明 |
+|------|------|
+| `positioning` | 本卷定位（一句话） |
+| `layer_setup` / `layer_confrontation` / `layer_resolution` | 三层结构：各含 `chapters`（如 `1-15 章`）+ `description` |
+| `conflict_external` / `conflict_internal` / `conflict_deep` | 冲突层级 |
+| `key_beats[]` | 关键节点：`order` / `cost` / `description` |
+
+分卷内容**仅存**节点 `volume` 字段；**不写** `outline`。写作注入与 MCP 返回的 `formatted` 由 `volume_fmt` 动态拼装。画布摘要显示 `positioning`。
+
+**`add_volume` 请求**
 
 ```json
 {
   "novel_id": "n-uuid",
   "title": "第一卷 · 启程",
-  "outline": "本卷主线…"
+  "volume": {
+    "positioning": "主角被迫离城",
+    "layer_setup": { "chapters": "1-15 章", "description": "…" },
+    "layer_confrontation": { "chapters": "16-30 章", "description": "…" },
+    "layer_resolution": { "chapters": "31-40 章", "description": "…" },
+    "conflict_external": "…",
+    "conflict_internal": "…",
+    "conflict_deep": "…",
+    "key_beats": [{ "order": 1, "cost": "暴露身份", "description": "救人" }]
+  }
 }
 ```
 
-| 字段 | 必填 | 说明 |
-|------|------|------|
-| `novel_id` | 否 | 工作台已选中时可省略 |
-| `title` | 否 | 默认 `第 {n} 卷` |
-| `outline` | 否 | 分卷纲要 |
+**`get_volume`**：`node_id` 省略则返回 `{ "count", "volumes": [ entry… ] }`；指定 `node_id` 返回 `{ "volume": entry, "ai_guidance" }`。  
+单条 `entry` 含：`id`、`label`、`volume`（全部结构化字段）、`formatted`（写作注入）、`linked_*` 摘要（人物/剧情/知识含完整 entry）。
 
-**返回**：新建的分卷 `TreeNode`（`kind: "volume"`）
+**`upsert_volume`**：必填 `node_id`；可改 `title` 或任意 `volume` / 顶层字段（深度合并）。勿写 `outline`。不改动剧情/知识/人物关联。返回更新后的 `entry`（同 `volume_json_entry`）。
 
 ---
 
 ### 5.6 `update_chapter_outline`
 
-更新章节或剧情卡的标题/大纲。
+更新章节或剧情卡的标题 / **简纲**（`outline`）；章节还可写 **细纲**（`detailed_outline: string[]`）。
 
 **请求**
 
@@ -711,11 +851,54 @@ Accept: application/json, text/event-stream
   "novel_id": "n-uuid",
   "node_id": "ch-uuid",
   "title": "第一章 离港（改）",
-  "outline": "更新后的大纲要点…"
+  "outline": "简纲要点…",
+  "detailed_outline": ["开场：……", "冲突：……", "收束：……"]
 }
 ```
 
-**返回**：更新后的 `TreeNode`
+**返回**：更新后的 `TreeNode`（含 `detailed_outline`）
+
+---
+
+### 5.6b `generate_detailed_outline`
+
+由本章 **简纲**（`outline`）进化 **细纲**（`detailed_outline`）并写回树。正文生成前若细纲为空会自动调用等价逻辑；本工具可强制重写。
+
+**请求**
+
+```json
+{ "novel_id": "n-uuid", "node_id": "ch-uuid", "user_notes": "可选补充", "model": null }
+```
+
+**返回**
+
+```json
+{ "node_id": "ch-uuid", "detailed_outline": ["…"], "ai_guidance": "…" }
+```
+
+---
+
+### 5.6c `regenerate_detailed_outline_item`
+
+AI 重写本章细纲中的**一条**（0-based `index`），保留其余条目并写回树。工作台左栏每条旁的「AI 重写」同源。
+
+**请求**
+
+```json
+{ "novel_id": "n-uuid", "node_id": "ch-uuid", "index": 0, "user_notes": "可选补充", "model": null }
+```
+
+**返回**
+
+```json
+{
+  "node_id": "ch-uuid",
+  "index": 0,
+  "item": "重写后的节拍…",
+  "detailed_outline": ["…", "…"],
+  "ai_guidance": "…"
+}
+```
 
 ---
 
@@ -756,22 +939,23 @@ Accept: application/json, text/event-stream
 生成新章：仅依据本接口 → 写全新正文 → `set_chapter_content`。精修/改稿：本接口 + `get_chapter_content` → 改稿 → `set_chapter_content`。
 
 剧情：**所有章节继承根节点关联的剧情卡与知识卡；若章节挂在分卷下，另继承该分卷关联卡**。  
-- `volume`：父分卷 `{ id, label, outline }`（无则为 `null`）。  
+- `volume`：父分卷 `{ id, label, volume, formatted }`（无则为 `null`；**不含**过时 `outline`）。  
 - `linked_plots`：`inherited_from` = `root` | `volume` | `chapter`（兼容字段 `inherited_from_root`）；根/卷继承只读，**仅本章可排序**。  
 - `linked_side_plot_ids`：仅本章剧情 id（不含根/卷继承）。  
 - `linked_root_plot_ids` / `linked_volume_plot_ids`：根 / 分卷继承剧情 id。  
-- `linked_knowledge_ids` / `linked_knowledge`：本章 ∪ 分卷 ∪ 根并集。
+- `linked_knowledge_ids` / `linked_knowledge`：本章 ∪ 分卷 ∪ 根并集（条目含 `formatted`/`slot`/结构化载荷）。  
+- `linked_characters`：与 §6.1 单人 entry 同形（含 `formatted`、`character_relations`、完整 `character`）。
 
 返回中的 **`ai_guidance`** 供写章 AI 直接遵守：
 
 1. **剧情**（`plots`）：根 / 分卷 / 本章分别按各自 order；不得混序或改写要点。  
-2. **人物**（`characters`）：`linked_characters` 为本节**必须出场**的人物。  
-3. **知识卡**（`knowledge`）：`linked_knowledge` 为本章**写作硬约束**（手法/文风/用词等）；优先 `extracted`。  
+2. **人物**（`characters`）：`linked_characters` 为本节**必须出场**的人物；须符合结构化字段与 `formatted`；关系见 `character_relations`。  
+3. **知识卡**（`knowledge`）：`linked_knowledge` 为本章**写作硬约束**；**顺序**为根 → 分卷 → 本章（各层按其 `linked_knowledge_ids`；根上六世界观 + 故事规则固定最前）；优先 `extracted`/`formatted`（槽位卡由 fmt 拼装）。  
 4. **叙事连贯**（`narrative_coherence`）：时间因果、人物一致、细节统一、段落衔接、逻辑自洽、节奏情绪、信息有效；禁止不合理、不连贯、前后冲突的叙述。  
 5. **禁止项**（`forbidden`）：逻辑冲突、矛盾事实、人设崩坏、擅自加设定、机械降神、硬切场景、说明文对话、重复注水、元叙述等。  
 6. **字数**（`length`）：符合 `get_novel_info` 的 `word_count_min`/`max`（约 ±60 字）。  
 7. **输出**（`output`）：只输出 Markdown 正文，不要清单/自我评价。  
-8. **正文用法**（`content_usage`）：本接口不含正文；生成禁止调 `get_chapter_content`；精修才另读旧稿。
+8. **正文用法**（`content_usage`）：本接口不含正文；生成新章若无细纲先 `generate_detailed_outline`，再按细纲写正文，禁止调 `get_chapter_content`；精修（含「精修第 N 章」）才另读旧稿。
 
 **请求**
 
@@ -792,9 +976,9 @@ Accept: application/json, text/event-stream
 ```json
 {
   "ai_guidance": {
-    "plots": "严格按 linked_plots 的 order……",
-    "characters": "linked_characters 为本章必须出场的人物……",
-    "knowledge": "linked_knowledge 为本章写作硬约束……",
+    "plots": "linked_plots 的 inherited_from 为 root|volume|chapter……",
+    "characters": "linked_characters 为本章必须出场的人物；须符合 character 结构化字段与 formatted；见 character_relations……",
+    "knowledge": "linked_knowledge 为本章写作硬约束……优先 extracted/formatted……",
     "narrative_coherence": "时间与因果、人物一致、细节统一、段落衔接……",
     "forbidden": "严禁前后逻辑冲突、人设崩坏、机械降神……",
     "length": "字数须符合 get_novel_info 的 word_count_min/max……",
@@ -806,6 +990,7 @@ Accept: application/json, text/event-stream
     "kind": "chapter",
     "label": "第一章",
     "outline": "离港…",
+    "detailed_outline": ["码头遇雨", "旧识拦路", "登船离港"],
     "linked_character_ids": ["char-1"],
     "linked_side_plot_ids": ["plot-a", "plot-b"],
     "linked_knowledge_ids": ["kn-1"],
@@ -814,8 +999,13 @@ Accept: application/json, text/event-stream
   "linked_side_plot_ids": ["plot-a"],
   "linked_root_plot_ids": ["plot-root"],
   "linked_volume_plot_ids": ["plot-vol"],
-  "volume": { "id": "vol-1", "label": "第一卷", "outline": "启程…" },
-  "linked_knowledge_ids": ["kn-1", "kn-root"],
+  "volume": {
+    "id": "vol-1",
+    "label": "第一卷",
+    "volume": { "positioning": "启程…" },
+    "formatted": "## 本卷定位\n启程…"
+  },
+  "linked_knowledge_ids": ["kn-root", "kn-1"],
   "linked_plots": [
     {
       "order": 0,
@@ -853,7 +1043,16 @@ Accept: application/json, text/event-stream
       "order": 0,
       "id": "char-1",
       "label": "林晚",
-      "character": { "role": "女主", "personality": "…", "motto": "", "gender": "女", "style": "", "alignment": "" }
+      "true_name": "林晚",
+      "character": {
+        "gender": "女",
+        "age": "24",
+        "world_anchors": { "embodies_law": "…", "will_challenge": "…" },
+        "voice": { "catchphrases": ["……"], "emotion_anger": "…", "emotion_happy": "…" },
+        "constraints": "…"
+      },
+      "formatted": "## 真名\n林晚\n…",
+      "character_relations": []
     }
   ],
   "linked_knowledge": [
@@ -862,8 +1061,10 @@ Accept: application/json, text/event-stream
       "id": "kn-1",
       "label": "冷硬文风",
       "outline": "",
+      "slot": "",
       "extract_prompt": "短句、少形容词、禁用网络梗",
-      "extracted": "叙述用短句；对话克制；「很」「非常」改为具体动作……",
+      "extracted": "叙述用短句；对话克制……",
+      "formatted": "叙述用短句；对话克制……",
       "book_ids": ["book-uuid"]
     }
   ]
@@ -873,22 +1074,26 @@ Accept: application/json, text/event-stream
 | 字段 | 说明 |
 |------|------|
 | `ai_guidance.plots` | 写章须严格按剧情卡顺序与内容 |
-| `ai_guidance.characters` | 关联人物必须在本章出场 |
-| `ai_guidance.knowledge` | 关联知识卡为写作手法/文风等硬约束 |
+| `ai_guidance.characters` | 关联人物必须出场，且遵守结构化字段 / `formatted` / `character_relations` |
+| `ai_guidance.knowledge` | 关联知识卡为写作手法/文风等硬约束（`extracted`/`formatted` 及结构化槽位字段） |
 | `ai_guidance.narrative_coherence` | 叙事合理连贯：时间因果、人设一致、细节统一、段落衔接、逻辑自洽等 |
 | `ai_guidance.forbidden` | 禁止逻辑冲突、矛盾事实、人设崩坏、擅自加设定、机械降神、元叙述等 |
 | `ai_guidance.length` | 字数符合全书每章目标（约 ±60） |
 | `ai_guidance.output` | 只输出 Markdown 正文 |
-| `ai_guidance.content_usage` | 本接口不含正文；生成勿调 `get_chapter_content`；精修才另读旧稿 |
-| `node` | 完整 `TreeNode` |
+| `ai_guidance.content_usage` | 本接口不含正文；生成须先有细纲（空则 `generate_detailed_outline`）；生成勿调 `get_chapter_content`；精修才另读旧稿 |
+| `node` | 完整 `TreeNode`（含 `detailed_outline`） |
+| `volume` | 父分卷摘要：`id`/`label`/`volume`/`formatted`；无父卷为 `null` |
 | `linked_side_plot_ids` | 仅本章剧情 id（可排序；不含根继承） |
 | `linked_root_plot_ids` | 根节点继承的剧情 id |
-| `linked_plots[].order` | 根继承与本章各自从 `0` 起；看 `inherited_from_root` |
-| `linked_plots[].inherited_from_root` | `true` = 根继承；`false` = 本章剧情 |
-| `linked_characters` | 本章必出人物 |
-| `linked_knowledge` / `linked_knowledge_ids` | 本章 + 根继承知识卡并集 |
+| `linked_volume_plot_ids` | 分卷继承的剧情 id |
+| `linked_plots[].order` | 根 / 卷 / 本章各自从 `0` 起；看 `inherited_from` |
+| `linked_plots[].inherited_from` | `root` \| `volume` \| `chapter` |
+| `linked_characters` | 本章必出人物（同 §6.1 entry，含 `order`） |
+| `linked_knowledge` / `linked_knowledge_ids` | 根 → 分卷 → 本章并集（顺序同左；含 `formatted`/`slot`/结构化载荷；`order` 为全局下标） |
 
-工作台：画布把知识卡连到章节会写入 `linked_knowledge_ids`；左侧编辑栏可查看关联知识卡。预生成/精修与 MCP 写章均须严格遵守知识卡约束。
+工作台：画布把知识卡连到根 / 分卷 / 章节会写入对应 `linked_knowledge_ids`；左侧编辑栏可**拖拽排序**本节点知识（继承项只读；根上六世界观 + 故事规则固定置顶不参与排序）。预生成/精修与 MCP 写章均须严格遵守知识卡约束，并按根→卷→章顺序理解 `linked_knowledge`。
+
+**全局 Chat「生成/重写第 N 章」**（软约束，非工作台 `generate_chapter` 命令）：助手须先 `get_novel_info` + `get_chapter_info`；新生成禁止 `get_chapter_content`；用户要求重写/改稿已有正文时再读 `get_chapter_content`。落盘前自检：章纲节拍、剧情 order、人物出场与人设、知识卡 `extracted`、字数在 `word_count_min`–`max` 的 ±60 内；通过后再 `set_chapter_content`。详见 `Project.md` §6 与 `/novel` skill。
 
 ---
 
@@ -918,35 +1123,313 @@ Accept: application/json, text/event-stream
 
 ---
 
-## 6. 卡片与关联
+### 5.9a `get_chapter_memory`
 
-### 6.1 `upsert_character_card`
+读取单章**章节记忆**（蒸馏事实条目，非正文）。
 
-无 `node_id` 则新建（写入后自动一键排版）；有则更新。新建默认挂**章节卡**：`link_to` 优先，否则当前选中章（或选中卡的宿主），落到根且已有章节则改挂末章；无章节才挂根。边为 **章.left ← 人物.right**。显式 `link_to: root` 仍挂根。
+**请求**
 
-**请求（新建）**
+```json
+{ "novel_id": "n-uuid", "node_id": "ch-uuid" }
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `novel_id` | string | 否 | 工作台已选中时可省略 |
+| `node_id` | string | 否 | 章节节点；工作台已选中时可省略 |
+
+**返回**
+
+```json
+{ "node_id": "ch-uuid", "items": ["林晚离港，与父亲决裂。", "…"] }
+```
+
+---
+
+### 5.9b `list_chapter_memory`
+
+全书已有章节记忆，按结构树章节顺序分组（无记忆的章不出现）。
+
+**请求**
+
+```json
+{ "novel_id": "n-uuid" }
+```
+
+**返回**
+
+```json
+[
+  { "node_id": "ch-1", "label": "第一章", "items": ["…"] },
+  { "node_id": "ch-2", "label": "第二章", "items": ["…"] }
+]
+```
+
+---
+
+### 5.9c `set_chapter_memory`
+
+手动覆盖或清空某章记忆（`items` 为空数组则清除 SQLite + Lance）。
+
+**请求**
 
 ```json
 {
   "novel_id": "n-uuid",
-  "name": "林晚",
-  "role": "女主",
-  "gender": "女",
-  "alignment": "中立善良",
-  "personality": "冷静，嘴硬",
-  "style": "少言，行动优先",
-  "motto": "船到桥头自然直",
+  "node_id": "ch-uuid",
+  "items": ["事实一", "事实二"]
+}
+```
+
+**返回**
+
+```json
+{ "ok": true }
+```
+
+---
+
+### 5.9d `regenerate_chapter_memory`
+
+按磁盘上当前正文用 LLM 抽取并**覆盖**本章记忆。正文为空时报错。
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `user_notes` | string | 否 | 抽取注意事项（可空） |
+| `memory_node_ids` | string[] | 否 | 其他章 `node_id`，注入其记忆作对照去重 |
+
+**请求**
+
+```json
+{
+  "novel_id": "n-uuid",
+  "node_id": "ch-uuid",
+  "user_notes": "只记人物关系与关键道具",
+  "memory_node_ids": ["ch-1"]
+}
+```
+
+**返回**
+
+```json
+{ "items": ["…", "…"] }
+```
+
+仅 `chapter` 节点；模拟模式（无真实 LLM）不写入并报错。
+
+---
+
+### 5.9e 分镜头 / ComfyUI MiniMax
+
+镜头存在 `novels/{id}/shots/{node_id}.json`，不进结构树。设置：`comfyui_url`（默认 `http://127.0.0.1:8188`）、`comfyui_workflow`（ComfyUI「导出（API）」JSON）、可选 `comfyui_prompt_node`。
+
+| 工具 | 作用 |
+|------|------|
+| `get_chapter_shots` | 读镜头列表（`action` / `camera` / `dialogue` / `duration_sec` / `comfy_prompt`） |
+| `set_chapter_shots` | 整表覆盖（**一章多镜**，`shots` 数组）；`shots: []` 清空。MCP 拆镜/写提示词后必须用此写入 |
+| `split_chapter_shots` | **不调用应用 LLM、不落盘**。返回 `body` / `characters` / `existing_shots` / `ai_guidance`；由客户端拆镜后 `set_chapter_shots`（需非空正文） |
+| `generate_shot_comfy_prompts` | **不调用应用 LLM、不落盘**。返回已有 `shots` + `characters` + `ai_guidance`；由客户端写 `comfy_prompt` 后 `set_chapter_shots` |
+| `submit_chapter_shots_comfyui` | `POST {comfyui_url}/prompt` 入队；不下载成片。含 Prompt Chain 的工作流一次提交全部镜头，否则每镜一条 |
+
+工作台「按正文拆镜头 / 生成提示词」仍走应用内置模型。MCP 路径用客户端流量。
+
+**`get` / `set` 返回**
+
+```json
+{
+  "node_id": "ch-uuid",
+  "shots": [
+    {
+      "id": "s-uuid",
+      "order": 1,
+      "action": "推门进屋",
+      "camera": "肩后跟拍",
+      "dialogue": "谁？",
+      "duration_sec": 8,
+      "comfy_prompt": "A man pushes a wooden door…"
+    }
+  ]
+}
+```
+
+**`split_chapter_shots` 返回（未保存）**
+
+```json
+{
+  "node_id": "ch-uuid",
+  "label": "第一章",
+  "body": "……",
+  "characters": "- 李四\\n……",
+  "existing_shots": [],
+  "saved": false,
+  "shot_fields": ["id", "order", "action", "camera", "dialogue", "duration_sec", "comfy_prompt"],
+  "min_shots": 2,
+  "typical_shots": "6-20",
+  "ai_guidance": "……一章必须拆成多条……禁止把整章收成 1 条……再 set_chapter_shots……"
+}
+```
+
+**`generate_shot_comfy_prompts` 返回（未保存）** `{ "node_id", "label", "characters", "shots", "saved": false, "ai_guidance" }`
+
+**`submit` 返回** `{ "queued": 3, "prompt_ids": ["…"], "mode": "each"|"chain", "url": "http://127.0.0.1:8188" }`
+
+工作流须为 API 格式对象（节点 id → `{class_type, inputs}`）。自动挑 MiniMax / CLIP 的 `text`/`prompt`/`prompts` 字段。
+
+---
+
+## 6. 卡片与关联
+
+### 6.1 `get_character_card`
+
+读取**完整人物卡**：结构化 `character`（含 `world_position`、`world_anchors`、`relations`、`core_belief`、`deep`、`voice` 等）、写作注入用 `formatted` Markdown，以及画布上的人物↔人物关系 `character_relations`。
+
+| 参数 | 说明 |
+|------|------|
+| `novel_id` | 可省略（当前选中书） |
+| `node_id` | 人物节点 id；**省略则返回本书全部人物** |
+
+**返回（单人）**
+
+```json
+{
+  "character": {
+    "id": "char-uuid",
+    "label": "李四",
+    "true_name": "李四",
+    "character": {
+      "gender": "男",
+      "aliases": "…",
+      "world_position": { "faction": "商会", "social_role": "账房" },
+      "world_anchors": {
+        "embodies_law": "等价交换",
+        "embodies_note": "…",
+        "shaped_by_law": "信息有价",
+        "shaped_by_note": "…",
+        "will_challenge": "皇权专营"
+      },
+      "relations": [{ "name": "张三", "relation": "旧识", "definition": "…", "default_attitude": "…", "hidden_tension": "…" }],
+      "core_belief": { "belief": "…", "author_verdict": "disprove", "source": "…" },
+      "deep": { "…": "…" },
+      "voice": {
+        "positioning": "…",
+        "body_language": "说话时转笔",
+        "catchphrases": ["这账不对"],
+        "emotion_anger": "…",
+        "emotion_tense": "…",
+        "emotion_mask": "…",
+        "emotion_sad": "…",
+        "emotion_happy": "…",
+        "banned": "…"
+      },
+      "constraints": "…"
+    },
+    "formatted": "## 真名\n李四\n## 世界锚点\n…\n## 角色声线\n- 口头禅：这账不对\n…",
+    "character_relations": [{ "peer_id": "char-2", "peer_label": "张三", "relation": "旧识" }]
+  }
+}
+```
+
+单人查询**不含** `order`；`get_novel_info` / `get_chapter_info` 的 `linked_characters` 以及全书列表条目含 `order`（从 0 起）。
+
+**返回（全书）**：`{ "count": N, "characters": [ … ] }`
+
+`get_novel_info` / `get_chapter_info` 的 `linked_characters` 条目形状与上相同（含 `formatted`、完整 `character`）。
+
+写章注入请优先读 `formatted`；结构化读写用 `character.*`。`get_selected_card` 仅返回原始 `TreeNode`（无 `formatted`），人物请改用本工具。
+
+---
+
+### 6.2 `upsert_character_card`
+
+无 `node_id` 则新建（写入后自动一键排版）；有则更新。新建默认挂**章节卡**（同前）。
+
+**更新是深度合并**：省略的结构化字段保留原值；可传：
+- `character`：`CharacterCard` 本体，**或** `get_character_card` 返回的整条 entry（含 `formatted` 的包装会自动摊平）
+- 顶层 `world_position` / `world_anchors` / `relations` / `core_belief` / `deep` / `voice`
+- 扁平字段 `gender` / `age` / `body_language` / …（`body_language` 写入 `voice.body_language`）。**不要传 `personality`**（忽略）
+
+更新时可省略 `name`（保留原真名）。新建必须传 `name`。
+
+**请求（新建，完整结构化）**
+
+```json
+{
+  "novel_id": "n-uuid",
+  "name": "李四",
+  "character": {
+    "gender": "男",
+    "age": "外表中年，实际800岁",
+    "aliases": "老李",
+    "world_position": {
+      "birth_class": "贱籍",
+      "faction": "商会",
+      "social_role": "账房",
+      "conflict_stance": "反对苛税"
+    },
+    "world_anchors": {
+      "embodies_law": "等价交换",
+      "embodies_note": "每笔账都要还",
+      "shaped_by_law": "信息有价",
+      "shaped_by_note": "情报黑市长大",
+      "will_challenge": "皇权专营"
+    },
+    "relations": [
+      {
+        "name": "张三",
+        "relation": "旧识",
+        "definition": "可利用的棋子",
+        "default_attitude": "热情但贪婪",
+        "hidden_tension": "想套出秘密"
+      }
+    ],
+    "core_belief": {
+      "belief": "钱能买命",
+      "author_verdict": "disprove",
+      "source": "早年饥荒"
+    },
+    "deep": { … },
+    "voice": {
+      "catchphrases": ["这账不对"],
+      "body_language": "说话时转笔",
+      "emotion_anger": "压低嗓门翻旧账",
+      "emotion_tense": "句式变短",
+      "emotion_mask": "改用敬语",
+      "emotion_sad": "少说话",
+      "emotion_happy": "爱开玩笑",
+      "banned": "网络流行语"
+    }
+  },
   "link_to": "ch-uuid"
 }
 ```
 
-**请求（更新）**：同上，加 `"node_id": "char-uuid"`。
+**请求（更新，部分字段）**
 
-**返回**：人物 `TreeNode`（含 `character` 对象）
+```json
+{
+  "node_id": "char-uuid",
+  "character": { "gender": "女", "world_position": { "faction": "商会" } }
+}
+```
+
+或顶层：
+
+```json
+{ "node_id": "char-uuid", "world_position": { "faction": "商会" }, "gender": "女" }
+```
+
+**返回**
+
+```json
+{
+  "node": { … TreeNode … },
+  "character": { "id", "label", "character", "formatted", "character_relations" }
+}
+```
 
 ---
 
-### 6.2 `upsert_plot_card`
+### 6.3 `upsert_plot_card`
 
 **请求**
 
@@ -969,11 +1452,13 @@ Accept: application/json, text/event-stream
 
 ---
 
-### 6.3 `upsert_knowledge_card`
+### 6.4 `upsert_knowledge_card`
 
 树上知识卡（非公共库本体）。
 
 **更新是部分字段**：省略的 `book_ids` / `extract_prompt` / `extracted` **保留原值**（便于 AI 只写回 `extracted`）。
+
+世界观 / 故事规则固定槽：传 `slot`（如 `wv_core_laws`、`sr_surface_setting`）可省略 `node_id`；传结构化 payload（`core_laws`、`surface_setting` 等）会自动同步 `extracted`（与写作注入同形）。固定槽不会重复新建，也不会被挂到章节下。
 
 选库后两条路：
 
@@ -995,11 +1480,27 @@ Accept: application/json, text/event-stream
 }
 ```
 
-**返回**：知识 `TreeNode`（`kind: "knowledge"`）。新建且未传 `link_to` 时挂当前选中章，否则末章，再否则小说根。边为 **章.left ← 知识.right**。`link_to` 为 `"root"` / `"novel"` 时解析为根节点真实 id（树里的根 id 通常是 UUID，不是 `"root"`）。
+**返回**：
+
+```json
+{
+  "node": { "id": "kn-uuid", "kind": "knowledge", "label": "…", "knowledge": { … } },
+  "formatted": "……写作注入正文……",
+  "extracted": "……同 formatted（注入体）……",
+  "slot": "",
+  "book_ids": ["kb-uuid"],
+  "extract_prompt": "…",
+  "core_laws": null
+}
+```
+
+有结构化载荷时，与 `linked_knowledge` 相同：非空则摊到顶层（`core_laws` / `world_axiom` / `surface_setting` / …）。`slot=story_rules` 时另含 `blocks`。
+
+新建且未传 `link_to` 时挂当前选中章，否则末章，再否则小说根。边为 **章.left ← 知识.right**。`link_to` 为 `"root"` / `"novel"` 时解析为根节点真实 id（树里的根 id 通常是 UUID，不是 `"root"`）。
 
 ---
 
-### 6.3.1 `fill_knowledge_card`
+### 6.4.1 `fill_knowledge_card`
 
 把知识卡关联的公共库**完整导入**到 `extracted`（有字数上限，默认 14000；优先分析/目录块）。AI 提炼不要走此工具。
 
@@ -1024,7 +1525,7 @@ Accept: application/json, text/event-stream
 
 ---
 
-### 6.3.2 公共知识卡（跨小说目录）
+### 6.4.2 公共知识卡（跨小说目录）
 
 树上知识卡默认只属于一本小说。用户可把某张卡**复制进目录**，再在其他小说里挂上（再次复制，不共享编辑；版本号以后再做）。
 
@@ -1080,7 +1581,7 @@ Accept: application/json, text/event-stream
 
 ---
 
-### 6.4 `link_nodes`
+### 6.5 `link_nodes`
 
 **请求**
 
@@ -1114,7 +1615,7 @@ Accept: application/json, text/event-stream
 
 ---
 
-### 6.5 `unlink_nodes`
+### 6.6 `unlink_nodes`
 
 **按边 id**
 
@@ -1164,8 +1665,11 @@ curl -s http://127.0.0.1:17832/mcp \
 
 ## 8. 维护说明
 
+数据格式（`models.rs`、前端载荷、写作注入）变更时，**同一 PR** 须同步 MCP。完整检查清单见 `.cursor/rules/mcp-sync.mdc`。
+
 | 改动 | 同步 |
 |------|------|
-| `src-tauri/src/mcp.rs` 工具名 / arguments / 返回 JSON | **本文** + 内置 skill `src-tauri/skills/novel/SKILL.md` |
-| 章节 AI 预生成 / 精修 / 记忆策略 | `Project.md` |
-| 应用内 Tauri `invoke` 命令 | 非本文范围（前端 `src/lib/api.ts`） |
+| `src-tauri/src/mcp.rs` 工具名 / arguments / 返回 JSON | **本文** + `src-tauri/skills/novel/SKILL.md` + `skills.rs` 工具名测试 |
+| `CharacterCard` / `KnowledgeCardPayload` / `NovelFeatures` 等树上载荷 | 上表 + `json_linked_*` / `get_*` / `upsert_*` / `patch_*` + 对应 `*_fmt.rs` |
+| 章节 AI 预生成 / 精修 / 记忆策略 | `Project.md`（`project-md-sync.mdc`） |
+| 应用内 Tauri `invoke` 命令 | `src/lib/api.ts`（非 MCP，但常与载荷同改） |

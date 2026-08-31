@@ -62,12 +62,7 @@ fn compat_endpoint<'a>(settings: &'a AppSettings, model: &str) -> CompatEndpoint
 }
 
 fn chat_completions_url(base: &str) -> String {
-    let b = base.trim_end_matches('/');
-    if b.ends_with("/v1") {
-        format!("{b}/chat/completions")
-    } else {
-        format!("{b}/v1/chat/completions")
-    }
+    format!("{}/chat/completions", base.trim().trim_end_matches('/'))
 }
 
 /// Kimi / Moonshot 部分模型（如 K2）只允许 temperature=1。
@@ -100,6 +95,7 @@ pub async fn complete(
     }
 
     let ep = compat_endpoint(settings, &model);
+    let api_model = crate::models::api_model_id(&model).to_string();
     if ep.api_key.trim().is_empty() {
         let content = mock_complete(system, user);
         let prompt_tokens = ((system.len() + user.len()) / 4) as u32;
@@ -120,16 +116,17 @@ pub async fn complete(
 
     let url = chat_completions_url(ep.base_url);
     let mut body = json!({
-        "model": model,
+        "model": api_model,
         "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": user},
         ],
-        "temperature": if json_object {
-            0.2
-        } else {
-            chat_temperature_with_hint(&model, ep.label, ep.base_url, 0.8)
-        },
+        "temperature": chat_temperature_with_hint(
+            &api_model,
+            ep.label,
+            ep.base_url,
+            if json_object { 0.2 } else { 0.8 },
+        ),
     });
     if json_object {
         body["response_format"] = json!({"type": "json_object"});
@@ -271,7 +268,19 @@ mod adk_bridge {
 
 #[cfg(test)]
 mod tests {
-    use super::chat_temperature_with_hint;
+    use super::{chat_completions_url, chat_temperature_with_hint};
+
+    #[test]
+    fn chat_url_uses_base_as_is() {
+        assert_eq!(
+            chat_completions_url("https://open.bigmodel.cn/api/paas/v4/"),
+            "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+        );
+        assert_eq!(
+            chat_completions_url("https://api.deepseek.com/v1"),
+            "https://api.deepseek.com/v1/chat/completions"
+        );
+    }
 
     #[test]
     fn kimi_forces_temperature_one() {
@@ -280,6 +289,8 @@ mod tests {
             chat_temperature_with_hint("custom", "Kimi", "https://api.moonshot.ai", 0.7),
             1.0
         );
+        // json_object 路径 preferred=0.2 仍须强制为 1
+        assert_eq!(chat_temperature_with_hint("kimi-k2.5", "", "", 0.2), 1.0);
         assert_eq!(
             chat_temperature_with_hint("deepseek-chat", "DeepSeek", "https://api.deepseek.com", 0.8),
             0.8

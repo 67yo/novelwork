@@ -30,6 +30,10 @@ const uiLocale = ref<LocalePreference>("system");
 const mcpPort = ref(17832);
 const mcpEnabled = ref(true);
 const mcpLan = ref(false);
+const comfyUrl = ref("http://127.0.0.1:8188");
+const comfyWorkflow = ref("");
+const comfyImageWorkflow = ref("");
+const comfyNode = ref("");
 const mcpStatus = ref<McpStatus | null>(null);
 const mcpBusy = ref(false);
 const settings = ref<SettingsView | null>(null);
@@ -45,7 +49,7 @@ const refreshBusyId = ref<string | null>(null);
 const adding = ref(false);
 const addLabel = ref("");
 const addProtocol = ref("openai");
-const addBaseUrl = ref("https://api.deepseek.com");
+const addBaseUrl = ref("https://api.deepseek.com/v1");
 const addKey = ref("");
 const addFetched = ref<string[]>([]);
 const addSelected = ref<Set<string>>(new Set());
@@ -85,6 +89,10 @@ async function load() {
   mcpPort.value = s.mcp_port || 17832;
   mcpEnabled.value = s.mcp_enabled !== false;
   mcpLan.value = !!s.mcp_lan;
+  comfyUrl.value = s.comfyui_url || "http://127.0.0.1:8188";
+  comfyWorkflow.value = s.comfyui_workflow || "";
+  comfyImageWorkflow.value = s.comfyui_image_workflow || "";
+  comfyNode.value = s.comfyui_prompt_node || "";
   setLocalePreference(uiLocale.value);
   geminiKey.value = "";
   claudeKey.value = "";
@@ -179,9 +187,13 @@ function opt(v: string) {
 
 function openAdd() {
   adding.value = true;
+  resetAddForm();
+}
+
+function resetAddForm() {
   addLabel.value = "";
   addProtocol.value = "openai";
-  addBaseUrl.value = "https://api.deepseek.com";
+  addBaseUrl.value = "https://api.deepseek.com/v1";
   addKey.value = "";
   addFetched.value = [];
   addSelected.value = new Set();
@@ -190,7 +202,7 @@ function openAdd() {
 
 function cancelAdd() {
   adding.value = false;
-  addErr.value = "";
+  resetAddForm();
 }
 
 async function fetchAddModels() {
@@ -301,6 +313,10 @@ async function save() {
       mcp_port: Number(mcpPort.value) || 17832,
       mcp_enabled: mcpEnabled.value,
       mcp_lan: mcpLan.value,
+      comfyui_url: comfyUrl.value.trim() || "http://127.0.0.1:8188",
+      comfyui_workflow: comfyWorkflow.value,
+      comfyui_prompt_node: comfyNode.value.trim(),
+      comfyui_image_workflow: comfyImageWorkflow.value,
     });
     settings.value = s;
     setLocalePreference((s.ui_locale || "system") as LocalePreference);
@@ -447,6 +463,45 @@ function scrollToSection(id: string) {
       </CardContent>
     </Card>
 
+    <Card id="settings-comfy" class="scroll-mt-4">
+      <CardHeader>
+        <CardTitle>{{ t("settings.comfyTitle") }}</CardTitle>
+        <p class="text-sm text-muted-foreground">{{ t("settings.comfyHint") }}</p>
+      </CardHeader>
+      <CardContent class="space-y-4">
+        <div class="space-y-1">
+          <label class="text-xs text-muted-foreground">{{ t("settings.comfyUrl") }}</label>
+          <Input v-model="comfyUrl" class="h-9 font-mono text-sm" />
+          <p class="text-xs text-muted-foreground">{{ t("settings.comfyUrlHint") }}</p>
+        </div>
+        <div class="space-y-1">
+          <label class="text-xs text-muted-foreground">{{ t("settings.comfyNode") }}</label>
+          <Input v-model="comfyNode" class="h-9 font-mono text-sm" />
+          <p class="text-xs text-muted-foreground">{{ t("settings.comfyNodeHint") }}</p>
+        </div>
+        <div class="space-y-1">
+          <label class="text-xs text-muted-foreground">{{ t("settings.comfyWorkflow") }}</label>
+          <textarea
+            v-model="comfyWorkflow"
+            rows="8"
+            class="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs"
+            :placeholder="t('settings.comfyWorkflowPh')"
+          />
+          <p class="text-xs text-muted-foreground">{{ t("settings.comfyWorkflowHint") }}</p>
+        </div>
+        <div class="space-y-1">
+          <label class="text-xs text-muted-foreground">{{ t("settings.comfyImageWorkflow") }}</label>
+          <textarea
+            v-model="comfyImageWorkflow"
+            rows="8"
+            class="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs"
+            :placeholder="t('settings.comfyImageWorkflowPh')"
+          />
+          <p class="text-xs text-muted-foreground">{{ t("settings.comfyImageWorkflowHint") }}</p>
+        </div>
+      </CardContent>
+    </Card>
+
     <Card id="settings-skills" class="scroll-mt-4">
       <CardHeader>
         <div class="flex items-start justify-between gap-3">
@@ -547,7 +602,7 @@ function scrollToSection(id: string) {
           </div>
           <div>
             <label class="mb-1 block text-sm">{{ t("settings.baseUrl") }}</label>
-            <Input v-model="addBaseUrl" placeholder="https://api.deepseek.com" />
+            <Input v-model="addBaseUrl" placeholder="https://api.deepseek.com/v1" />
           </div>
           <div>
             <label class="mb-1 block text-sm">{{ t("settings.apiKey") }}</label>
@@ -616,9 +671,7 @@ function scrollToSection(id: string) {
             <div class="flex items-start justify-between gap-2">
               <div class="min-w-0">
                 <p class="font-medium">{{ p.label || p.id }}</p>
-                <p class="truncate text-xs text-muted-foreground">
-                  {{ p.protocol }} · {{ p.base_url }}
-                </p>
+                <p class="text-xs text-muted-foreground">{{ p.protocol }}</p>
                 <p class="mt-1 text-xs text-muted-foreground">
                   {{ t("settings.status") }}
                   <span :class="p.api_key_configured || p.api_key ? 'text-primary' : 'text-muted-foreground'">
@@ -647,6 +700,25 @@ function scrollToSection(id: string) {
                 </Button>
                 <Button variant="outline" size="sm" @click="removeProvider(p.id)">
                   {{ t("settings.compatRemove") }}
+                </Button>
+              </div>
+            </div>
+            <div>
+              <label class="mb-1 block text-sm">{{ t("settings.baseUrl") }}</label>
+              <Input v-model="p.base_url" placeholder="https://api.deepseek.com/v1" />
+            </div>
+            <div>
+              <label class="mb-1 block text-sm">{{ t("settings.apiKey") }}</label>
+              <div class="flex gap-2">
+                <Input
+                  v-model="p.api_key"
+                  :type="show[p.id] ? 'text' : 'password'"
+                  :placeholder="p.api_key_masked || `sk-… (${t('settings.keyPlaceholder')})`"
+                  class="flex-1"
+                />
+                <Button variant="outline" size="icon" type="button" @click="toggle(p.id)">
+                  <Eye v-if="!show[p.id]" class="h-4 w-4" />
+                  <EyeOff v-else class="h-4 w-4" />
                 </Button>
               </div>
             </div>

@@ -6,12 +6,7 @@ use chrono::Utc;
 use serde::Deserialize;
 
 pub fn models_list_url(base: &str) -> String {
-    let b = base.trim_end_matches('/');
-    if b.ends_with("/v1") {
-        format!("{b}/models")
-    } else {
-        format!("{b}/v1/models")
-    }
+    format!("{}/models", base.trim().trim_end_matches('/'))
 }
 
 pub async fn fetch_openai_models(base_url: &str, api_key: &str) -> Result<Vec<String>> {
@@ -49,6 +44,10 @@ pub async fn refresh(db: &Db) -> Result<ModelCatalog> {
     }
 
     catalog.compat = settings.all_compat_model_ids();
+    // 遗留字段：不再从旧单项 Key 拉列表，统一清空以免删光配置后仍显示模型名
+    catalog.deepseek.clear();
+    catalog.grok.clear();
+    catalog.kimi.clear();
 
     if !settings.gemini_api_key.trim().is_empty() {
         match fetch_gemini(&settings.gemini_api_key).await {
@@ -57,6 +56,8 @@ pub async fn refresh(db: &Db) -> Result<ModelCatalog> {
                 catalog.errors.insert("gemini".into(), e.to_string());
             }
         }
+    } else {
+        catalog.gemini.clear();
     }
 
     if !settings.claude_api_key.trim().is_empty() {
@@ -66,6 +67,8 @@ pub async fn refresh(db: &Db) -> Result<ModelCatalog> {
                 catalog.errors.insert("claude".into(), e.to_string());
             }
         }
+    } else {
+        catalog.claude.clear();
     }
 
     catalog.updated_at = Utc::now().to_rfc3339();
@@ -187,4 +190,21 @@ async fn fetch_claude(api_key: &str) -> Result<Vec<String>> {
     ids.sort();
     ids.dedup();
     Ok(ids)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::models_list_url;
+
+    #[test]
+    fn models_url_uses_base_as_is() {
+        assert_eq!(
+            models_list_url("https://open.bigmodel.cn/api/paas/v4/"),
+            "https://open.bigmodel.cn/api/paas/v4/models"
+        );
+        assert_eq!(
+            models_list_url("https://api.deepseek.com/v1"),
+            "https://api.deepseek.com/v1/models"
+        );
+    }
 }

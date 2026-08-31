@@ -617,16 +617,16 @@ pub async fn index_book_embeddings(
 }
 
 /// Cap a list of knowledge card bodies into a single string under total budget.
-pub fn format_knowledge_cards_capped(
-    cards: &[(String, String)],
-    per_card: usize,
+/// `cards`: (label, body, per_card_cap)
+pub fn format_knowledge_cards_capped_var(
+    cards: &[(String, String, usize)],
     total: usize,
     zh: bool,
 ) -> String {
     let mut parts = Vec::new();
     let mut used = 0usize;
-    for (label, feat) in cards {
-        let snip = truncate_chars(feat.trim(), per_card);
+    for (label, feat, per_card) in cards {
+        let snip = truncate_chars(feat.trim(), *per_card);
         if snip.is_empty() {
             continue;
         }
@@ -643,6 +643,20 @@ pub fn format_knowledge_cards_capped(
         parts.push(block);
     }
     parts.join("\n")
+}
+
+/// Cap a list of knowledge card bodies into a single string under total budget.
+pub fn format_knowledge_cards_capped(
+    cards: &[(String, String)],
+    per_card: usize,
+    total: usize,
+    zh: bool,
+) -> String {
+    let v: Vec<(String, String, usize)> = cards
+        .iter()
+        .map(|(l, b)| (l.clone(), b.clone(), per_card))
+        .collect();
+    format_knowledge_cards_capped_var(&v, total, zh)
 }
 
 #[cfg(test)]
