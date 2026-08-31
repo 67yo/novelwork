@@ -1,4 +1,4 @@
-import { ensureWorldviewCards, missingWorldviewSlots, worldviewComplete } from "./worldview.ts";
+import { ensureWorldviewCards, missingWorldviewSlots, worldviewComplete, worldviewJsonKeyForSlot } from "./worldview.ts";
 import type { NovelTree } from "./api.ts";
 
 const titles: Record<string, string> = {
@@ -44,4 +44,7 @@ const fan = tree.edges.find((e) => e.target === tree.nodes.find((n) => n.knowled
 console.assert(fan?.source_handle === "top" && fan?.target_handle === "bottom");
 const rules = tree.edges.find((e) => e.target === tree.nodes.find((n) => n.knowledge?.slot === "story_rules")!.id);
 console.assert(rules?.source_handle === "right" && rules?.target_handle === "left");
+console.assert(worldviewJsonKeyForSlot("wv_existence") === "existence");
+console.assert(worldviewJsonKeyForSlot("core_laws") === "core_laws");
+console.assert(worldviewJsonKeyForSlot("story_rules") === null);
 console.log("worldview.selfcheck ok");

@@ -6,12 +6,7 @@ use chrono::Utc;
 use serde::Deserialize;
 
 pub fn models_list_url(base: &str) -> String {
-    let b = base.trim_end_matches('/');
-    if b.ends_with("/v1") {
-        format!("{b}/models")
-    } else {
-        format!("{b}/v1/models")
-    }
+    format!("{}/models", base.trim().trim_end_matches('/'))
 }
 
 pub async fn fetch_openai_models(base_url: &str, api_key: &str) -> Result<Vec<String>> {
@@ -195,4 +190,21 @@ async fn fetch_claude(api_key: &str) -> Result<Vec<String>> {
     ids.sort();
     ids.dedup();
     Ok(ids)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::models_list_url;
+
+    #[test]
+    fn models_url_uses_base_as_is() {
+        assert_eq!(
+            models_list_url("https://open.bigmodel.cn/api/paas/v4/"),
+            "https://open.bigmodel.cn/api/paas/v4/models"
+        );
+        assert_eq!(
+            models_list_url("https://api.deepseek.com/v1"),
+            "https://api.deepseek.com/v1/models"
+        );
+    }
 }

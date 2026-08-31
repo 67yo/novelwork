@@ -38,6 +38,27 @@ export type SettingsView = {
   mcp_port: number;
   mcp_enabled: boolean;
   mcp_lan: boolean;
+  comfyui_url: string;
+  comfyui_workflow: string;
+  comfyui_prompt_node: string;
+  comfyui_image_workflow: string;
+};
+
+export type ChapterShot = {
+  id: string;
+  order: number;
+  action: string;
+  camera: string;
+  dialogue: string;
+  duration_sec: number;
+  comfy_prompt: string;
+};
+
+export type ComfySubmitResult = {
+  queued: number;
+  prompt_ids: string[];
+  mode: string;
+  url: string;
 };
 
 export type McpStatus = {
@@ -358,6 +379,10 @@ export const api = {
     mcp_port?: number | null;
     mcp_enabled?: boolean | null;
     mcp_lan?: boolean | null;
+    comfyui_url?: string | null;
+    comfyui_workflow?: string | null;
+    comfyui_prompt_node?: string | null;
+    comfyui_image_workflow?: string | null;
   }) =>
     invoke<SettingsView>("save_settings", {
       input: {
@@ -383,6 +408,10 @@ export const api = {
         mcpPort: input.mcp_port ?? null,
         mcpEnabled: input.mcp_enabled ?? null,
         mcpLan: input.mcp_lan ?? null,
+        comfyuiUrl: input.comfyui_url ?? null,
+        comfyuiWorkflow: input.comfyui_workflow ?? null,
+        comfyuiPromptNode: input.comfyui_prompt_node ?? null,
+        comfyuiImageWorkflow: input.comfyui_image_workflow ?? null,
       },
     }),
   getMcpStatus: () => invoke<McpStatus>("get_mcp_status"),
@@ -480,6 +509,9 @@ export const api = {
     invoke<NovelTree>("delete_tree_card", { novelId, nodeId }),
   getChapter: (novelId: string, nodeId: string) =>
     invoke<string>("get_chapter", { novelId, nodeId }),
+  playChapterTts: (text: string, speed?: number) =>
+    invoke<void>("play_chapter_tts", { text, speed: speed ?? 1 }),
+  stopChapterTts: () => invoke<void>("stop_chapter_tts"),
   /** 手动保存章节正文；返回字数。空内容清空文件 */
   saveChapter: (novelId: string, nodeId: string, content: string) =>
     invoke<number>("save_chapter", { novelId, nodeId, content }),
@@ -494,6 +526,21 @@ export const api = {
       novelId,
       paragraph,
       instruction,
+      model: model?.trim() || null,
+    }),
+  /** 正文续写建议：本章细纲 + 上一段 + 当前段已写 → 6 条 */
+  suggestBodyNext: (
+    novelId: string,
+    nodeId: string,
+    current: string,
+    prevParagraph: string,
+    model?: string | null,
+  ) =>
+    invoke<string[]>("suggest_body_next", {
+      novelId,
+      nodeId,
+      current,
+      prevParagraph,
       model: model?.trim() || null,
     }),
   /** 世界观等设定字段：按提示词改写/新写（current 可空） */
@@ -516,11 +563,12 @@ export const api = {
       model: model?.trim() || null,
       nodeId: nodeId?.trim() || null,
     }),
-  /** 根节点世界观 Chat：返回 assistant 说明 + worldview JSON */
+  /** 世界观 Chat：返回 assistant 说明 + worldview JSON；slot 非空时只写该卡 */
   generateWorldviewChat: (
     novelId: string,
     messages: { role: string; content: string }[],
     model?: string | null,
+    slot?: string | null,
   ) =>
     invoke<{ assistant: string; worldview: Record<string, unknown> }>(
       "generate_worldview_chat",
@@ -528,6 +576,7 @@ export const api = {
         novelId,
         messages,
         model: model?.trim() || null,
+        slot: slot?.trim() || null,
       },
     ),
   /** 故事规则 Chat：返回 assistant + 四卡 blocks JSON */
@@ -544,6 +593,16 @@ export const api = {
         model: model?.trim() || null,
       },
     ),
+  getChapterShots: (novelId: string, nodeId: string) =>
+    invoke<ChapterShot[]>("get_chapter_shots", { novelId, nodeId }),
+  setChapterShots: (novelId: string, nodeId: string, shots: ChapterShot[]) =>
+    invoke<ChapterShot[]>("set_chapter_shots", { novelId, nodeId, shots }),
+  splitChapterShots: (novelId: string, nodeId: string) =>
+    invoke<ChapterShot[]>("split_chapter_shots", { novelId, nodeId }),
+  generateShotComfyPrompts: (novelId: string, nodeId: string) =>
+    invoke<ChapterShot[]>("generate_shot_comfy_prompts", { novelId, nodeId }),
+  submitChapterShotsComfyui: (novelId: string, nodeId: string) =>
+    invoke<ComfySubmitResult>("submit_chapter_shots_comfyui", { novelId, nodeId }),
   getChapterMemory: (novelId: string, nodeId: string) =>
     invoke<string[]>("get_chapter_memory", { novelId, nodeId }),
   listAllChapterMemory: (novelId: string) =>
@@ -581,18 +640,6 @@ export const api = {
       nodeId,
       memoryNodeIds,
       userBrief,
-      model: model?.trim() || null,
-    }),
-  generateDetailedOutline: (
-    novelId: string,
-    nodeId: string,
-    userNotes?: string,
-    model?: string | null,
-  ) =>
-    invoke<string[]>("generate_detailed_outline", {
-      novelId,
-      nodeId,
-      userNotes: userNotes ?? "",
       model: model?.trim() || null,
     }),
   regenerateDetailedOutlineItem: (
@@ -711,6 +758,14 @@ export const api = {
     }),
   generateCoverPrompt: (novelId: string) =>
     invoke<string>("generate_cover_prompt", { novelId }),
+  generateCharacterSheetPrompt: (novelId: string, nodeId: string) =>
+    invoke<string>("generate_character_sheet_prompt", { novelId, nodeId }),
+  generateCharacterSheet: (novelId: string, nodeId: string, prompt: string) =>
+    invoke<{ prompt: string; image_path: string }>("generate_character_sheet", {
+      novelId,
+      nodeId,
+      prompt,
+    }),
   pickCover: () => invoke<string | null>("pick_cover"),
   setCover: (novelId: string, sourcePath: string) =>
     invoke<NovelProject>("set_cover", { novelId, sourcePath }),

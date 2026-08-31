@@ -75,6 +75,22 @@ pub struct AppSettings {
     /// 是否允许局域网访问 MCP（监听 0.0.0.0）
     #[serde(default)]
     pub mcp_lan: bool,
+    /// ComfyUI Desktop HTTP（默认 8188；部分 Desktop 为 8000）
+    #[serde(default = "default_comfyui_url")]
+    pub comfyui_url: String,
+    /// ComfyUI「导出（API）」工作流 JSON
+    #[serde(default)]
+    pub comfyui_workflow: String,
+    /// 写入提示词的节点 id；空则自动挑 MiniMax / CLIP 文本节点
+    #[serde(default)]
+    pub comfyui_prompt_node: String,
+    /// 文生图「导出（API）」工作流 JSON（人物设定图等）
+    #[serde(default)]
+    pub comfyui_image_workflow: String,
+}
+
+fn default_comfyui_url() -> String {
+    "http://127.0.0.1:8188".into()
 }
 
 fn default_mcp_port() -> u16 {
@@ -263,8 +279,8 @@ impl Default for AppSettings {
             claude_api_key: String::new(),
             grok_api_key: String::new(),
             kimi_api_key: String::new(),
-            deepseek_base_url: "https://api.deepseek.com".into(),
-            kimi_base_url: "https://api.moonshot.ai".into(),
+            deepseek_base_url: "https://api.deepseek.com/v1".into(),
+            kimi_base_url: "https://api.moonshot.ai/v1".into(),
             default_model: "deepseek-chat".into(),
             create_model: "deepseek-v4-flash".into(),
             generate_model: "deepseek-v4-flash".into(),
@@ -275,6 +291,10 @@ impl Default for AppSettings {
             mcp_port: default_mcp_port(),
             mcp_enabled: true,
             mcp_lan: false,
+            comfyui_url: default_comfyui_url(),
+            comfyui_workflow: String::new(),
+            comfyui_prompt_node: String::new(),
+            comfyui_image_workflow: String::new(),
         }
     }
 }
@@ -297,6 +317,10 @@ pub struct SettingsView {
     pub mcp_port: u16,
     pub mcp_enabled: bool,
     pub mcp_lan: bool,
+    pub comfyui_url: String,
+    pub comfyui_workflow: String,
+    pub comfyui_prompt_node: String,
+    pub comfyui_image_workflow: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -328,6 +352,14 @@ pub struct SaveSettingsInput {
     pub mcp_enabled: Option<bool>,
     #[serde(default, alias = "mcp_lan")]
     pub mcp_lan: Option<bool>,
+    #[serde(default, alias = "comfyui_url")]
+    pub comfyui_url: Option<String>,
+    #[serde(default, alias = "comfyui_workflow")]
+    pub comfyui_workflow: Option<String>,
+    #[serde(default, alias = "comfyui_prompt_node")]
+    pub comfyui_prompt_node: Option<String>,
+    #[serde(default, alias = "comfyui_image_workflow")]
+    pub comfyui_image_workflow: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -705,6 +737,9 @@ pub struct CharacterVoice {
     pub positioning: String,
     #[serde(default)]
     pub cognitive_filter: String,
+    /// 习惯动作、姿态、微表情等（写动作戏用）
+    #[serde(default)]
+    pub body_language: String,
     #[serde(default)]
     pub sentence_length: String,
     #[serde(default)]
@@ -755,6 +790,17 @@ pub struct CharacterCard {
     pub deep: CharacterDeep,
     #[serde(default)]
     pub voice: CharacterVoice,
+    /// 四向全身设定图（本地路径 + 文生图提示词）
+    #[serde(default)]
+    pub sheet: CharacterSheet,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct CharacterSheet {
+    #[serde(default)]
+    pub prompt: String,
+    #[serde(default)]
+    pub image_path: String,
 }
 
 /// 树上的知识卡：勾选公共库后，完整导入或 AI 提炼后写入 `extracted`。
@@ -880,8 +926,9 @@ pub struct FulfillmentSystemPayload {
     pub payoff_syntax: Vec<String>,
     #[serde(default)]
     pub emotional_rhythm: String,
-    #[serde(default)]
-    pub tension_circles: Vec<String>,
+    /// 张力原型。旧 JSON 键 `tension_circles` 仍可读。
+    #[serde(default, alias = "tension_circles")]
+    pub tension_archetypes: Vec<String>,
 }
 
 /// 约束红线（故事规则子卡）。
@@ -1007,8 +1054,9 @@ pub struct InfoFlowPayload {
     pub info_speed: String,
     #[serde(default)]
     pub info_barrier: String,
-    #[serde(default)]
-    pub message_truth: String,
+    /// 流言与真相。旧 JSON 键 `message_truth` 仍可读。
+    #[serde(default, alias = "message_truth")]
+    pub rumor_truth: String,
     #[serde(default)]
     pub knowledge_carrier: String,
 }

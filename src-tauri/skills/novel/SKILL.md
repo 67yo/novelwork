@@ -16,6 +16,7 @@ trigger: true
 当前选中卡片 → `get_selected_card`（返回 `node`；章/剧情卡带 `content`）。写章仍用 `get_chapter_info`。
 写/改某一章 → **生成**：`get_chapter_info` → 若 `detailed_outline` 空则 `generate_detailed_outline` → **按细纲**写全新正文 → `set_chapter_content`。**精修**（含「精修第 N 章」+自定义提示）：`get_chapter_info` + `get_chapter_content` → 在旧稿上改 → `set_chapter_content`。工作台正文栏已去掉生成/精修按钮，写章请用全局 Chat。
 只读正文 → `get_chapter_content`。
+分镜头 / MiniMax 视频：**一章 → 多镜**（`shots` 数组，通常 6–20，禁止整章 1 条）。**禁止指望应用内置 LLM**。`split_chapter_shots` / `generate_shot_comfy_prompts` 只返回正文、人物外观与已有镜头（`saved: false`），你自己拆多镜/写每镜 `comfy_prompt`，再 `set_chapter_shots` 覆盖。提交 → `submit_chapter_shots_comfyui`（POST 本机 ComfyUI Desktop `/prompt`；设置里须有 API 工作流）。只入队，不等待成片。只读 → `get_chapter_shots`。
 章节记忆（蒸馏事实，非正文）→ `get_chapter_memory` / `list_chapter_memory`；手动改 → `set_chapter_memory`；按正文 LLM 抽取 → `regenerate_chapter_memory`（需已有正文；可选 `user_notes`、`memory_node_ids` 对照去重）。写章落盘后若需更新记忆可调 `regenerate_chapter_memory`（Chat/MCP 写章路径**不自动**抽取）。
 改章标题/简纲/细纲 → `update_chapter_outline`（`outline`=简纲；`detailed_outline`=细纲分条，仅章节）。单独进化整份细纲 → `generate_detailed_outline`；只重写一条 → `regenerate_detailed_outline_item`（`index` 从 0 起）。
 补分卷 → `add_volume`（挂根；**必须**传结构化 `volume` 对象，勿写 `outline`）。读/改 → `get_volume` / `upsert_volume`（改 `volume` 字段；写作注入读返回的 `formatted`；保留剧情/知识/人物关联）。
@@ -24,9 +25,9 @@ trigger: true
 画布整列 → `layout_tree`（新建卡已自动排版，一般不必再调）。
 建书/改书计划与功能选项 → `create_novel` / `update_novel`（title、synopsis、chapter_count、word_count_min/max、`features`：题材/核心玩法/风格/关系/受众）。
 列书 → `list_novels`。
-世界观 → `get_worldview`（快照 + features + `story_rules_blocks`）；缺卡先 `ensure_worldview`（含故事规则四子卡）；LLM 生成并落盘 `generate_worldview`（`instruction`；默认 `apply=true`；**必须服从** `novel.features`）；已有 JSON 写入 `apply_worldview`（含 `story_rules_blocks` 四卡）。故事规则 → `get_story_rules` / `apply_story_rules` / `generate_story_rules`；或 `upsert_knowledge_card` 按 `slot`（`sr_surface_setting` 等）+ 结构化字段写入。
+世界观 → `get_worldview`（快照 + features + `story_rules_blocks`）；缺卡先 `ensure_worldview`（含故事规则四子卡）；LLM 生成并落盘 `generate_worldview`（`instruction`；可选 `slot` 只补该六卡之一的全部字段；默认 `apply=true`；**必须服从** `novel.features`）；已有 JSON 写入 `apply_worldview`（含 `story_rules_blocks` 四卡）。故事规则 → `get_story_rules` / `apply_story_rules` / `generate_story_rules`；或 `upsert_knowledge_card` 按 `slot`（`sr_surface_setting` 等）+ 结构化字段写入。
 
-人物卡 → `get_character_card`（完整结构化 `character` + `formatted` 全文 + `character_relations`；省略 `node_id` 列出全书人物）→ `upsert_character_card`（**深度合并**；可传 `character` 本体或 get 返回的整条 entry；也可顶层传 `world_position`/`relations`/`core_belief`/`deep`/`voice`；更新可省略 `name`；新建要 `name`；默认挂章，`link_to` 可改）。
+人物卡 → `get_character_card`（完整结构化 `character` + `formatted` 全文 + `character_relations`；**无 `personality`**；省略 `node_id` 列出全书人物）→ `upsert_character_card`（**深度合并**；可传 `character` 本体或 get 返回的整条 entry；也可顶层传 `world_position`/`relations`/`core_belief`/`deep`/`voice`/`body_language`（肢体语言写入 `voice.body_language`）；**勿传 personality**；更新可省略 `name`；新建要 `name`；默认挂章，`link_to` 可改）。
 剧情卡 → `upsert_plot_card`（`title`；`status`: active|resolved|deferred；新建默认挂章，章.right→剧情.left；`link_to` 可挂章/分卷/根）。
 树上知识卡（文风/设定，不是公共库本体）。选库后只有两条路：
 1. **完整导入** → 先 `upsert_knowledge_card` 写上 `book_ids`（或卡上已有），再 `fill_knowledge_card`（把关联公共库正文写入 `extracted`，有字数上限）。

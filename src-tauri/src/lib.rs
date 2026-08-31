@@ -3,6 +3,8 @@ mod worldview_ops;
 mod catalog;
 mod chapter_constraints;
 mod chapter_memory;
+mod chapter_shots;
+mod chapter_tts;
 mod chunk;
 mod commands;
 mod core_laws_fmt;
@@ -141,17 +143,25 @@ pub fn run() {
             commands::save_tree_json,
             commands::delete_tree_card,
             commands::get_chapter,
+            commands::play_chapter_tts,
+            commands::stop_chapter_tts,
             commands::save_chapter,
             commands::get_chapter_memory,
             commands::list_all_chapter_memory,
             commands::set_chapter_memory,
             commands::regenerate_chapter_memory,
+            commands::get_chapter_shots,
+            commands::set_chapter_shots,
+            commands::split_chapter_shots,
+            commands::generate_shot_comfy_prompts,
+            commands::submit_chapter_shots_comfyui,
             commands::preview_generate_chapter,
             commands::generate_chapter,
             commands::generate_detailed_outline,
             commands::regenerate_detailed_outline_item,
             commands::refine_chapter,
             commands::rewrite_chapter_paragraph,
+            commands::suggest_body_next,
             commands::rewrite_text_field,
             commands::generate_worldview_chat,
             commands::generate_story_rules_chat,
@@ -169,6 +179,8 @@ pub fn run() {
             commands::delete_public_knowledge_card,
             commands::add_public_knowledge_card,
             commands::generate_cover_prompt,
+            commands::generate_character_sheet_prompt,
+            commands::generate_character_sheet,
             commands::pick_cover,
             commands::set_cover,
             commands::pick_text_file,

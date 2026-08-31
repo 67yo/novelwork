@@ -242,6 +242,7 @@ pub fn format_character_full(label: &str, c: &CharacterCard) -> String {
     };
     let has_voice = !positioning.trim().is_empty()
         || !vo.cognitive_filter.trim().is_empty()
+        || !vo.body_language.trim().is_empty()
         || !vo.sentence_length.trim().is_empty()
         || !vo.pause.trim().is_empty()
         || !vo.patterns.trim().is_empty()
@@ -262,6 +263,11 @@ pub fn format_character_full(label: &str, c: &CharacterCard) -> String {
         if !vo.cognitive_filter.trim().is_empty() {
             lines.push("### 认知滤镜".into());
             lines.push(vo.cognitive_filter.trim().to_string());
+            lines.push(String::new());
+        }
+        if !vo.body_language.trim().is_empty() {
+            lines.push("### 肢体语言".into());
+            lines.push(vo.body_language.trim().to_string());
             lines.push(String::new());
         }
         let mut syn = Vec::new();
@@ -363,5 +369,20 @@ mod tests {
         assert!(md.contains("李四"));
         assert!(md.contains("账房"));
         assert!(md.contains("终将证伪"));
+    }
+
+    #[test]
+    fn formats_body_language_in_voice() {
+        let c = CharacterCard {
+            voice: CharacterVoice {
+                positioning: "少言".into(),
+                body_language: "说话时转笔".into(),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let md = format_character_full("李四", &c);
+        assert!(md.contains("### 肢体语言"));
+        assert!(md.contains("说话时转笔"));
     }
 }

@@ -63,6 +63,8 @@ export type CharacterDeep = {
 export type CharacterVoice = {
   positioning: string;
   cognitive_filter: string;
+  /** 习惯动作、姿态、微表情 */
+  body_language: string;
   sentence_length: string;
   pause: string;
   patterns: string;
@@ -79,6 +81,11 @@ export type CharacterVoice = {
  * 人物卡载荷。保留旧扁平字段以便旧树/MCP/画布摘要兼容；
  * 保存时用 syncLegacyFields 从结构化同步。
  */
+export type CharacterSheet = {
+  prompt: string;
+  image_path: string;
+};
+
 export type CharacterCard = {
   role: string;
   personality: string;
@@ -96,7 +103,19 @@ export type CharacterCard = {
   core_belief: CharacterCoreBelief;
   deep: CharacterDeep;
   voice: CharacterVoice;
+  sheet: CharacterSheet;
 };
+
+export function emptySheet(): CharacterSheet {
+  return { prompt: "", image_path: "" };
+}
+
+export function buildCharacterSheetPrompt(name: string, card: CharacterCard): string {
+  const bits = [name, card.gender, card.age, card.role, card.style, card.voice.body_language]
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return `character design turnaround sheet of one person, four full-body views left to right: front view, left profile, back view, right profile, same face outfit and proportions, full body head to toe, even spacing, plain light gray studio background, ${bits.join(", ")}, clean illustration, no text labels, no extra characters`;
+}
 
 export function emptyWorldPosition(): CharacterWorldPosition {
   return {
@@ -161,6 +180,7 @@ export function emptyVoice(): CharacterVoice {
   return {
     positioning: "",
     cognitive_filter: "",
+    body_language: "",
     sentence_length: "",
     pause: "",
     patterns: "",
@@ -191,6 +211,7 @@ export function emptyCharacterCard(): CharacterCard {
     core_belief: emptyCoreBelief(),
     deep: emptyDeep(),
     voice: emptyVoice(),
+    sheet: emptySheet(),
   };
 }
 
@@ -329,6 +350,7 @@ export function normalizeCharacterCard(
   d.voice = {
     positioning: str(vo.positioning ?? vo.声音定位 ?? raw.style),
     cognitive_filter: str(vo.cognitive_filter ?? vo.认知滤镜),
+    body_language: str(vo.body_language ?? vo.肢体语言),
     sentence_length: str(vo.sentence_length ?? syntax.sentence_length ?? syntax.长短句偏好),
     pause: str(vo.pause ?? syntax.pause ?? syntax.停顿习惯),
     patterns: str(vo.patterns ?? syntax.patterns ?? syntax.常用句式),
@@ -343,6 +365,12 @@ export function normalizeCharacterCard(
   if (!asObj(raw.voice) && d.style) {
     d.voice.positioning = d.voice.positioning || d.style;
   }
+
+  const sh = asObj(raw.sheet) ?? {};
+  d.sheet = {
+    prompt: str(sh.prompt),
+    image_path: str(sh.image_path),
+  };
 
   return d;
 }
@@ -517,6 +545,7 @@ export function formatCharacterExtracted(card: CharacterCard, trueName = ""): st
   const voiceBits =
     vo.positioning.trim() ||
     vo.cognitive_filter.trim() ||
+    vo.body_language.trim() ||
     vo.sentence_length.trim() ||
     vo.pause.trim() ||
     vo.patterns.trim() ||
@@ -531,6 +560,7 @@ export function formatCharacterExtracted(card: CharacterCard, trueName = ""): st
     lines.push(`## 角色声线`);
     push(lines, "声音定位", vo.positioning);
     push(lines, "认知滤镜", vo.cognitive_filter);
+    push(lines, "肢体语言", vo.body_language);
     {
       const bits = [
         vo.sentence_length && `长短句偏好：${vo.sentence_length}`,
@@ -689,6 +719,7 @@ export function listMissingCharacterFields(
   const vo = c.voice;
   if (!trimReq(vo.positioning)) miss.push("voicePos");
   if (!trimReq(vo.cognitive_filter)) miss.push("cognitiveFilter");
+  if (!trimReq(vo.body_language)) miss.push("bodyLanguage");
   if (!trimReq(vo.sentence_length)) miss.push("sentenceLength");
   if (!trimReq(vo.pause)) miss.push("pause");
   if (!trimReq(vo.patterns)) miss.push("patterns");
@@ -801,6 +832,7 @@ export function buildCharacterWholeAiInstruction(
   "voice": {
     "positioning": "声音定位",
     "cognitive_filter": "认知滤镜",
+    "body_language": "肢体语言",
     "sentence_length": "长短句偏好",
     "pause": "停顿习惯",
     "patterns": "常用句式",

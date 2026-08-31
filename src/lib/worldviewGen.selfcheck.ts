@@ -87,4 +87,20 @@ console.assert(
   tree.nodes.find((n) => knowledgeSlot(n) === "wv_history_culture")?.knowledge?.extracted.includes("炉神教"),
   "history culture extracted",
 );
+
+const coreBefore = tree.nodes.find((n) => knowledgeSlot(n) === "wv_core_laws")?.knowledge?.extracted ?? "";
+const onlyExistence = applyWorldviewPayload(
+  tree,
+  { existence: { premise: "只改存在基础", death: "魂散", calendar: "历", lifespan: "1", disease_reproduction: "无" } },
+  t,
+);
+console.assert(onlyExistence, "slot-only apply");
+console.assert(
+  (tree.nodes.find((n) => knowledgeSlot(n) === "wv_core_laws")?.knowledge?.extracted ?? "") === coreBefore,
+  "slot-only must not wipe other cards",
+);
+console.assert(
+  tree.nodes.find((n) => knowledgeSlot(n) === "wv_existence")?.knowledge?.extracted.includes("只改存在基础"),
+  "existence filled",
+);
 console.log("worldviewGen.selfcheck ok");

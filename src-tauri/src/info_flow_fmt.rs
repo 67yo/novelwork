@@ -37,7 +37,7 @@ pub fn format_info_flow_full(n: &TreeNode) -> String {
         push_section(&mut lines, "一句话立意", &inf.premise);
         push_section(&mut lines, "信息速度", &inf.info_speed);
         push_section(&mut lines, "信息壁垒", &inf.info_barrier);
-        push_section(&mut lines, "留言与真相", &inf.message_truth);
+        push_section(&mut lines, "流言与真相", &inf.rumor_truth);
         push_section(&mut lines, "知识载体", &inf.knowledge_carrier);
     }
     let out = lines.join("\n").trim().to_string();
@@ -108,13 +108,23 @@ mod tests {
             premise: "真相滞后于流言".into(),
             info_speed: "驿马一日百里".into(),
             info_barrier: "边境查禁".into(),
-            message_truth: "口信失真".into(),
+            rumor_truth: "口信失真".into(),
             knowledge_carrier: "竹简与口述".into(),
         }));
         let body = format_info_flow_full(&n);
         assert!(body.contains("驿马"));
         assert!(body.contains("真相滞后"));
         assert!(body.contains("## 信息壁垒"));
+        assert!(body.contains("## 流言与真相"));
         assert!(!body.contains("stale"));
+    }
+
+    #[test]
+    fn rumor_truth_reads_legacy_message_truth_key() {
+        let p: InfoFlowPayload = serde_json::from_value(serde_json::json!({
+            "message_truth": "旧键"
+        }))
+        .unwrap();
+        assert_eq!(p.rumor_truth, "旧键");
     }
 }

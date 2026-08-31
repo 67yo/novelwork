@@ -41,8 +41,11 @@ export type FulfillmentSystemData = {
   ending_texture: string;
   payoff_syntax: string[];
   emotional_rhythm: string;
-  tension_circles: string[];
+  tension_archetypes: string[];
 };
+
+/** 读盘/LLM 可能仍带旧键 tension_circles。 */
+type FulfillmentSystemInput = Partial<FulfillmentSystemData> & { tension_circles?: string[] };
 
 export type ConstraintRedlinesData = {
   premise: string;
@@ -192,9 +195,9 @@ export const STORY_RULES_BLOCK_FIELDS: Record<StoryRulesBlockSlot, StoryRulesFie
       kind: "text",
     },
     {
-      key: "tension_circles",
-      labelKey: "workspace.sr.tensionCircles",
-      phKey: "workspace.sr.tensionCirclesPh",
+      key: "tension_archetypes",
+      labelKey: "workspace.sr.tensionArchetypes",
+      phKey: "workspace.sr.tensionArchetypesPh",
       kind: "list",
     },
   ],
@@ -272,7 +275,7 @@ export function emptyFulfillmentSystem(): FulfillmentSystemData {
     ending_texture: "",
     payoff_syntax: [""],
     emotional_rhythm: "",
-    tension_circles: [""],
+    tension_archetypes: [""],
   };
 }
 
@@ -312,7 +315,7 @@ export function normalizeStoryEngine(raw: Partial<StoryEngineData> | null | unde
 }
 
 export function normalizeFulfillmentSystem(
-  raw: Partial<FulfillmentSystemData> | null | undefined,
+  raw: FulfillmentSystemInput | null | undefined,
 ): FulfillmentSystemData {
   const d = emptyFulfillmentSystem();
   if (!raw) return d;
@@ -321,7 +324,7 @@ export function normalizeFulfillmentSystem(
   d.ending_texture = raw.ending_texture ?? "";
   d.payoff_syntax = normList(raw.payoff_syntax);
   d.emotional_rhythm = raw.emotional_rhythm ?? "";
-  d.tension_circles = normList(raw.tension_circles);
+  d.tension_archetypes = normList(raw.tension_archetypes ?? raw.tension_circles);
   return d;
 }
 
@@ -341,7 +344,7 @@ export function normalizeStoryRulesBlock(
 ): StoryRulesBlockData {
   if (slot === "sr_surface_setting") return normalizeSurfaceSetting(raw as SurfaceSettingData);
   if (slot === "sr_story_engine") return normalizeStoryEngine(raw as StoryEngineData);
-  if (slot === "sr_fulfillment_system") return normalizeFulfillmentSystem(raw as FulfillmentSystemData);
+  if (slot === "sr_fulfillment_system") return normalizeFulfillmentSystem(raw as FulfillmentSystemInput);
   return normalizeConstraintRedlines(raw as ConstraintRedlinesData);
 }
 
@@ -418,7 +421,7 @@ export function formatFulfillmentSystemExtracted(d: FulfillmentSystemData): stri
   pushSection(lines, "结局质感", d.ending_texture);
   pushListSection(lines, "兑现语法", d.payoff_syntax);
   pushSection(lines, "情绪节奏", d.emotional_rhythm);
-  pushListSection(lines, "张力原型", d.tension_circles);
+  pushListSection(lines, "张力原型", d.tension_archetypes);
   return lines.join("\n").trim();
 }
 

@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from "vue";
 import { Loader2, Plus, Sparkles, Trash2 } from "@lucide/vue";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import type { CharacterCard } from "@/lib/characterCard";
 import {
   CHARACTER_WHOLE_AI_FIELD_LABEL,
+  buildCharacterSheetPrompt,
   buildCharacterWholeAiInstruction,
   emptyRelation,
   formatCharacterExtracted,
@@ -93,6 +95,55 @@ const pendingAi = ref<AiTarget | null>(null);
 const aiPrompt = ref("");
 const aiBusy = ref(false);
 const aiError = ref("");
+const sheetPromptBusy = ref(false);
+const sheetBusy = ref(false);
+const sheetError = ref("");
+const sheetUrl = computed(() =>
+  draft.sheet.image_path.trim() ? convertFileSrc(draft.sheet.image_path.trim()) : "",
+);
+
+async function draftSheetPrompt() {
+  if (sheetPromptBusy.value || sheetBusy.value) return;
+  sheetError.value = "";
+  if (!props.characterId) {
+    draft.sheet.prompt = buildCharacterSheetPrompt(draftName.value || props.name, draft);
+    commit();
+    return;
+  }
+  sheetPromptBusy.value = true;
+  try {
+    draft.sheet.prompt = await api.generateCharacterSheetPrompt(props.novelId, props.characterId);
+    commit();
+  } catch {
+    draft.sheet.prompt = buildCharacterSheetPrompt(draftName.value || props.name, draft);
+    commit();
+  } finally {
+    sheetPromptBusy.value = false;
+  }
+}
+
+async function generateSheet() {
+  if (sheetBusy.value || !props.characterId) {
+    sheetError.value = t("character.sheetNeedSave");
+    return;
+  }
+  sheetBusy.value = true;
+  sheetError.value = "";
+  try {
+    const r = await api.generateCharacterSheet(
+      props.novelId,
+      props.characterId,
+      draft.sheet.prompt,
+    );
+    draft.sheet.prompt = r.prompt;
+    draft.sheet.image_path = r.image_path;
+    commit();
+  } catch (e) {
+    sheetError.value = String(e);
+  } finally {
+    sheetBusy.value = false;
+  }
+}
 
 const aiFieldLabel = computed(() => {
   const p = pendingAi.value;
@@ -163,6 +214,7 @@ function missingFieldLabels(ids: string[]): string {
     arcChoice: "character.arcChoice",
     voicePos: "character.voicePos",
     cognitiveFilter: "character.cognitiveFilter",
+    bodyLanguage: "character.bodyLanguage",
     sentenceLength: "character.sentenceLength",
     pause: "character.pause",
     patterns: "character.patterns",
@@ -638,6 +690,17 @@ function applyFieldRewrite(path: string, text: string) {
           @change="commit"
         />
       </div>
+      <div>
+        <label class="mb-1 block text-[11px] text-muted-foreground">{{ t("character.bodyLanguage") }}</label>
+        <Textarea
+          v-model="draft.voice.body_language"
+          :class="fieldClass"
+          rows="2"
+          :placeholder="t('character.bodyLanguagePh')"
+          :disabled="busy"
+          @change="commit"
+        />
+      </div>
       <div class="space-y-2">
         <p class="text-[11px] font-medium">{{ t("character.syntax") }}</p>
         <Input v-model="draft.voice.sentence_length" class="h-8" :placeholder="t('character.sentenceLength')" :disabled="busy" @change="commit" />
@@ -675,6 +738,61 @@ function applyFieldRewrite(path: string, text: string) {
           :disabled="busy"
           @change="commit"
         />
+      </div>
+    </section>
+
+    <section class="space-y-3 rounded-md border bg-muted/20 p-3">
+      <p class="text-xs font-medium text-muted-foreground">{{ t("character.sheetTitle") }}</p>
+      <p class="text-[11px] text-muted-foreground">{{ t("character.sheetHint") }}</p>
+      <div class="overflow-hidden rounded-md border bg-background">
+        <img
+          v-if="sheetUrl"
+          :src="sheetUrl"
+          :alt="t('character.sheetTitle')"
+          class="max-h-72 w-full object-contain"
+        />
+        <div
+          v-else
+          class="grid grid-cols-4 divide-x text-center text-[10px] text-muted-foreground"
+        >
+          <div class="flex h-24 items-center justify-center">{{ t("character.sheetFront") }}</div>
+          <div class="flex h-24 items-center justify-center">{{ t("character.sheetLeft") }}</div>
+          <div class="flex h-24 items-center justify-center">{{ t("character.sheetBack") }}</div>
+          <div class="flex h-24 items-center justify-center">{{ t("character.sheetRight") }}</div>
+        </div>
+      </div>
+      <div>
+        <label class="mb-1 block text-[11px] text-muted-foreground">{{ t("character.sheetPrompt") }}</label>
+        <Textarea
+          v-model="draft.sheet.prompt"
+          :class="fieldClass"
+          rows="3"
+          :placeholder="t('character.sheetPromptPh')"
+          :disabled="busy || sheetBusy"
+          @change="commit"
+        />
+      </div>
+      <p v-if="sheetError" class="text-xs text-destructive">{{ sheetError }}</p>
+      <div class="flex flex-wrap justify-end gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          :disabled="busy || sheetBusy || sheetPromptBusy"
+          @click="draftSheetPrompt"
+        >
+          <Loader2 v-if="sheetPromptBusy" class="mr-1 h-3.5 w-3.5 animate-spin" />
+          {{ t("character.sheetDraft") }}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          :disabled="busy || sheetBusy || sheetPromptBusy"
+          @click="generateSheet"
+        >
+          <Loader2 v-if="sheetBusy" class="mr-1 h-3.5 w-3.5 animate-spin" />
+          {{ sheetBusy ? t("character.sheetBusy") : t("character.sheetGenerate") }}
+        </Button>
       </div>
     </section>
 

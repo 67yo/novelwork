@@ -18,4 +18,11 @@ if ((wrong as { premise: string }).premise === "第三人称限知") {
   throw new Error("normalizeStoryRulesBlock on full knowledge must not accidentally flatten");
 }
 
+const fromLegacy = normalizeStoryRulesBlock("sr_fulfillment_system", {
+  tension_circles: ["旧键"],
+});
+if ((fromLegacy as { tension_archetypes: string[] }).tension_archetypes[0] !== "旧键") {
+  throw new Error("legacy tension_circles should map to tension_archetypes");
+}
+
 console.log("storyRules.selfcheck ok");

@@ -160,6 +160,10 @@ const leftHandleClass = computed(
 const rightHandleClass = computed(
   () => sideHandleClass.value ?? "!h-2.5 !w-2.5 !border-2 !border-sky-600 !bg-sky-500",
 );
+
+const characterDisplayName = computed(
+  () => n.value?.label?.trim() || t("workspace.newCharacter"),
+);
 </script>
 
 <template>
@@ -198,38 +202,44 @@ const rightHandleClass = computed(
       :title="kind === 'character' ? t('workspace.role') : kind === 'knowledge' ? t('workspace.knowledgeCard') : t('workspace.plotCard')"
     />
 
-    <template v-if="kind === 'character' && n?.character">
-      <div class="mb-1 flex items-center justify-between gap-2">
-        <span class="flex min-w-0 items-center gap-1.5 text-sm font-semibold leading-tight">
-          <component
-            v-if="kindIcon"
-            :is="kindIcon.icon"
-            class="h-3.5 w-3.5 shrink-0"
-            :class="kindIcon.class"
-          />
-          <span class="truncate">{{ n.label }}</span>
-        </span>
-        <span class="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px]">{{ n.character.gender || "—" }}</span>
+    <template v-if="kind === 'character'">
+      <div class="mb-1 flex min-w-0 items-center gap-1.5 text-sm font-semibold leading-tight">
+        <component
+          v-if="kindIcon"
+          :is="kindIcon.icon"
+          class="h-3.5 w-3.5 shrink-0"
+          :class="kindIcon.class"
+        />
+        <span class="min-w-0 flex-1 truncate">{{ characterDisplayName }}</span>
+      </div>
+      <div v-if="n?.character" class="mb-1 flex flex-wrap gap-1">
+        <span
+          v-if="n.character.gender"
+          class="max-w-full truncate rounded bg-muted px-1.5 py-0.5 text-[10px]"
+        >{{ n.character.gender }}</span>
         <span
           v-if="n.character.age"
-          class="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px]"
+          class="max-w-full truncate rounded bg-muted px-1.5 py-0.5 text-[10px]"
         >{{ n.character.age }}</span>
-      </div>
-      <div class="mb-1 flex flex-wrap gap-1">
-        <span class="rounded bg-amber-100 px-1 text-[10px] text-amber-900">{{
-          n.character.world_position?.social_role || n.character.role
-        }}</span>
-        <span class="rounded bg-muted px-1 text-[10px]">{{
-          n.character.world_position?.faction || n.character.alignment
-        }}</span>
+        <span
+          v-if="n.character.world_position?.social_role || n.character.role"
+          class="max-w-full truncate rounded bg-amber-100 px-1 text-[10px] text-amber-900"
+        >{{ n.character.world_position?.social_role || n.character.role }}</span>
+        <span
+          v-if="n.character.world_position?.faction || n.character.alignment"
+          class="max-w-full truncate rounded bg-muted px-1 text-[10px]"
+        >{{ n.character.world_position?.faction || n.character.alignment }}</span>
       </div>
       <p
-        v-if="n.character.aliases"
+        v-if="n?.character?.aliases"
         class="mb-1 line-clamp-1 text-[10px] text-muted-foreground"
       >
         {{ n.character.aliases }}
       </p>
-      <p class="line-clamp-2 text-[11px] leading-snug text-muted-foreground">
+      <p
+        v-if="n?.character"
+        class="line-clamp-2 text-[11px] leading-snug text-muted-foreground"
+      >
         {{
           n.character.core_belief?.belief ||
           n.character.personality ||

@@ -19,6 +19,35 @@ const FAN: &[(&str, &str)] = &[
 ];
 const STORY_RULES: (&str, &str) = ("story_rules", "故事规则");
 
+/// `wv_core_laws` 或 `core_laws` → `core_laws`。非六卡返回 None。
+pub fn worldview_json_key_for_slot(slot: &str) -> Option<&'static str> {
+    let s = slot.trim();
+    if s.is_empty() {
+        return None;
+    }
+    for (fan_slot, _) in FAN {
+        let json_key = fan_slot.strip_prefix("wv_").unwrap_or(fan_slot);
+        if s == *fan_slot || s == json_key {
+            return Some(json_key);
+        }
+    }
+    None
+}
+
+/// 只保留 worldview 里的一张卡，避免模型漏写其它键时覆盖整套。
+pub fn keep_worldview_slot(wv: Value, json_key: &str) -> Value {
+    match wv {
+        Value::Object(mut map) => {
+            if let Some(v) = map.remove(json_key) {
+                serde_json::json!({ json_key: v })
+            } else {
+                serde_json::json!({ json_key: Value::Object(map) })
+            }
+        }
+        other => serde_json::json!({ json_key: other }),
+    }
+}
+
 fn empty_payload(slot: &str) -> KnowledgeCardPayload {
     KnowledgeCardPayload {
         book_ids: vec![],
@@ -314,7 +343,7 @@ mod tests {
                 .iter()
                 .filter(|n| matches!(n.kind, NodeKind::Knowledge))
                 .count(),
-            7
+            11
         );
         let wv = serde_json::json!({
             "core_laws": {
@@ -336,5 +365,58 @@ mod tests {
             rules.knowledge.as_ref().unwrap().extracted.trim(),
             "禁止说教"
         );
+
+        apply_worldview_payload(
+            &mut tree,
+            &serde_json::json!({
+                "existence": {
+                    "premise": "死亡不可逆",
+                    "death": "魂散",
+                    "calendar": "帝国历",
+                    "lifespan": "80",
+                    "disease_reproduction": "雾季瘟疫"
+                }
+            }),
+        )
+        .unwrap();
+        let core2 = find_by_slot(&tree, "wv_core_laws").unwrap();
+        assert!(
+            core2
+                .knowledge
+                .as_ref()
+                .unwrap()
+                .extracted
+                .contains("力量有价"),
+            "slot-only apply must not wipe other cards"
+        );
+        let ex = find_by_slot(&tree, "wv_existence").unwrap();
+        assert!(
+            ex.knowledge
+                .as_ref()
+                .unwrap()
+                .extracted
+                .contains("死亡不可逆")
+        );
+    }
+
+    #[test]
+    fn slot_key_and_keep_filter() {
+        assert_eq!(worldview_json_key_for_slot("wv_existence"), Some("existence"));
+        assert_eq!(worldview_json_key_for_slot("core_laws"), Some("core_laws"));
+        assert_eq!(worldview_json_key_for_slot("story_rules"), None);
+        let kept = keep_worldview_slot(
+            serde_json::json!({
+                "existence": {"premise": "a"},
+                "core_laws": {"premise": "b"}
+            }),
+            "existence",
+        );
+        assert_eq!(kept["existence"]["premise"], "a");
+        assert!(kept.get("core_laws").is_none());
+        let wrapped = keep_worldview_slot(
+            serde_json::json!({"premise": "x", "death": "y"}),
+            "existence",
+        );
+        assert_eq!(wrapped["existence"]["premise"], "x");
     }
 }

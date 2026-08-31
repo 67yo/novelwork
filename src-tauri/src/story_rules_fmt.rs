@@ -117,7 +117,7 @@ pub fn format_fulfillment_system(d: &FulfillmentSystemPayload) -> String {
     push_section(&mut lines, "结局质感", &d.ending_texture);
     push_list(&mut lines, "兑现语法", &d.payoff_syntax);
     push_section(&mut lines, "情绪节奏", &d.emotional_rhythm);
-    push_list(&mut lines, "张力原型", &d.tension_circles);
+    push_list(&mut lines, "张力原型", &d.tension_archetypes);
     lines.join("\n").trim().to_string()
 }
 
@@ -225,4 +225,18 @@ pub fn format_story_rules_full(tree: &NovelTree, rules: &TreeNode) -> String {
         .as_ref()
         .map(|k| k.extracted.trim().to_string())
         .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::models::FulfillmentSystemPayload;
+
+    #[test]
+    fn tension_archetypes_reads_legacy_circles_key() {
+        let p: FulfillmentSystemPayload = serde_json::from_value(serde_json::json!({
+            "tension_circles": ["旧键"]
+        }))
+        .unwrap();
+        assert_eq!(p.tension_archetypes, vec!["旧键"]);
+    }
 }

@@ -32,6 +32,7 @@ import {
   type PublicKnowledgeCard,
   type NovelProject,
   type NovelTree,
+  type ChapterShot,
   type TreeEdge,
   type TreeNode,
 } from "@/lib/api";
@@ -135,6 +136,7 @@ import {
 import {
   BookOpen,
   Brain,
+  Clapperboard,
   ChevronDown,
   ChevronUp,
   Copy,
@@ -142,10 +144,13 @@ import {
   Layers,
   LayoutGrid,
   Library,
+  Lightbulb,
   ListTree,
   Loader2,
   PanelBottom,
   PanelRight,
+  Pause,
+  Play,
   Plus,
   RefreshCw,
   Share2,
@@ -156,7 +161,12 @@ import {
   X,
 } from "@lucide/vue";
 import { renderChapterMd, stripChapterMeta } from "@/lib/md";
-import { replaceBodyLine, splitBodyLines } from "@/lib/chapterParagraphs";
+import {
+  bodySuggestContext,
+  insertBodySuggestion,
+  replaceBodyLine,
+  splitBodyLines,
+} from "@/lib/chapterParagraphs";
 import {
   applyAutoLayout,
   chapterInheritedKnowledgeIds,
@@ -232,6 +242,20 @@ const bodyEditing = ref(false);
 const bodyDraft = ref("");
 const bodySaveBusy = ref(false);
 const bodyAutosaved = ref(false);
+/** idle | loading（下模型/推理）| playing */
+const bodyTts = ref<"idle" | "loading" | "playing">("idle");
+/** v1.1 语速为整数 1–3 */
+const ttsSpeed = useLocalStorage("novework.ttsSpeed", 1);
+type TtsDownloadProgress = {
+  phase?: string;
+  file?: string;
+  fileIndex?: number;
+  fileTotal?: number;
+  bytesDownloaded?: number;
+  bytesTotal?: number | null;
+  percent?: number;
+};
+const bodyTtsDownload = ref<TtsDownloadProgress | null>(null);
 const bodyTaEl = ref<HTMLTextAreaElement | null>(null);
 const bodyMirrorEl = ref<HTMLElement | null>(null);
 const bodyScrollTop = ref(0);
@@ -242,6 +266,12 @@ const pendingParaRewrite = ref<{ index: number; text: string } | null>(null);
 const paraRewriteNote = ref("");
 const paraRewriteBusy = ref(false);
 const paraRewriteError = ref("");
+const bodySuggestOn = useLocalStorage("novework.bodySuggestOn", false);
+const bodySuggestBusy = ref(false);
+const bodySuggestError = ref("");
+const bodySuggestItems = ref<string[]>([]);
+let bodySuggestInsertAt = 0;
+let bodySuggestGen = 0;
 /** 上次成功落盘的正文快照；用于跳过无变更的自动保存 */
 let lastSavedBody = "";
 /** 画布浮动导航显隐（章节 / 人物 / 剧情 / 知识） */
@@ -279,6 +309,25 @@ const pendingMemoryDelete = ref<{
   itemIndex: number | null;
 } | null>(null);
 const deletingMemory = ref(false);
+const shotsPanelOpen = ref(false);
+const shots = ref<ChapterShot[]>([]);
+const shotsBusy = ref(false);
+const shotsError = ref("");
+const shotsNotice = ref("");
+const shotsTotalSec = computed(() =>
+  shots.value.reduce((sum, s) => sum + (Number(s.duration_sec) || 0), 0),
+);
+const shotsPreviewTitle = computed(() =>
+  shotsTotalSec.value > 0
+    ? t("workspace.shotsPreviewWithTotal", { n: shotsTotalSec.value })
+    : t("workspace.shotsPreview"),
+);
+const shotsPanelHeading = computed(() =>
+  shotsTotalSec.value > 0
+    ? t("workspace.shotsPanelTitleWithTotal", { n: shotsTotalSec.value })
+    : t("workspace.shotsPanelTitle"),
+);
+const pendingShotSplit = ref<1 | 2 | null>(null);
 const busy = ref("");
 const notice = ref("");
 /** 章节 AI 任务等待：当前阶段与进度 */
@@ -305,6 +354,9 @@ const chapterTick = ref(0);
 let unlistenChapterProgress: (() => void) | null = null;
 let unlistenChapterTokens: (() => void) | null = null;
 let unlistenTreeChanged: (() => void) | null = null;
+let unlistenChapterTts: (() => void) | null = null;
+let unlistenChapterTtsDownload: (() => void) | null = null;
+let unlistenChapterTtsChunk: (() => void) | null = null;
 /** AI 任务结束后的结束语（左侧底部独立区） */
 const chapterResultNotice = ref("");
 const coverBusy = ref(false);
@@ -598,8 +650,10 @@ async function selectNode(n: TreeNode) {
   }
   if (n.kind === "chapter") {
     enterChapterBodyEdit();
+    void loadChapterShots(n.id, false);
   } else {
     leaveChapterBodyEdit();
+    shots.value = [];
   }
 }
 
@@ -609,11 +663,13 @@ function enterChapterBodyEdit() {
     leaveChapterBodyEdit();
     return;
   }
+  closeBodySuggest();
   bodyDraft.value = stripChapterMeta(chapterMd.value);
   bodyEditing.value = true;
   bodyAutosaved.value = false;
   lastSavedBody = bodyDraft.value;
   nextTick(() => refreshParaGutters());
+  if (bodySuggestOn.value) scheduleBodySuggest();
 }
 
 function leaveChapterBodyEdit() {
@@ -624,6 +680,8 @@ function leaveChapterBodyEdit() {
   paraGutterTops.value = [];
   hoveredParaIndex.value = null;
   pendingParaRewrite.value = null;
+  closeBodySuggest();
+  void stopChapterTts();
 }
 
 const bodyLines = computed(() => splitBodyLines(bodyDraft.value));
@@ -714,12 +772,23 @@ watch(bodyDraft, () => {
   bodyAutosaved.value = false;
   scheduleBodyAutosave();
   nextTick(() => refreshParaGutters());
+  if (!bodySuggestOn.value) return;
+  if (bodySuggestBusy.value) {
+    bodySuggestGen += 1;
+    void api.chatCancel(props.id).catch(() => {});
+  }
+  scheduleBodySuggest();
 });
 
 
 function openParaRewrite(index: number) {
   const line = bodyLines.value[index];
   if (!line?.trim() || paraRewriteBusy.value) return;
+  if (bodySuggestBusy.value) {
+    bodySuggestGen += 1;
+    void api.chatCancel(props.id).catch(() => {});
+    bodySuggestBusy.value = false;
+  }
   pendingParaRewrite.value = { index, text: line };
   paraRewriteNote.value = "";
   paraRewriteError.value = "";
@@ -752,6 +821,68 @@ async function confirmParaRewrite() {
   }
 }
 
+function closeBodySuggest() {
+  bodySuggestGen += 1;
+  if (bodySuggestBusy.value) {
+    void api.chatCancel(props.id).catch(() => {});
+  }
+  bodySuggestBusy.value = false;
+  bodySuggestError.value = "";
+  bodySuggestItems.value = [];
+}
+
+function toggleBodySuggest() {
+  bodySuggestOn.value = !bodySuggestOn.value;
+  if (!bodySuggestOn.value) {
+    closeBodySuggest();
+    return;
+  }
+  scheduleBodySuggest();
+}
+
+const scheduleBodySuggest = useDebounceFn(() => {
+  if (!bodySuggestOn.value) return;
+  void requestBodySuggest();
+}, 200);
+
+async function requestBodySuggest() {
+  if (!bodySuggestOn.value || !bodyEditing.value || paraRewriteBusy.value || pendingParaRewrite.value) return;
+  if (!selected.value || selected.value.kind !== "chapter") return;
+  const ta = bodyTaEl.value;
+  bodySuggestInsertAt = ta?.selectionStart ?? bodyDraft.value.length;
+  const { current, prevParagraph } = bodySuggestContext(bodyDraft.value, bodySuggestInsertAt);
+  if (bodySuggestBusy.value) {
+    bodySuggestGen += 1;
+    void api.chatCancel(props.id).catch(() => {});
+  }
+  const gen = ++bodySuggestGen;
+  const nodeId = selected.value.id;
+  bodySuggestBusy.value = true;
+  bodySuggestError.value = "";
+  try {
+    const items = await api.suggestBodyNext(props.id, nodeId, current, prevParagraph);
+    if (gen !== bodySuggestGen) return;
+    bodySuggestItems.value = items;
+  } catch (e) {
+    if (gen !== bodySuggestGen) return;
+    bodySuggestError.value = String(e);
+  } finally {
+    if (gen === bodySuggestGen) bodySuggestBusy.value = false;
+  }
+}
+
+function applyBodySuggest(item: string) {
+  if (!item.trim()) return;
+  const { text, cursor } = insertBodySuggestion(bodyDraft.value, bodySuggestInsertAt, item);
+  bodyDraft.value = text;
+  bodySuggestInsertAt = cursor;
+  nextTick(() => {
+    const ta = bodyTaEl.value;
+    if (!ta) return;
+    ta.focus();
+    ta.setSelectionRange(cursor, cursor);
+  });
+}
 
 function onNodeClick(ev: NodeMouseEvent) {
   const data = ev.node.data as TreeNode;
@@ -1123,6 +1254,26 @@ onMounted(async () => {
     if (ev.payload.novelId !== props.id) return;
     void reloadTreeFromDisk();
   });
+  unlistenChapterTts = await listen<{ status: string }>("chapter-tts-status", (ev) => {
+    if (ev.payload.status === "playing") {
+      bodyTtsDownload.value = null;
+      bodyTts.value = "playing";
+    }
+    if (ev.payload.status === "idle") bodyTts.value = "idle";
+  });
+  unlistenChapterTtsDownload = await listen<TtsDownloadProgress>("chapter-tts-download", (ev) => {
+    const p = ev.payload;
+    if (p?.phase === "done") {
+      bodyTtsDownload.value = null;
+      return;
+    }
+    if (bodyTts.value === "idle") return;
+    bodyTtsDownload.value = p ?? null;
+  });
+  unlistenChapterTtsChunk = await listen<{ start: number; end: number }>("chapter-tts-chunk", (ev) => {
+    if (bodyTts.value === "idle") return;
+    selectBodyTtsRange(ev.payload.start, ev.payload.end);
+  });
   window.addEventListener("resize", refreshParaGutters);
 });
 onUnmounted(() => {
@@ -1132,8 +1283,15 @@ onUnmounted(() => {
   unlistenChapterTokens = null;
   unlistenTreeChanged?.();
   unlistenTreeChanged = null;
+  unlistenChapterTts?.();
+  unlistenChapterTts = null;
+  unlistenChapterTtsDownload?.();
+  unlistenChapterTtsDownload = null;
+  unlistenChapterTtsChunk?.();
+  unlistenChapterTtsChunk = null;
   window.removeEventListener("resize", refreshParaGutters);
   stopChapterTick();
+  void stopChapterTts();
   // Only clear if still this novel — late clear must not wipe the next workspace.
   void api.setWorkspaceSelection(props.id, null);
 });
@@ -1238,6 +1396,118 @@ function closeChapterMemory() {
   memoryPanelOpen.value = false;
   memoryRefPicks.value = [];
   memoryRefSelectedIds.value = [];
+}
+
+async function loadChapterShots(nodeId: string, showBusy = true) {
+  if (showBusy) shotsBusy.value = true;
+  try {
+    shots.value = await api.getChapterShots(props.id, nodeId);
+  } catch (e) {
+    if (showBusy) shotsError.value = String(e);
+    else shots.value = [];
+  } finally {
+    if (showBusy) shotsBusy.value = false;
+  }
+}
+
+async function openChapterShots() {
+  if (!selected.value || selected.value.kind !== "chapter") return;
+  shotsPanelOpen.value = true;
+  shotsError.value = "";
+  shotsNotice.value = "";
+  await loadChapterShots(selected.value.id, true);
+}
+
+function closeChapterShots() {
+  if (busy.value === "split-shots" || busy.value === "shot-prompts" || busy.value === "submit-comfy") {
+    return;
+  }
+  shotsPanelOpen.value = false;
+  pendingShotSplit.value = null;
+}
+
+function requestSplitShots() {
+  if (shots.value.length) {
+    pendingShotSplit.value = 1;
+    return;
+  }
+  void runSplitShots();
+}
+
+async function runSplitShots() {
+  if (!selected.value || selected.value.kind !== "chapter" || !!busy.value) return;
+  pendingShotSplit.value = null;
+  busy.value = "split-shots";
+  shotsError.value = "";
+  shotsNotice.value = "";
+  try {
+    shots.value = await api.splitChapterShots(props.id, selected.value.id);
+  } catch (e) {
+    shotsError.value = String(e);
+  } finally {
+    busy.value = "";
+  }
+}
+
+async function runShotPrompts() {
+  if (!selected.value || selected.value.kind !== "chapter" || !!busy.value) return;
+  busy.value = "shot-prompts";
+  shotsError.value = "";
+  shotsNotice.value = "";
+  try {
+    shots.value = await api.generateShotComfyPrompts(props.id, selected.value.id);
+  } catch (e) {
+    shotsError.value = String(e);
+  } finally {
+    busy.value = "";
+  }
+}
+
+async function persistShots() {
+  if (!selected.value || selected.value.kind !== "chapter") return;
+  try {
+    shots.value = await api.setChapterShots(props.id, selected.value.id, shots.value);
+  } catch (e) {
+    shotsError.value = String(e);
+  }
+}
+
+function addShot() {
+  shots.value.push({
+    id: "",
+    order: shots.value.length + 1,
+    action: "",
+    camera: "",
+    dialogue: "",
+    duration_sec: 8,
+    comfy_prompt: "",
+  });
+  void persistShots();
+}
+
+function removeShot(i: number) {
+  shots.value.splice(i, 1);
+  void persistShots();
+}
+
+async function runSubmitComfy() {
+  if (!selected.value || selected.value.kind !== "chapter" || !!busy.value) return;
+  await persistShots();
+  busy.value = "submit-comfy";
+  shotsError.value = "";
+  shotsNotice.value = "";
+  try {
+    const r = await api.submitChapterShotsComfyui(props.id, selected.value.id);
+    shotsNotice.value = t("workspace.shotsSubmitted", {
+      n: String(r.queued),
+      mode: r.mode,
+      url: r.url,
+    });
+  } catch (e) {
+    shotsError.value = String(e);
+  } finally {
+    busy.value = "";
+  }
 }
 
 async function regenerateChapterMemory() {
@@ -1382,6 +1652,95 @@ async function stopChapter() {
     await api.chatCancel(props.id);
   } catch {
     /* ignore */
+  }
+}
+
+let chapterTtsReq = 0;
+
+async function stopChapterTts() {
+  chapterTtsReq += 1;
+  bodyTts.value = "idle";
+  bodyTtsDownload.value = null;
+  try {
+    await api.stopChapterTts();
+  } catch {
+    /* ignore */
+  }
+}
+
+function formatTtsMb(n: number) {
+  return (n / (1024 * 1024)).toFixed(1);
+}
+
+const ttsDownloadLabel = computed(() => {
+  const p = bodyTtsDownload.value;
+  if (!p?.phase) return "";
+  if (p.phase === "download") return t("workspace.readAloudModelDownloading");
+  if (p.phase === "load") return t("workspace.readAloudModelLoading");
+  return "";
+});
+
+const ttsDownloadPercent = computed(() =>
+  Math.max(0, Math.min(100, Math.round(bodyTtsDownload.value?.percent ?? 0))),
+);
+
+const ttsDownloadDetail = computed(() => {
+  const p = bodyTtsDownload.value;
+  if (!p || p.phase !== "download" || !p.file) return "";
+  const file = p.file.split("/").pop() || p.file;
+  if (p.bytesTotal && p.bytesTotal > 0) {
+    return t("workspace.readAloudModelBytes", {
+      file,
+      done: formatTtsMb(p.bytesDownloaded ?? 0),
+      total: formatTtsMb(p.bytesTotal),
+    });
+  }
+  return t("workspace.readAloudModelFile", {
+    file,
+    index: p.fileIndex ?? 0,
+    total: p.fileTotal ?? 0,
+  });
+});
+
+function selectBodyTtsRange(start: number, end: number) {
+  const ta = bodyTaEl.value;
+  if (!ta || !bodyEditing.value) return;
+  const len = ta.value.length;
+  const s = Math.max(0, Math.min(Math.floor(start), len));
+  const e = Math.max(s, Math.min(Math.floor(end), len));
+  if (e <= s) return;
+  ta.focus({ preventScroll: true });
+  ta.setSelectionRange(s, e);
+  const sh = ta.scrollHeight;
+  const ch = ta.clientHeight;
+  if (sh > ch) {
+    const y = (s / Math.max(len, 1)) * sh - ch * 0.35;
+    ta.scrollTop = Math.max(0, Math.min(sh - ch, y));
+    bodyScrollTop.value = ta.scrollTop;
+  }
+}
+
+async function toggleChapterTts() {
+  if (bodyTts.value !== "idle") {
+    await stopChapterTts();
+    return;
+  }
+  const md = bodyEditing.value ? bodyDraft.value : stripChapterMeta(chapterMd.value);
+  if (!md.trim()) {
+    notice.value = t("workspace.readAloudEmpty");
+    return;
+  }
+  const req = ++chapterTtsReq;
+  bodyTts.value = "loading";
+  try {
+    await api.playChapterTts(md, Number(ttsSpeed.value) || 1);
+  } catch (e) {
+    if (req === chapterTtsReq) notice.value = String(e);
+  } finally {
+    if (req === chapterTtsReq) {
+      bodyTts.value = "idle";
+      bodyTtsDownload.value = null;
+    }
   }
 }
 
@@ -1995,12 +2354,14 @@ const rootWorldviewComplete = computed(() =>
 );
 const worldviewBusy = ref(false);
 const worldviewChatOpen = ref(false);
+const worldviewChatSlot = ref<string | null>(null);
 const storyRulesChatOpen = ref(false);
 
 const titleI18n = (key: string) => t(key as Parameters<typeof t>[0]);
 
-async function openWorldviewChat() {
+async function openWorldviewChat(slot?: string | null) {
   if (!tree.value || worldviewBusy.value) return;
+  const slotId = typeof slot === "string" && slot.trim() ? slot.trim() : null;
   worldviewBusy.value = true;
   try {
     const before = missingWorldviewSlots(tree.value).length;
@@ -2017,6 +2378,7 @@ async function openWorldviewChat() {
       await nextTick();
       void fitView({ padding: 0.18, duration: 280 });
     }
+    worldviewChatSlot.value = slotId;
     worldviewChatOpen.value = true;
   } catch (e) {
     notice.value = String(e);
@@ -2024,6 +2386,10 @@ async function openWorldviewChat() {
     worldviewBusy.value = false;
   }
 }
+
+provide("novework.openWorldviewSlotChat", (slot: string) => {
+  void openWorldviewChat(slot);
+});
 
 async function onWorldviewChatApplied() {
   if (!tree.value) return;
@@ -2930,13 +3296,10 @@ async function persistSelectedCardText() {
   syncFlowFromTree();
 }
 
-const detailedOutlineBusy = ref(false);
 /** 单条 AI 重写中的下标；null 表示未在重写 */
 const detailedOutlineItemBusy = ref<number | null>(null);
-/** 细纲 AI：先填提示再生成（整份 / 单条） */
-const pendingDetailedOutlineAi = ref<
-  { kind: "all" } | { kind: "item"; index: number; text: string } | null
->(null);
+/** 细纲单条 AI：先填提示再重写 */
+const pendingDetailedOutlineAi = ref<{ index: number; text: string } | null>(null);
 const detailedOutlineAiNote = ref("");
 const detailedOutlineAiError = ref("");
 
@@ -2953,7 +3316,7 @@ function addDetailedOutlineItem() {
 
 async function removeDetailedOutlineItem(i: number) {
   if (!selected.value || selected.value.kind !== "chapter" || chapterBusy.value) return;
-  if (detailedOutlineBusy.value || detailedOutlineItemBusy.value !== null) return;
+  if (detailedOutlineItemBusy.value !== null) return;
   const list = ensureSelectedDetailedOutline();
   list.splice(i, 1);
   await persistSelectedCardText();
@@ -2961,7 +3324,7 @@ async function removeDetailedOutlineItem(i: number) {
 
 async function moveDetailedOutlineItem(i: number, dir: -1 | 1) {
   if (!selected.value || selected.value.kind !== "chapter" || chapterBusy.value) return;
-  if (detailedOutlineBusy.value || detailedOutlineItemBusy.value !== null) return;
+  if (detailedOutlineItemBusy.value !== null) return;
   const list = ensureSelectedDetailedOutline();
   const j = i + dir;
   if (j < 0 || j >= list.length) return;
@@ -2971,21 +3334,9 @@ async function moveDetailedOutlineItem(i: number, dir: -1 | 1) {
   await persistSelectedCardText();
 }
 
-function openDetailedOutlineAiAll() {
-  if (!selected.value || selected.value.kind !== "chapter" || chapterBusy.value) return;
-  if (detailedOutlineBusy.value || detailedOutlineItemBusy.value !== null) return;
-  if (!(selected.value.outline ?? "").trim()) {
-    notice.value = t("workspace.chapterDetailedOutlineNeedBrief");
-    return;
-  }
-  pendingDetailedOutlineAi.value = { kind: "all" };
-  detailedOutlineAiNote.value = "";
-  detailedOutlineAiError.value = "";
-}
-
 function openDetailedOutlineAiItem(i: number) {
   if (!selected.value || selected.value.kind !== "chapter" || chapterBusy.value) return;
-  if (detailedOutlineBusy.value || detailedOutlineItemBusy.value !== null) return;
+  if (detailedOutlineItemBusy.value !== null) return;
   if (!(selected.value.outline ?? "").trim()) {
     notice.value = t("workspace.chapterDetailedOutlineNeedBrief");
     return;
@@ -2993,7 +3344,6 @@ function openDetailedOutlineAiItem(i: number) {
   const list = ensureSelectedDetailedOutline();
   if (i < 0 || i >= list.length) return;
   pendingDetailedOutlineAi.value = {
-    kind: "item",
     index: i,
     text: list[i] ?? "",
   };
@@ -3002,7 +3352,7 @@ function openDetailedOutlineAiItem(i: number) {
 }
 
 function cancelDetailedOutlineAi() {
-  if (detailedOutlineBusy.value || detailedOutlineItemBusy.value !== null) return;
+  if (detailedOutlineItemBusy.value !== null) return;
   pendingDetailedOutlineAi.value = null;
   detailedOutlineAiNote.value = "";
   detailedOutlineAiError.value = "";
@@ -3011,48 +3361,32 @@ function cancelDetailedOutlineAi() {
 async function confirmDetailedOutlineAi() {
   const pending = pendingDetailedOutlineAi.value;
   if (!pending || !tree.value || !selected.value || selected.value.kind !== "chapter") return;
-  if (chapterBusy.value || detailedOutlineBusy.value || detailedOutlineItemBusy.value !== null) return;
+  if (chapterBusy.value || detailedOutlineItemBusy.value !== null) return;
   const notes = detailedOutlineAiNote.value.trim();
   notice.value = "";
   detailedOutlineAiError.value = "";
   try {
     await persistSelectedCardText();
-    if (pending.kind === "all") {
-      detailedOutlineBusy.value = true;
-      const items = await api.generateDetailedOutline(
-        props.id,
-        selected.value.id,
-        notes,
-      );
-      selected.value.detailed_outline = [...items];
-      const n = tree.value.nodes.find((x) => x.id === selected.value!.id);
-      if (n) n.detailed_outline = [...items];
-      tree.value = await persistTree(tree.value);
-      syncFlowFromTree();
-      notice.value = t("workspace.chapterDetailedOutlineDone");
-    } else {
-      detailedOutlineItemBusy.value = pending.index;
-      const list = ensureSelectedDetailedOutline();
-      const item = await api.regenerateDetailedOutlineItem(
-        props.id,
-        selected.value.id,
-        pending.index,
-        notes,
-      );
-      list[pending.index] = item;
-      const n = tree.value.nodes.find((x) => x.id === selected.value!.id);
-      if (n) n.detailed_outline = [...list];
-      selected.value.detailed_outline = [...list];
-      tree.value = await persistTree(tree.value);
-      syncFlowFromTree();
-      notice.value = t("workspace.chapterDetailedOutlineItemDone");
-    }
+    detailedOutlineItemBusy.value = pending.index;
+    const list = ensureSelectedDetailedOutline();
+    const item = await api.regenerateDetailedOutlineItem(
+      props.id,
+      selected.value.id,
+      pending.index,
+      notes,
+    );
+    list[pending.index] = item;
+    const n = tree.value.nodes.find((x) => x.id === selected.value!.id);
+    if (n) n.detailed_outline = [...list];
+    selected.value.detailed_outline = [...list];
+    tree.value = await persistTree(tree.value);
+    syncFlowFromTree();
+    notice.value = t("workspace.chapterDetailedOutlineItemDone");
     pendingDetailedOutlineAi.value = null;
     detailedOutlineAiNote.value = "";
   } catch (e) {
     detailedOutlineAiError.value = String(e);
   } finally {
-    detailedOutlineBusy.value = false;
     detailedOutlineItemBusy.value = null;
   }
 }
@@ -3464,7 +3798,10 @@ const chapterBusy = computed(
     busy.value === "gen-plots" ||
     busy.value === "regen-memory" ||
     busy.value === "gen-cards" ||
-    busy.value === "consolidate-plots",
+    busy.value === "consolidate-plots" ||
+    busy.value === "split-shots" ||
+    busy.value === "shot-prompts" ||
+    busy.value === "submit-comfy",
 );
 /** 三区尺寸比例跨会话记住 */
 const leftW = useLocalStorage("novework.workspaceLeftW", 380);
@@ -3584,8 +3921,8 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                 @change="persistSelectedCardText"
               />
             </div>
-            <div v-else class="min-w-0 flex-1 text-sm font-medium">
-              {{ selected?.label ?? t("workspace.selectNode") }}
+            <div v-else class="min-w-0 flex-1 truncate text-sm font-medium">
+              {{ selected?.label?.trim() || t("workspace.selectNode") }}
             </div>
             <Button
               v-if="canDeleteSelectedCard"
@@ -4367,21 +4704,9 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                   <Button
                     type="button"
                     size="sm"
-                    variant="ghost"
-                    class="h-7 px-2 text-xs"
-                    :disabled="chapterBusy || detailedOutlineBusy || detailedOutlineItemBusy !== null || !(selected?.outline ?? '').trim()"
-                    @click="openDetailedOutlineAiAll"
-                  >
-                    <Loader2 v-if="detailedOutlineBusy" class="mr-1 h-3.5 w-3.5 animate-spin" />
-                    <Sparkles v-else class="mr-1 h-3.5 w-3.5" />
-                    {{ t("workspace.chapterDetailedOutlineAi") }}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
                     variant="outline"
                     class="h-7 px-2 text-xs"
-                    :disabled="chapterBusy || detailedOutlineBusy || detailedOutlineItemBusy !== null"
+                    :disabled="chapterBusy || detailedOutlineItemBusy !== null"
                     @click="addDetailedOutlineItem"
                   >
                     <Plus class="mr-1 h-3.5 w-3.5" />
@@ -4407,7 +4732,6 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                         :title="t('workspace.chapterDetailedOutlineMoveUp')"
                         :disabled="
                           chapterBusy ||
-                          detailedOutlineBusy ||
                           detailedOutlineItemBusy !== null ||
                           i === 0
                         "
@@ -4424,7 +4748,6 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                         :title="t('workspace.chapterDetailedOutlineMoveDown')"
                         :disabled="
                           chapterBusy ||
-                          detailedOutlineBusy ||
                           detailedOutlineItemBusy !== null ||
                           i >= (selected!.detailed_outline!.length - 1)
                         "
@@ -4438,7 +4761,7 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                       rows="1"
                       class="min-h-8 flex-1 field-sizing-content resize-y py-1.5 text-xs"
                       :placeholder="t('workspace.chapterDetailedOutlinePh')"
-                      :disabled="chapterBusy || detailedOutlineBusy || detailedOutlineItemBusy !== null"
+                      :disabled="chapterBusy || detailedOutlineItemBusy !== null"
                       @update:model-value="(v) => { if (selected?.detailed_outline) selected.detailed_outline[i] = String(v); }"
                       @change="persistSelectedCardText"
                     />
@@ -4451,7 +4774,6 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                         :title="t('workspace.chapterDetailedOutlineItemAi')"
                         :disabled="
                           chapterBusy ||
-                          detailedOutlineBusy ||
                           detailedOutlineItemBusy !== null ||
                           !(selected?.outline ?? '').trim()
                         "
@@ -4468,7 +4790,7 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                         size="icon"
                         variant="ghost"
                         class="h-7 w-7"
-                        :disabled="chapterBusy || detailedOutlineBusy || detailedOutlineItemBusy !== null"
+                        :disabled="chapterBusy || detailedOutlineItemBusy !== null"
                         @click="removeDetailedOutlineItem(i)"
                       >
                         <Trash2 class="h-3.5 w-3.5" />
@@ -4787,12 +5109,75 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                 size="sm"
                 variant="outline"
                 class="px-2"
+                :class="bodySuggestOn ? 'border-amber-500/70 bg-amber-50 text-amber-900 dark:bg-amber-950 dark:text-amber-100' : ''"
+                :aria-pressed="bodySuggestOn"
+                :title="bodySuggestOn ? t('workspace.bodySuggestOn') : t('workspace.bodySuggestOff')"
+                :aria-label="bodySuggestOn ? t('workspace.bodySuggestOn') : t('workspace.bodySuggestOff')"
+                @click="toggleBodySuggest"
+              >
+                <Loader2 v-if="bodySuggestBusy" class="h-3.5 w-3.5 animate-spin" />
+                <Lightbulb v-else class="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                class="px-2"
+                :disabled="
+                  bodyTts === 'idle' &&
+                  (!!busy || !(bodyEditing ? bodyDraft : chapterMd).trim())
+                "
+                :title="
+                  bodyTts === 'idle'
+                    ? t('workspace.readAloud')
+                    : t('workspace.readAloudStop')
+                "
+                :aria-label="
+                  bodyTts === 'idle'
+                    ? t('workspace.readAloud')
+                    : t('workspace.readAloudStop')
+                "
+                @click="toggleChapterTts"
+              >
+                <Loader2 v-if="bodyTts === 'loading'" class="h-3.5 w-3.5 animate-spin" />
+                <Pause v-else-if="bodyTts === 'playing'" class="h-3.5 w-3.5" />
+                <Play v-else class="h-3.5 w-3.5" />
+              </Button>
+              <select
+                v-model.number="ttsSpeed"
+                class="h-8 rounded-md border border-input bg-background px-1.5 text-xs outline-none hover:bg-muted disabled:opacity-50"
+                :disabled="bodyTts !== 'idle'"
+                :title="t('workspace.readAloudSpeed')"
+                :aria-label="t('workspace.readAloudSpeed')"
+              >
+                <option :value="1">1×</option>
+                <option :value="2">2×</option>
+                <option :value="3">3×</option>
+              </select>
+              <Button
+                size="sm"
+                variant="outline"
+                class="px-2"
                 :disabled="!!busy || !(bodyEditing ? bodyDraft : chapterMd)"
                 :title="t('workspace.copyBody')"
                 :aria-label="t('workspace.copyBody')"
                 @click="copyChapterBody"
               >
                 <Copy class="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                class="px-2"
+                :disabled="shotsBusy || (chapterBusy && !['split-shots','shot-prompts','submit-comfy'].includes(busy))"
+                :title="shotsPreviewTitle"
+                :aria-label="shotsPreviewTitle"
+                @click="openChapterShots"
+              >
+                <Loader2
+                  v-if="shotsBusy || ['split-shots','shot-prompts','submit-comfy'].includes(busy)"
+                  class="h-3.5 w-3.5 animate-spin"
+                />
+                <Clapperboard v-else class="h-3.5 w-3.5" />
               </Button>
               <Button
                 size="sm"
@@ -4854,6 +5239,7 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
             <p class="text-xs text-muted-foreground">{{ t("workspace.bodyDockPickChapter") }}</p>
           </template>
           <template v-else>
+            <div class="flex min-h-0 w-full flex-1 flex-col gap-2">
             <div
               class="relative flex min-h-0 w-full flex-1"
               @pointermove="onBodyEditorPointerMove"
@@ -4904,6 +5290,31 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                 </div>
               </div>
             </div>
+            <div
+              v-if="bodySuggestOn"
+              class="max-h-36 shrink-0 overflow-y-auto rounded-md border bg-muted/20 px-2 py-1.5"
+            >
+              <p class="mb-1 text-[11px] text-muted-foreground">{{ t("workspace.bodySuggestHint") }}</p>
+              <div v-if="bodySuggestBusy && !bodySuggestItems.length" class="flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 class="h-3.5 w-3.5 animate-spin" />
+                {{ t("workspace.bodySuggestBusy") }}
+              </div>
+              <p v-else-if="bodySuggestError && !bodySuggestItems.length" class="text-xs text-destructive">
+                {{ bodySuggestError }}
+              </p>
+              <ol v-else-if="bodySuggestItems.length" class="space-y-1">
+                <li v-for="(item, i) in bodySuggestItems" :key="i">
+                  <button
+                    type="button"
+                    class="w-full rounded px-1.5 py-1 text-left text-xs leading-relaxed hover:bg-muted"
+                    @click="applyBodySuggest(item)"
+                  >
+                    {{ i + 1 }}. {{ item }}
+                  </button>
+                </li>
+              </ol>
+            </div>
+            </div>
           </template>
         </div>
         <div
@@ -4913,6 +5324,36 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
           <span class="text-[11px] text-muted-foreground">{{
             bodySaveBusy ? t("workspace.bodySaving") : t("workspace.bodyAutosaved")
           }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 朗读模型下载进度 -->
+    <div
+      v-if="bodyTtsDownload"
+      class="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+    >
+      <div class="w-full max-w-md rounded-lg border bg-background p-5 shadow-lg" role="dialog" aria-modal="true">
+        <h2 class="text-base font-semibold">{{ t("workspace.readAloudModelTitle") }}</h2>
+        <div class="mt-3 space-y-2">
+          <div class="flex items-center justify-between gap-2 text-sm">
+            <span>{{ ttsDownloadLabel }}</span>
+            <span class="tabular-nums text-muted-foreground">{{ ttsDownloadPercent }}%</span>
+          </div>
+          <div class="h-2 overflow-hidden rounded-full bg-muted">
+            <div
+              class="h-full rounded-full bg-primary transition-[width] duration-200"
+              :style="{ width: `${ttsDownloadPercent}%` }"
+            />
+          </div>
+          <p v-if="ttsDownloadDetail" class="truncate text-xs text-muted-foreground">
+            {{ ttsDownloadDetail }}
+          </p>
+        </div>
+        <div class="mt-4 flex justify-end">
+          <Button size="sm" variant="outline" @click="stopChapterTts">
+            {{ t("novels.cancel") }}
+          </Button>
         </div>
       </div>
     </div>
@@ -4954,7 +5395,7 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
       </div>
     </div>
 
-    <!-- 细纲 AI（整份 / 单条）提示词 -->
+    <!-- 细纲单条 AI 重写提示词 -->
     <div
       v-if="pendingDetailedOutlineAi"
       class="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
@@ -4962,21 +5403,12 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
     >
       <div class="w-full max-w-md rounded-lg border bg-background p-5 shadow-lg" role="dialog" aria-modal="true">
         <h2 class="text-base font-semibold">
-          {{
-            pendingDetailedOutlineAi.kind === "all"
-              ? t("workspace.chapterDetailedOutlineAiTitle")
-              : t("workspace.chapterDetailedOutlineItemAiTitle")
-          }}
+          {{ t("workspace.chapterDetailedOutlineItemAiTitle") }}
         </h2>
         <p class="mt-2 text-xs text-muted-foreground">
-          {{
-            pendingDetailedOutlineAi.kind === "all"
-              ? t("workspace.chapterDetailedOutlineAiHint")
-              : t("workspace.chapterDetailedOutlineItemAiHint")
-          }}
+          {{ t("workspace.chapterDetailedOutlineItemAiHint") }}
         </p>
         <p
-          v-if="pendingDetailedOutlineAi.kind === 'item'"
           class="mt-2 max-h-28 overflow-y-auto whitespace-pre-wrap rounded border bg-muted/40 px-2 py-1.5 text-xs text-muted-foreground"
         >
           {{ pendingDetailedOutlineAi.text.trim() || t("workspace.chapterDetailedOutlineItemAiEmpty") }}
@@ -4988,35 +5420,31 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
           v-model="detailedOutlineAiNote"
           rows="4"
           class="mt-1 text-sm"
-          :disabled="detailedOutlineBusy || detailedOutlineItemBusy !== null"
-          :placeholder="
-            pendingDetailedOutlineAi.kind === 'all'
-              ? t('workspace.chapterDetailedOutlineAiNotePh')
-              : t('workspace.chapterDetailedOutlineItemAiNotePh')
-          "
+          :disabled="detailedOutlineItemBusy !== null"
+          :placeholder="t('workspace.chapterDetailedOutlineItemAiNotePh')"
         />
         <p v-if="detailedOutlineAiError" class="mt-2 text-xs text-destructive">{{ detailedOutlineAiError }}</p>
         <div class="mt-4 flex justify-end gap-2">
           <Button
             size="sm"
             variant="outline"
-            :disabled="detailedOutlineBusy || detailedOutlineItemBusy !== null"
+            :disabled="detailedOutlineItemBusy !== null"
             @click="cancelDetailedOutlineAi"
           >
             {{ t("novels.cancel") }}
           </Button>
           <Button
             size="sm"
-            :disabled="detailedOutlineBusy || detailedOutlineItemBusy !== null"
+            :disabled="detailedOutlineItemBusy !== null"
             @click="confirmDetailedOutlineAi"
           >
             <Loader2
-              v-if="detailedOutlineBusy || detailedOutlineItemBusy !== null"
+              v-if="detailedOutlineItemBusy !== null"
               class="mr-1.5 h-3.5 w-3.5 animate-spin"
             />
             <Sparkles v-else class="mr-1.5 h-3.5 w-3.5" />
             {{
-              detailedOutlineBusy || detailedOutlineItemBusy !== null
+              detailedOutlineItemBusy !== null
                 ? t("workspace.chapterDetailedOutlineAiBusy")
                 : t("workspace.chapterDetailedOutlineAiRun")
             }}
@@ -5108,6 +5536,7 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
     <WorldviewChatPanel
       :open="worldviewChatOpen"
       :novel-id="props.id"
+      :slot="worldviewChatSlot"
       @close="worldviewChatOpen = false"
       @applied="onWorldviewChatApplied"
     />
@@ -5166,6 +5595,160 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
         <div class="mt-4 flex justify-end">
           <Button variant="outline" :disabled="publicPickBusy" @click="publicPickOpen = false">
             {{ t("novels.cancel") }}
+          </Button>
+        </div>
+      </div>
+    </div>
+
+    <div
+      v-if="shotsPanelOpen"
+      class="fixed inset-0 z-50 flex items-stretch justify-center bg-black/30 p-0 sm:p-4 md:p-6"
+      @click.self="closeChapterShots"
+      @keydown.escape="closeChapterShots"
+    >
+      <div
+        class="flex h-full w-full max-w-4xl flex-col border bg-background shadow-lg sm:h-[min(92vh,860px)] sm:rounded-lg"
+        role="dialog"
+        aria-modal="true"
+        :aria-label="shotsPanelHeading"
+      >
+        <div class="flex shrink-0 items-center justify-between gap-2 border-b px-4 py-3">
+          <div class="min-w-0">
+            <h2 class="truncate text-sm font-semibold">{{ shotsPanelHeading }}</h2>
+            <p class="truncate text-xs text-muted-foreground">{{ selected?.label }}</p>
+          </div>
+          <Button size="sm" variant="ghost" class="px-2" @click="closeChapterShots">
+            <X class="h-4 w-4" />
+          </Button>
+        </div>
+        <div class="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+          <p class="text-xs text-muted-foreground">{{ t("workspace.shotsHint") }}</p>
+          <p v-if="shotsError" class="text-xs text-destructive">{{ shotsError }}</p>
+          <p v-if="shotsNotice" class="text-xs text-primary">{{ shotsNotice }}</p>
+          <div v-if="shotsBusy" class="flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 class="h-3.5 w-3.5 animate-spin" />
+            {{ t("workspace.shotsBusy") }}
+          </div>
+          <p v-else-if="!shots.length" class="text-xs text-muted-foreground">
+            {{ t("workspace.shotsEmpty") }}
+          </p>
+          <article
+            v-for="(s, i) in shots"
+            :key="s.id || i"
+            class="space-y-2 rounded-md border p-3"
+          >
+            <div class="flex items-center justify-between gap-2">
+              <p class="text-xs font-medium text-muted-foreground">#{{ s.order || i + 1 }}</p>
+              <Button
+                size="sm"
+                variant="ghost"
+                class="h-7 px-2 text-muted-foreground"
+                :disabled="!!busy"
+                :aria-label="t('workspace.shotsRemove')"
+                @click="removeShot(i)"
+              >
+                <Trash2 class="h-3.5 w-3.5" />
+              </Button>
+            </div>
+            <label class="block text-xs text-muted-foreground">{{ t("workspace.shotsAction") }}</label>
+            <textarea
+              v-model="s.action"
+              rows="2"
+              class="w-full rounded-md border bg-background px-2 py-1 text-sm"
+              @change="persistShots"
+            />
+            <div class="grid gap-2 sm:grid-cols-2">
+              <div>
+                <label class="block text-xs text-muted-foreground">{{ t("workspace.shotsCamera") }}</label>
+                <input
+                  v-model="s.camera"
+                  class="mt-0.5 h-8 w-full rounded-md border px-2 text-sm"
+                  @change="persistShots"
+                />
+              </div>
+              <div>
+                <label class="block text-xs text-muted-foreground">{{ t("workspace.shotsDuration") }}</label>
+                <input
+                  v-model.number="s.duration_sec"
+                  type="number"
+                  min="5"
+                  max="15"
+                  class="mt-0.5 h-8 w-24 rounded-md border px-2 text-sm"
+                  @change="persistShots"
+                />
+              </div>
+            </div>
+            <label class="block text-xs text-muted-foreground">{{ t("workspace.shotsDialogue") }}</label>
+            <input
+              v-model="s.dialogue"
+              class="h-8 w-full rounded-md border px-2 text-sm"
+              @change="persistShots"
+            />
+            <label class="block text-xs text-muted-foreground">{{ t("workspace.shotsPrompt") }}</label>
+            <textarea
+              v-model="s.comfy_prompt"
+              rows="3"
+              class="w-full rounded-md border bg-background px-2 py-1 font-mono text-xs"
+              @change="persistShots"
+            />
+          </article>
+        </div>
+        <div class="flex shrink-0 flex-wrap justify-end gap-2 border-t px-4 py-3">
+          <Button size="sm" variant="ghost" :disabled="!!busy" @click="addShot">
+            <Plus class="mr-1 h-3.5 w-3.5" />
+            {{ t("workspace.shotsAdd") }}
+          </Button>
+          <Button size="sm" variant="outline" :disabled="!!busy" @click="requestSplitShots">
+            <Loader2 v-if="busy === 'split-shots'" class="mr-1.5 h-3.5 w-3.5 animate-spin" />
+            {{ t("workspace.shotsSplit") }}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            :disabled="!!busy || !shots.length"
+            @click="runShotPrompts"
+          >
+            <Loader2 v-if="busy === 'shot-prompts'" class="mr-1.5 h-3.5 w-3.5 animate-spin" />
+            {{ t("workspace.shotsPrompts") }}
+          </Button>
+          <Button
+            size="sm"
+            :disabled="!!busy || !shots.length"
+            @click="runSubmitComfy"
+          >
+            <Loader2 v-if="busy === 'submit-comfy'" class="mr-1.5 h-3.5 w-3.5 animate-spin" />
+            {{ t("workspace.shotsSubmit") }}
+          </Button>
+        </div>
+      </div>
+    </div>
+
+    <div
+      v-if="pendingShotSplit"
+      class="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+      @click.self="pendingShotSplit = null"
+    >
+      <div class="w-full max-w-md rounded-lg border bg-background p-4 shadow-lg" role="dialog">
+        <h3 class="text-sm font-semibold">{{ t("workspace.shotsOverwriteTitle") }}</h3>
+        <p class="mt-2 text-sm text-muted-foreground">{{ t("workspace.shotsOverwriteBody") }}</p>
+        <div class="mt-4 flex justify-end gap-2">
+          <Button size="sm" variant="ghost" @click="pendingShotSplit = null">
+            {{ t("workspace.shotsCancel") }}
+          </Button>
+          <Button
+            v-if="pendingShotSplit === 1"
+            size="sm"
+            @click="pendingShotSplit = 2"
+          >
+            {{ t("workspace.shotsOverwriteContinue") }}
+          </Button>
+          <Button
+            v-else
+            size="sm"
+            variant="destructive"
+            @click="runSplitShots"
+          >
+            {{ t("workspace.shotsOverwriteConfirm") }}
           </Button>
         </div>
       </div>

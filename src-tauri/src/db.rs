@@ -227,7 +227,7 @@ impl Db {
                     id: uuid::Uuid::new_v4().to_string(),
                     label: "ChatGPT".into(),
                     protocol: "openai".into(),
-                    base_url: "https://api.openai.com".into(),
+                    base_url: "https://api.openai.com/v1".into(),
                     api_key: chatgpt_api_key.clone(),
                     models: vec![],
                 });
@@ -238,7 +238,7 @@ impl Db {
                     id: uuid::Uuid::new_v4().to_string(),
                     label: "Grok".into(),
                     protocol: "openai".into(),
-                    base_url: "https://api.x.ai".into(),
+                    base_url: "https://api.x.ai/v1".into(),
                     api_key: grok_api_key.clone(),
                     models: vec![],
                 });
@@ -282,6 +282,17 @@ impl Db {
                 get("mcp_lan", if d.mcp_lan { "1" } else { "0" }).as_str(),
                 "1" | "true" | "True" | "yes"
             ),
+            comfyui_url: {
+                let u = get("comfyui_url", &d.comfyui_url);
+                if u.trim().is_empty() {
+                    d.comfyui_url
+                } else {
+                    u
+                }
+            },
+            comfyui_workflow: get("comfyui_workflow", &d.comfyui_workflow),
+            comfyui_prompt_node: get("comfyui_prompt_node", &d.comfyui_prompt_node),
+            comfyui_image_workflow: get("comfyui_image_workflow", &d.comfyui_image_workflow),
         };
         // migrate legacy plaintext → encrypted on read
         let needs_migrate = migrated
@@ -365,6 +376,10 @@ impl Db {
                 if s.mcp_enabled { "1" } else { "0" }.to_string(),
             ),
             ("mcp_lan", if s.mcp_lan { "1" } else { "0" }.to_string()),
+            ("comfyui_url", s.comfyui_url.clone()),
+            ("comfyui_workflow", s.comfyui_workflow.clone()),
+            ("comfyui_prompt_node", s.comfyui_prompt_node.clone()),
+            ("comfyui_image_workflow", s.comfyui_image_workflow.clone()),
         ];
         let conn = self.conn.lock().unwrap();
         for (k, v) in pairs {

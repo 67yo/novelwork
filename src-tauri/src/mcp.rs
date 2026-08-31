@@ -7,7 +7,9 @@ use crate::commands::{
     fill_knowledge_card_inner, generate_detailed_outline_inner, generate_story_rules_chat_inner,
     generate_worldview_chat_inner, get_chapter, get_chapter_memory_inner, get_tree,
     ingest_knowledge_source, knowledge_attach_host, last_chapter_anchor,
-    list_all_chapter_memory_inner, regenerate_chapter_memory_inner,
+    list_all_chapter_memory_inner,
+    regenerate_chapter_memory_inner, shot_character_looks,
+    submit_chapter_shots_comfyui_inner,
     regenerate_detailed_outline_item_inner, resolve_link_host, save_chapter,
     save_tree, set_chapter_memory_inner, upsert_public_knowledge_card_inner,
     worldview_snapshot_value, ChatTurn,
@@ -363,12 +365,13 @@ fn tool_defs() -> Vec<Tool> {
         ),
         tool(
             "generate_worldview",
-            "LLM-generate full worldview from instruction. Always respects novel.features (题材/核心玩法/风格/关系/受众). Default apply=true writes cards; set apply=false to only return JSON.",
+            "LLM-generate worldview from instruction. Always respects novel.features (题材/核心玩法/风格/关系/受众). Optional slot fills only that one of the six cards (all fields). Default apply=true writes cards; set apply=false to only return JSON.",
             json!({
                 "type":"object",
                 "properties":{
                     "novel_id":{"type":"string","description":"省略则用工作台当前选中"},
                     "instruction":{"type":"string","description":"用户指令：随机全新 / 按现有扩展 / 具体种子"},
+                    "slot":{"type":"string","description":"可选。只补一张卡的全部字段：wv_core_laws / wv_spatiotemporal / wv_social_power / wv_history_culture / wv_existence / wv_info_flow（也可写 JSON 键 core_laws 等）。省略则生成全部六卡 + story_rules。"},
                     "apply":{"type":"boolean","default":true},
                     "model":{"type":"string"}
                 },
@@ -616,6 +619,63 @@ fn tool_defs() -> Vec<Tool> {
             }),
         ),
         tool(
+            "get_chapter_shots",
+            "Read storyboard shots for a chapter (action/camera/dialogue/duration/comfy_prompt). Empty if not split yet.",
+            json!({
+                "type":"object",
+                "properties":{
+                    "novel_id":{"type":"string","description":"省略则用工作台当前选中"},
+                    "node_id":{"type":"string","description":"省略则用工作台当前选中"}
+                }
+            }),
+        ),
+        tool(
+            "set_chapter_shots",
+            "Overwrite the chapter's shot list (one chapter → many shots; empty array clears). Fields: action, camera, dialogue, duration_sec (5–15), comfy_prompt.",
+            json!({
+                "type":"object",
+                "properties":{
+                    "novel_id":{"type":"string","description":"省略则用工作台当前选中"},
+                    "node_id":{"type":"string","description":"省略则用工作台当前选中"},
+                    "shots":{"type":"array","items":{"type":"object"}}
+                },
+                "required":["shots"]
+            }),
+        ),
+        tool(
+            "split_chapter_shots",
+            "Return chapter body + character looks + shot schema. Does NOT call the app LLM — you split shots yourself, then overwrite with set_chapter_shots. Requires non-empty body.",
+            json!({
+                "type":"object",
+                "properties":{
+                    "novel_id":{"type":"string","description":"省略则用工作台当前选中"},
+                    "node_id":{"type":"string","description":"省略则用工作台当前选中"}
+                }
+            }),
+        ),
+        tool(
+            "generate_shot_comfy_prompts",
+            "Return existing shots + character looks for MiniMax/ComfyUI prompts. Does NOT call the app LLM — you write each comfy_prompt, then set_chapter_shots.",
+            json!({
+                "type":"object",
+                "properties":{
+                    "novel_id":{"type":"string","description":"省略则用工作台当前选中"},
+                    "node_id":{"type":"string","description":"省略则用工作台当前选中"}
+                }
+            }),
+        ),
+        tool(
+            "submit_chapter_shots_comfyui",
+            "Queue shot prompts to local ComfyUI Desktop (POST /prompt). Needs settings.comfyui_url + API-format workflow (MiniMax text/prompt node). Returns prompt_ids; does not wait for video files.",
+            json!({
+                "type":"object",
+                "properties":{
+                    "novel_id":{"type":"string","description":"省略则用工作台当前选中"},
+                    "node_id":{"type":"string","description":"省略则用工作台当前选中"}
+                }
+            }),
+        ),
+        tool(
             "regenerate_chapter_memory",
             "LLM extract memory from chapter body and overwrite. Requires non-empty body on disk.",
             json!({
@@ -630,7 +690,7 @@ fn tool_defs() -> Vec<Tool> {
         ),
         tool(
             "get_character_card",
-            "Read one or all character cards with full structured fields plus formatted markdown (same as writing injection). Omit node_id to list every character in the novel.",
+            "Read one or all character cards with full structured fields plus formatted markdown (same as writing injection). Character JSON has no personality; use deep + voice.body_language. Omit node_id to list every character in the novel.",
             json!({
                 "type":"object",
                 "properties":{
@@ -641,7 +701,7 @@ fn tool_defs() -> Vec<Tool> {
         ),
         tool(
             "upsert_character_card",
-            "Create or update a character card (partial merge: omitted structured fields kept). Pass flat fields and/or `character` (CharacterCard or get_character_card entry). Top-level world_position / relations / core_belief / deep / voice also merge. Updates: name optional if node_id set. New cards hang on a chapter unless link_to set.",
+            "Create or update a character card (partial merge: omitted structured fields kept). Pass flat fields and/or `character` (CharacterCard or get_character_card entry). Top-level world_position / relations / core_belief / deep / voice / body_language also merge. Do not send personality (legacy; ignored). Updates: name optional if node_id set. New cards hang on a chapter unless link_to set.",
             json!({
                 "type":"object",
                 "properties":{
@@ -654,13 +714,13 @@ fn tool_defs() -> Vec<Tool> {
                     "relations":{"type":"array","items":{"type":"object"}},
                     "core_belief":{"type":"object"},
                     "deep":{"type":"object"},
-                    "voice":{"type":"object"},
+                    "voice":{"type":"object","description":"角色声线（含 body_language 肢体语言）"},
+                    "body_language":{"type":"string","description":"肢体语言，写入 voice.body_language"},
                     "role":{"type":"string","description":"社会角色（扁平字段，覆盖 character）"},
                     "gender":{"type":"string"},
                     "age":{"type":"string","description":"年龄，自由文本"},
                     "aliases":{"type":"string","description":"别称"},
                     "alignment":{"type":"string","description":"阵营归属（扁平）"},
-                    "personality":{"type":"string"},
                     "style":{"type":"string"},
                     "motto":{"type":"string"},
                     "constraints":{"type":"string","description":"写章注入全文；通常由结构化字段自动生成"},
@@ -1016,6 +1076,32 @@ async fn call_tool(ctx: McpCtx, name: &str, args: Value) -> Result<String, Strin
             let words = save_chapter(novel_id.clone(), node_id, content)?;
             emit_tree_changed(&ctx, &novel_id);
             Ok(json!({"ok": true, "word_count": words}).to_string())
+        }
+        "get_chapter_shots" => {
+            let novel_id = arg_novel_id(&ctx, &args)?;
+            let node_id = arg_node_id(&ctx, &args)?;
+            let shots = crate::chapter_shots::load_shots(&novel_id, &node_id)?;
+            Ok(json!({"node_id": node_id, "shots": shots}).to_string())
+        }
+        "set_chapter_shots" => {
+            let novel_id = arg_novel_id(&ctx, &args)?;
+            let node_id = arg_node_id(&ctx, &args)?;
+            let shots = args
+                .get("shots")
+                .cloned()
+                .ok_or_else(|| "缺少 shots".to_string())?;
+            let shots: Vec<crate::chapter_shots::ChapterShot> =
+                serde_json::from_value(shots).map_err(|e| e.to_string())?;
+            let shots = crate::chapter_shots::save_shots(&novel_id, &node_id, shots)?;
+            Ok(json!({"node_id": node_id, "shots": shots}).to_string())
+        }
+        "split_chapter_shots" => mcp_split_chapter_shots_brief(&ctx, args),
+        "generate_shot_comfy_prompts" => mcp_shot_comfy_prompts_brief(&ctx, args),
+        "submit_chapter_shots_comfyui" => {
+            let novel_id = arg_novel_id(&ctx, &args)?;
+            let node_id = arg_node_id(&ctx, &args)?;
+            let result = submit_chapter_shots_comfyui_inner(&ctx.db, &novel_id, &node_id).await?;
+            Ok(serde_json::to_string_pretty(&result).unwrap_or_default())
         }
         "get_chapter_memory" => {
             let novel_id = arg_novel_id(&ctx, &args)?;
@@ -1550,11 +1636,15 @@ fn character_json_entry(tree: &NovelTree, n: &TreeNode, order: Option<usize>) ->
         .as_ref()
         .map(|c| crate::character_fmt::format_character_full(&n.label, c))
         .unwrap_or_default();
+    let mut ch = serde_json::to_value(&n.character).unwrap_or(Value::Null);
+    if let Some(obj) = ch.as_object_mut() {
+        obj.remove("personality");
+    }
     let mut obj = json!({
         "id": n.id,
         "label": n.label,
         "true_name": n.label,
-        "character": n.character,
+        "character": ch,
         "formatted": formatted,
     });
     if let Some(o) = order {
@@ -1652,6 +1742,23 @@ fn coerce_character_patch(v: &Value) -> Result<Value, String> {
     }
 }
 
+/// MCP 人物补丁：丢掉 personality；顶层 body_language 并进 voice。
+fn fold_character_mcp_patch(patch: &mut Value) {
+    let Some(obj) = patch.as_object_mut() else {
+        return;
+    };
+    obj.remove("personality");
+    if let Some(inner) = obj.get_mut("character") {
+        fold_character_mcp_patch(inner);
+    }
+    if let Some(bl) = obj.remove("body_language") {
+        let voice = obj.entry("voice").or_insert_with(|| json!({}));
+        if let Some(vo) = voice.as_object_mut() {
+            vo.insert("body_language".into(), bl);
+        }
+    }
+}
+
 fn patch_character_card_from_args(
     card: &mut CharacterCard,
     args: &Value,
@@ -1659,7 +1766,8 @@ fn patch_character_card_from_args(
 ) -> Result<(), String> {
     let mut base = serde_json::to_value(&*card).map_err(|e| e.to_string())?;
     if let Some(ch) = args.get("character") {
-        let patch = coerce_character_patch(ch)?;
+        let mut patch = coerce_character_patch(ch)?;
+        fold_character_mcp_patch(&mut patch);
         deep_merge_json(&mut base, &patch);
     }
     // 顶层也可直接传结构化字段（与 character 内同名键深度合并）
@@ -1675,7 +1783,10 @@ fn patch_character_card_from_args(
             deep_merge_json(&mut base, &json!({ key: v }));
         }
     }
-    // 扁平遗留字段覆盖
+    if let Some(s) = args.get("body_language").and_then(|v| v.as_str()) {
+        deep_merge_json(&mut base, &json!({ "voice": { "body_language": s } }));
+    }
+    // 扁平遗留字段覆盖（无 personality）
     let mut flat = serde_json::Map::new();
     for key in [
         "role",
@@ -1683,7 +1794,6 @@ fn patch_character_card_from_args(
         "age",
         "aliases",
         "alignment",
-        "personality",
         "style",
         "motto",
         "constraints",
@@ -1935,7 +2045,7 @@ fn get_novel_info(ctx: &McpCtx, args: Value) -> Result<String, String> {
         "ai_guidance": {
             "features": "novel.features 为根节点功能选项（题材/核心玩法/风格/关系/受众）。生成世界观必须遵守；写章口吻与爽点也应贴合。",
             "plots": "linked_plots 为根节点关联的跨章剧情卡，按 order（0 最先）理解全书主线；写章时与分卷/章节卡上的剧情一并遵守，不得改写既定要点。分卷可选，见 volumes。",
-            "characters": "linked_characters 含完整结构化 character（world_position / world_anchors / relations / core_belief / deep / voice 等）与 formatted 全文（写章注入同形）。须符合人设与 character_relations；formatted 非空时严格遵守。",
+            "characters": "linked_characters 含完整结构化 character（world_position / world_anchors / relations / core_belief / deep / voice.body_language 等）与 formatted 全文（写章注入同形）。无 personality。须符合人设与 character_relations；formatted 非空时严格遵守。",
             "knowledge": "linked_knowledge 为根上知识卡（全书写作约束）。优先 extracted；若为空则遵守 extract_prompt 与 outline。公共知识库不是小说设定源，只有挂到树上的知识卡才约束写作。"
         },
         "novel": novel_json_for_mcp(&novel),
@@ -2133,12 +2243,14 @@ async fn generate_worldview(ctx: &McpCtx, args: Value) -> Result<String, String>
         role: "user".into(),
         content: instruction,
     }];
+    let slot = args.get("slot").and_then(|v| v.as_str());
     let result = generate_worldview_chat_inner(
         app.as_ref(),
         &ctx.db,
         &novel_id,
         &messages,
         model.as_deref(),
+        slot,
         None,
     )
     .await?;
@@ -2166,6 +2278,75 @@ fn chapter_write_ai_guidance() -> Value {
         "output": "只输出本章 Markdown 正文（可用 `# 章标题` 开头，或直接正文）；禁止输出注释、写作说明、「本章完」、检查清单或自我评分。",
         "content_usage": "本接口不含正文。生成新章：若 node.detailed_outline 为空须先 generate_detailed_outline（由简纲进化细纲）；再仅依据 outline+detailed_outline、linked_* 与 ai_guidance **按细纲扩充**写全新正文，禁止调用 get_chapter_content，禁止参考磁盘旧稿。精修/改稿（含用户说「精修第 N 章」+自定义提示）：先 get_chapter_info 取约束，再 get_chapter_content 读旧稿，在旧稿上改完后 set_chapter_content。"
     })
+}
+
+fn shot_split_ai_guidance() -> &'static str {
+    "本工具不调用应用内置 LLM，不写入镜头。一章必须拆成多条连续镜头（通常 6–20；短章至少 2 镜）。禁止把整章收成 1 条。按场面转换、对白轮次、机位变化切开；每镜 5–15 秒；不发明正文没有的情节；对话原句保留。用 body / characters 拆完后 set_chapter_shots 整表覆盖（shots 为数组）。字段：action、camera、dialogue（可空）、duration_sec、comfy_prompt（拆镜时可空）。"
+}
+
+fn shot_comfy_prompt_ai_guidance() -> &'static str {
+    "本工具不调用应用内置 LLM，不写入镜头。你必须为每镜写 cinematic comfy_prompt（英文为主、专名可中文：外貌与人物卡一致、环境、动作、镜头运动、光线；有对白则写成 spoken line），再 set_chapter_shots 整表写回（保留 id/order/action/camera/dialogue/duration_sec）。禁止网文腔与抽象情绪堆砌，禁止发明分镜以外的情节。"
+}
+
+fn mcp_split_chapter_shots_brief(ctx: &McpCtx, args: Value) -> Result<String, String> {
+    let novel_id = arg_novel_id(ctx, &args)?;
+    let node_id = arg_node_id(ctx, &args)?;
+    let tree = get_tree(novel_id.clone())?;
+    let node = tree
+        .nodes
+        .iter()
+        .find(|n| n.id == node_id)
+        .ok_or_else(|| "章节不存在".to_string())?;
+    if !matches!(node.kind, NodeKind::Chapter) {
+        return Err("仅章节可拆分镜头".into());
+    }
+    let body = get_chapter(novel_id.clone(), node_id.clone())?;
+    if body.trim().is_empty() {
+        return Err("请先写好本章正文".into());
+    }
+    let existing = crate::chapter_shots::load_shots(&novel_id, &node_id)?;
+    let characters = shot_character_looks(&tree, &node_id);
+    Ok(json!({
+        "node_id": node_id,
+        "label": node.label,
+        "body": body,
+        "characters": characters,
+        "existing_shots": existing,
+        "saved": false,
+        "shot_fields": ["id", "order", "action", "camera", "dialogue", "duration_sec", "comfy_prompt"],
+        "min_shots": 2,
+        "typical_shots": "6-20",
+        "ai_guidance": shot_split_ai_guidance(),
+    })
+    .to_string())
+}
+
+fn mcp_shot_comfy_prompts_brief(ctx: &McpCtx, args: Value) -> Result<String, String> {
+    let novel_id = arg_novel_id(ctx, &args)?;
+    let node_id = arg_node_id(ctx, &args)?;
+    let tree = get_tree(novel_id.clone())?;
+    let node = tree
+        .nodes
+        .iter()
+        .find(|n| n.id == node_id)
+        .ok_or_else(|| "章节不存在".to_string())?;
+    if !matches!(node.kind, NodeKind::Chapter) {
+        return Err("仅章节可写分镜提示词".into());
+    }
+    let shots = crate::chapter_shots::load_shots(&novel_id, &node_id)?;
+    if shots.is_empty() {
+        return Err("请先拆分镜头".into());
+    }
+    let characters = shot_character_looks(&tree, &node_id);
+    Ok(json!({
+        "node_id": node_id,
+        "label": node.label,
+        "characters": characters,
+        "shots": shots,
+        "saved": false,
+        "ai_guidance": shot_comfy_prompt_ai_guidance(),
+    })
+    .to_string())
 }
 
 fn get_chapter_info(ctx: &McpCtx, args: Value) -> Result<String, String> {
@@ -3318,6 +3499,20 @@ mod tests {
     }
 
     #[test]
+    #[test]
+    fn mcp_shot_briefs_tell_agent_to_write_without_app_llm() {
+        for g in [shot_split_ai_guidance(), shot_comfy_prompt_ai_guidance()] {
+            assert!(g.contains("不调用应用内置 LLM"), "{g}");
+            assert!(g.contains("set_chapter_shots"), "{g}");
+        }
+        assert!(
+            shot_split_ai_guidance().contains("禁止把整章收成 1 条"),
+            "{}",
+            shot_split_ai_guidance()
+        );
+    }
+
+    #[test]
     fn chapter_write_ai_guidance_has_coherence_fields() {
         let g = chapter_write_ai_guidance();
         for k in [
@@ -3575,5 +3770,60 @@ mod tests {
         .unwrap();
         assert_eq!(card.world_position.faction, "帮会");
         assert_eq!(card.world_position.social_role, "掌柜");
+    }
+
+    #[test]
+    fn mcp_character_drops_personality_and_takes_body_language() {
+        use crate::models::CharacterCard;
+        let mut card = CharacterCard {
+            personality: "旧性格摘要".into(),
+            ..Default::default()
+        };
+        patch_character_card_from_args(
+            &mut card,
+            &json!({
+                "personality": "不要写这个",
+                "character": { "personality": "也不要", "body_language": "说话时转笔" }
+            }),
+            "李四",
+        )
+        .unwrap();
+        assert_ne!(card.personality, "不要写这个");
+        assert_ne!(card.personality, "也不要");
+        assert_eq!(card.voice.body_language, "说话时转笔");
+
+        patch_character_card_from_args(
+            &mut card,
+            &json!({ "body_language": "紧张时摸袖口" }),
+            "李四",
+        )
+        .unwrap();
+        assert_eq!(card.voice.body_language, "紧张时摸袖口");
+
+        let mut ch = node("char-1", NodeKind::Character);
+        ch.label = "李四".into();
+        ch.character = Some(CharacterCard {
+            personality: "画布摘要".into(),
+            voice: crate::models::CharacterVoice {
+                body_language: "转笔".into(),
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+        let tree = NovelTree {
+            novel_id: "n".into(),
+            nodes: vec![ch],
+            edges: vec![],
+        };
+        let entry = character_json_entry(&tree, &tree.nodes[0], None);
+        let inner = entry.get("character").and_then(|v| v.as_object()).expect("character");
+        assert!(!inner.contains_key("personality"));
+        assert_eq!(
+            inner
+                .get("voice")
+                .and_then(|v| v.get("body_language"))
+                .and_then(|v| v.as_str()),
+            Some("转笔")
+        );
     }
 }

@@ -275,7 +275,7 @@ Accept: application/json, text/event-stream
 
 | 字段 | 说明 |
 |------|------|
-| `role` / `gender` / `age` / `alignment` / `personality` / `style` / `motto` | 基础信息（扁平；可与结构化并存） |
+| `role` / `gender` / `age` / `alignment` / `style` / `motto` | 基础信息（扁平；可与结构化并存）。MCP **不读写** `personality`（遗留画布摘要，由深层字段生成） |
 | `aliases` | 别称 |
 | `constraints` | 写该人物时的硬约束长文本（常与 `formatted` 同步） |
 | `world_position` | 出身阶层 / 势力 / 社会角色 / 冲突立场 |
@@ -283,7 +283,7 @@ Accept: application/json, text/event-stream
 | `relations[]` | 关系网：`name`/`relation`/`definition`/`default_attitude`/`hidden_tension` |
 | `core_belief` | 核心信念：`belief`/`author_verdict`/`source` |
 | `deep` | 深层弧光（创伤、矛盾、成长等） |
-| `voice` | 角色声线：`positioning`/`cognitive_filter`/`sentence_length`/`pause`/`patterns`、`catchphrases[]`（口头禅）、`emotion_anger`/`emotion_tense`/`emotion_mask`/`emotion_sad`/`emotion_happy`（情绪变化）、`banned` |
+| `voice` | 角色声线：`positioning`/`cognitive_filter`/`body_language`（肢体语言）、`sentence_length`/`pause`/`patterns`、`catchphrases[]`（口头禅）、`emotion_anger`/`emotion_tense`/`emotion_mask`/`emotion_sad`/`emotion_happy`（情绪变化）、`banned` |
 
 MCP 条目另含：`formatted`（写作注入 Markdown，与 `character_fmt` 同形）、`character_relations`（画布人物↔人物边）、列表/关联时的 `order`。
 
@@ -311,11 +311,11 @@ MCP 条目另含：`formatted`（写作注入 Markdown，与 `character_fmt` 同
 | `world_race` | 仅 `wv_race`：{name,features,population,social_status} |
 | `major_faction` | 仅 `wv_faction`：{name,faction_type,goal,means,power_base} |
 | `existence` | 仅 `wv_existence`：`premise`、`death`、`calendar`、`lifespan`、`disease_reproduction` |
-| `info_flow` | 仅 `wv_info_flow`：`premise`、`info_speed`、`info_barrier`、`message_truth`、`knowledge_carrier` |
+| `info_flow` | 仅 `wv_info_flow`：`premise`、`info_speed`、`info_barrier`、`rumor_truth`（旧键 `message_truth` 仍可读）、`knowledge_carrier` |
 | `history_culture` | 仅 `wv_history_culture`：`premise`、`customs`、`economy`、`daily_slices` 等 |
 | `world_religion` | 仅 `wv_religion` |
 | `major_event` | 仅 `wv_major_event` |
-| `surface_setting` / `story_engine` / `fulfillment_system` / `constraint_redlines` | 故事规则四卡结构化载荷 |
+| `surface_setting` / `story_engine` / `fulfillment_system` / `constraint_redlines` | 故事规则四卡结构化载荷。兑现系统含 `tension_archetypes[]`（旧键 `tension_circles` 仍可读） |
 
 写作/大纲注入：挂在根或章上的世界观/故事规则槽不以可能过期的 `extracted` 截断为准，而由对应 `*_fmt` 拼完整正文（含子卡列表，若有）。MCP `linked_knowledge[].extracted` / `.formatted` 同此规则；有结构化载荷时一并摊到同级字段（如 `core_laws`、`world_axiom`、`surface_setting` 等）。
 
@@ -528,7 +528,7 @@ MCP 条目另含：`formatted`（写作注入 Markdown，与 `character_fmt` 同
 | `get_worldview` | 返回 `features` + `features_text` + 六卡/故事规则 `snapshot`（含 `story_rules_blocks`） |
 | `ensure_worldview` | 补齐根上六张世界观卡 + 故事规则主卡与右侧四子卡空壳（不覆盖已有内容） |
 | `apply_worldview` | 写入 `worldview` JSON（与 Chat 同结构）；支持 `story_rules_blocks` 四卡；落盘后排版 |
-| `generate_worldview` | LLM 生成；**必须服从** `novel.features`；默认 `apply=true` 落盘 |
+| `generate_worldview` | LLM 生成；**必须服从** `novel.features`；可选 `slot` 只补一张六卡的全部字段；默认 `apply=true` 落盘 |
 | `get_story_rules` | 读取故事规则四卡 `blocks` + 各卡 `node_id`/`formatted` + 父卡；缺卡先 `ensure_worldview` |
 | `apply_story_rules` | 写入四卡 `blocks` JSON（与 Chat / `generate_story_rules` 同形）；返回同 `get_story_rules` |
 | `generate_story_rules` | LLM 生成故事规则四卡；默认 `apply=true` 落盘 |
@@ -542,6 +542,19 @@ MCP 条目另含：`formatted`（写作注入 Markdown，与 `character_fmt` 同
   "apply": true
 }
 ```
+
+只补一张卡（六卡之一，全部字段含子项）时加 `slot`（`wv_core_laws` 或 JSON 键 `core_laws` 等均可）：
+
+```json
+{
+  "novel_id": "n-uuid",
+  "slot": "wv_existence",
+  "instruction": "补全存在基础全部字段",
+  "apply": true
+}
+```
+
+返回的 `worldview` 只含该键，`apply` 时不会覆盖其它卡。
 
 **返回摘要（与实现一致）**
 
@@ -580,7 +593,7 @@ MCP 条目另含：`formatted`（写作注入 Markdown，与 `character_fmt` 同
   "ai_guidance": {
     "features": "novel.features 为根节点功能选项……生成世界观必须遵守。",
     "plots": "linked_plots 为根节点关联的跨章剧情卡……分卷可选，见 volumes。",
-    "characters": "linked_characters 含完整结构化 character（world_position / world_anchors / relations / core_belief / deep / voice 等）与 formatted 全文……",
+    "characters": "linked_characters 含完整结构化 character（world_position / world_anchors / relations / core_belief / deep / voice.body_language 等）与 formatted 全文……无 personality",
     "knowledge": "linked_knowledge 为根上知识卡……公共知识库不是小说设定源。"
   },
   "novel": {
@@ -636,6 +649,7 @@ MCP 条目另含：`formatted`（写作注入 Markdown，与 `character_fmt` 同
         "world_anchors": { "embodies_law": "…", "shaped_by_law": "…", "will_challenge": "…" },
         "voice": {
           "catchphrases": ["这账不对"],
+          "body_language": "说话时转笔",
           "emotion_anger": "…",
           "emotion_tense": "…",
           "emotion_mask": "…",
@@ -1205,6 +1219,64 @@ AI 重写本章细纲中的**一条**（0-based `index`），保留其余条目�
 
 ---
 
+### 5.9e 分镜头 / ComfyUI MiniMax
+
+镜头存在 `novels/{id}/shots/{node_id}.json`，不进结构树。设置：`comfyui_url`（默认 `http://127.0.0.1:8188`）、`comfyui_workflow`（ComfyUI「导出（API）」JSON）、可选 `comfyui_prompt_node`。
+
+| 工具 | 作用 |
+|------|------|
+| `get_chapter_shots` | 读镜头列表（`action` / `camera` / `dialogue` / `duration_sec` / `comfy_prompt`） |
+| `set_chapter_shots` | 整表覆盖（**一章多镜**，`shots` 数组）；`shots: []` 清空。MCP 拆镜/写提示词后必须用此写入 |
+| `split_chapter_shots` | **不调用应用 LLM、不落盘**。返回 `body` / `characters` / `existing_shots` / `ai_guidance`；由客户端拆镜后 `set_chapter_shots`（需非空正文） |
+| `generate_shot_comfy_prompts` | **不调用应用 LLM、不落盘**。返回已有 `shots` + `characters` + `ai_guidance`；由客户端写 `comfy_prompt` 后 `set_chapter_shots` |
+| `submit_chapter_shots_comfyui` | `POST {comfyui_url}/prompt` 入队；不下载成片。含 Prompt Chain 的工作流一次提交全部镜头，否则每镜一条 |
+
+工作台「按正文拆镜头 / 生成提示词」仍走应用内置模型。MCP 路径用客户端流量。
+
+**`get` / `set` 返回**
+
+```json
+{
+  "node_id": "ch-uuid",
+  "shots": [
+    {
+      "id": "s-uuid",
+      "order": 1,
+      "action": "推门进屋",
+      "camera": "肩后跟拍",
+      "dialogue": "谁？",
+      "duration_sec": 8,
+      "comfy_prompt": "A man pushes a wooden door…"
+    }
+  ]
+}
+```
+
+**`split_chapter_shots` 返回（未保存）**
+
+```json
+{
+  "node_id": "ch-uuid",
+  "label": "第一章",
+  "body": "……",
+  "characters": "- 李四\\n……",
+  "existing_shots": [],
+  "saved": false,
+  "shot_fields": ["id", "order", "action", "camera", "dialogue", "duration_sec", "comfy_prompt"],
+  "min_shots": 2,
+  "typical_shots": "6-20",
+  "ai_guidance": "……一章必须拆成多条……禁止把整章收成 1 条……再 set_chapter_shots……"
+}
+```
+
+**`generate_shot_comfy_prompts` 返回（未保存）** `{ "node_id", "label", "characters", "shots", "saved": false, "ai_guidance" }`
+
+**`submit` 返回** `{ "queued": 3, "prompt_ids": ["…"], "mode": "each"|"chain", "url": "http://127.0.0.1:8188" }`
+
+工作流须为 API 格式对象（节点 id → `{class_type, inputs}`）。自动挑 MiniMax / CLIP 的 `text`/`prompt`/`prompts` 字段。
+
+---
+
 ## 6. 卡片与关联
 
 ### 6.1 `get_character_card`
@@ -1240,6 +1312,7 @@ AI 重写本章细纲中的**一条**（0-based `index`），保留其余条目�
       "deep": { "…": "…" },
       "voice": {
         "positioning": "…",
+        "body_language": "说话时转笔",
         "catchphrases": ["这账不对"],
         "emotion_anger": "…",
         "emotion_tense": "…",
@@ -1273,7 +1346,7 @@ AI 重写本章细纲中的**一条**（0-based `index`），保留其余条目�
 **更新是深度合并**：省略的结构化字段保留原值；可传：
 - `character`：`CharacterCard` 本体，**或** `get_character_card` 返回的整条 entry（含 `formatted` 的包装会自动摊平）
 - 顶层 `world_position` / `world_anchors` / `relations` / `core_belief` / `deep` / `voice`
-- 扁平字段 `gender` / `age` / …（覆盖同名字段）
+- 扁平字段 `gender` / `age` / `body_language` / …（`body_language` 写入 `voice.body_language`）。**不要传 `personality`**（忽略）
 
 更新时可省略 `name`（保留原真名）。新建必须传 `name`。
 
@@ -1317,6 +1390,7 @@ AI 重写本章细纲中的**一条**（0-based `index`），保留其余条目�
     "deep": { … },
     "voice": {
       "catchphrases": ["这账不对"],
+      "body_language": "说话时转笔",
       "emotion_anger": "压低嗓门翻旧账",
       "emotion_tense": "句式变短",
       "emotion_mask": "改用敬语",

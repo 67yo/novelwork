@@ -76,6 +76,7 @@ const rich = normalizeCharacterCard({
   voice: {
     positioning: "市井账房，语调平稳带刺",
     cognitive_filter: "凡事先算账",
+    body_language: "说话时转笔",
     sentence_length: "偏短",
     pause: "算完再说",
     patterns: "反问居多",
@@ -96,6 +97,8 @@ console.assert(md.includes("## 关系网络"));
 console.assert(md.includes("张三"));
 console.assert(md.includes("终将证伪"));
 console.assert(md.includes("句法指纹"));
+console.assert(md.includes("肢体语言"));
+console.assert(md.includes("说话时转笔"));
 console.assert(md.includes("这账不对"));
 
 const synced = syncLegacyFields(rich);
@@ -111,6 +114,7 @@ console.assert(parsed?.aliases === "小雪");
 console.assert(parsed?.world_position.birth_class === "贵族");
 console.assert(parsed?.core_belief.author_verdict === "unresolved");
 
+console.assert(normalizeCharacterCard({}).sheet.image_path === "");
 console.assert(formatCharacterExtracted(emptyCharacterCard()) === "");
 console.assert(listMissingCharacterFields(rich, "李四").length === 0);
 console.assert(listMissingCharacterFields(emptyCharacterCard(), "").length > 10);

@@ -62,12 +62,7 @@ fn compat_endpoint<'a>(settings: &'a AppSettings, model: &str) -> CompatEndpoint
 }
 
 fn chat_completions_url(base: &str) -> String {
-    let b = base.trim_end_matches('/');
-    if b.ends_with("/v1") {
-        format!("{b}/chat/completions")
-    } else {
-        format!("{b}/v1/chat/completions")
-    }
+    format!("{}/chat/completions", base.trim().trim_end_matches('/'))
 }
 
 /// Kimi / Moonshot 部分模型（如 K2）只允许 temperature=1。
@@ -273,7 +268,19 @@ mod adk_bridge {
 
 #[cfg(test)]
 mod tests {
-    use super::chat_temperature_with_hint;
+    use super::{chat_completions_url, chat_temperature_with_hint};
+
+    #[test]
+    fn chat_url_uses_base_as_is() {
+        assert_eq!(
+            chat_completions_url("https://open.bigmodel.cn/api/paas/v4/"),
+            "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+        );
+        assert_eq!(
+            chat_completions_url("https://api.deepseek.com/v1"),
+            "https://api.deepseek.com/v1/chat/completions"
+        );
+    }
 
     #[test]
     fn kimi_forces_temperature_one() {

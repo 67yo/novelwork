@@ -7,11 +7,13 @@ import { usePersistedChatModel } from "@/lib/chatModel";
 import { applyWorldviewPayload } from "@/lib/worldviewGen";
 import { plainTree } from "@/lib/plainTree";
 import { applyAutoLayout } from "@/lib/treeLayout";
+import { worldviewFanTitleKey, worldviewJsonKeyForSlot } from "@/lib/worldview";
 import { Button } from "@/components/ui/button";
 
 const props = defineProps<{
   open: boolean;
   novelId: string;
+  slot?: string | null;
 }>();
 
 const emit = defineEmits<{
@@ -30,20 +32,35 @@ const sending = ref(false);
 const error = ref("");
 const listEl = ref<HTMLElement | null>(null);
 const expanded = ref(false);
+const sessionSlot = ref<string | null | undefined>(undefined);
+
+const slotKey = computed(() => worldviewJsonKeyForSlot(props.slot));
+const slotTitle = computed(() => {
+  const key = worldviewFanTitleKey(props.slot);
+  return key ? t(key) : "";
+});
+
+function welcomeText() {
+  return slotKey.value
+    ? t("workspace.wv.chatSlotWelcome", { title: slotTitle.value })
+    : t("workspace.wv.chatWelcome");
+}
 
 watch(
-  () => props.open,
-  (open) => {
+  () => [props.open, props.slot] as const,
+  ([open]) => {
     if (!open) return;
     error.value = "";
-    if (!messages.value.length) {
+    const s = props.slot ?? null;
+    if (sessionSlot.value !== s || !messages.value.length) {
       messages.value = [
         {
           id: "welcome",
           role: "assistant",
-          content: t("workspace.wv.chatWelcome"),
+          content: welcomeText(),
         },
       ];
+      sessionSlot.value = s;
     }
     void loadModel(t("settings.deprecated"));
     void nextTick(() => scrollBottom());
@@ -84,7 +101,12 @@ async function sendText(text: string) {
     const turns = messages.value
       .filter((m) => m.id !== "welcome")
       .map((m) => ({ role: m.role, content: m.content }));
-    const res = await api.generateWorldviewChat(props.novelId, turns, model.value);
+    const res = await api.generateWorldviewChat(
+      props.novelId,
+      turns,
+      model.value,
+      slotKey.value,
+    );
     pushAssistant(res.assistant);
     const tr = await api.getTree(props.novelId);
     const changed = applyWorldviewPayload(tr, res.worldview, (key) =>
@@ -118,7 +140,13 @@ async function send() {
 }
 
 function sendPreset(key: "random" | "expand") {
-  void sendText(t(key === "random" ? "workspace.wv.chatRandomMsg" : "workspace.wv.chatExpandMsg"));
+  const title = slotTitle.value;
+  const msg = slotKey.value
+    ? t(key === "random" ? "workspace.wv.chatSlotRandomMsg" : "workspace.wv.chatSlotExpandMsg", {
+        title,
+      })
+    : t(key === "random" ? "workspace.wv.chatRandomMsg" : "workspace.wv.chatExpandMsg");
+  void sendText(msg);
 }
 
 async function stop() {
@@ -157,10 +185,12 @@ const canSend = computed(() => !!draft.value.trim() && !sending.value);
       class="flex h-[min(640px,90vh)] w-full max-w-lg flex-col overflow-hidden rounded-lg border bg-background shadow-xl"
       role="dialog"
       aria-modal="true"
-      :aria-label="t('workspace.wv.chatTitle')"
+      :aria-label="slotKey ? t('workspace.wv.chatSlotTitle', { title: slotTitle }) : t('workspace.wv.chatTitle')"
     >
       <header class="flex shrink-0 items-center gap-2 border-b px-4 py-3">
-        <h2 class="min-w-0 flex-1 text-sm font-semibold">{{ t("workspace.wv.chatTitle") }}</h2>
+        <h2 class="min-w-0 flex-1 text-sm font-semibold">{{
+          slotKey ? t("workspace.wv.chatSlotTitle", { title: slotTitle }) : t("workspace.wv.chatTitle")
+        }}</h2>
         <button
           type="button"
           class="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -173,7 +203,11 @@ const canSend = computed(() => !!draft.value.trim() && !sending.value);
       </header>
 
       <p class="shrink-0 border-b px-4 py-2 text-[11px] text-muted-foreground">
-        {{ t("workspace.wv.chatHint") }}
+        {{
+          slotKey
+            ? t("workspace.wv.chatSlotHint", { title: slotTitle })
+            : t("workspace.wv.chatHint")
+        }}
       </p>
 
       <div class="flex shrink-0 flex-wrap gap-1.5 px-4 py-2">
@@ -217,7 +251,11 @@ const canSend = computed(() => !!draft.value.trim() && !sending.value);
         </div>
         <div v-if="sending" class="mr-4 flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
           <Loader2 class="h-3.5 w-3.5 animate-spin" />
-          {{ t("workspace.wv.chatBusy") }}
+          {{
+            slotKey
+              ? t("workspace.wv.chatSlotBusy", { title: slotTitle })
+              : t("workspace.wv.chatBusy")
+          }}
         </div>
         <p v-if="error" class="rounded-md bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
           {{ error }}

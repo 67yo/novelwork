@@ -96,12 +96,7 @@ impl GlobalChatRuntime {
 }
 
 fn openai_compat_base(base: &str) -> String {
-    let b = base.trim().trim_end_matches('/');
-    if b.ends_with("/v1") {
-        b.to_string()
-    } else {
-        format!("{b}/v1")
-    }
+    base.trim().trim_end_matches('/').to_string()
 }
 
 fn task_model(preferred: &str, fallback: &str) -> String {
@@ -687,6 +682,18 @@ mod tests {
         assert_eq!(usage_to_record(10, 4, 99, 400), (10, 4));
         assert_eq!(usage_to_record(0, 0, 80, 12), (80, 3));
         assert_eq!(usage_to_record(0, 7, 80, 100), (80, 7));
+    }
+
+    #[test]
+    fn openai_compat_base_does_not_append_v1() {
+        assert_eq!(
+            openai_compat_base("https://open.bigmodel.cn/api/paas/v4/"),
+            "https://open.bigmodel.cn/api/paas/v4"
+        );
+        assert_eq!(
+            openai_compat_base("https://api.deepseek.com/v1"),
+            "https://api.deepseek.com/v1"
+        );
     }
 
     #[test]

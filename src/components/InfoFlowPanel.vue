@@ -52,10 +52,10 @@ const fieldBlocks = computed(() => [
     model: "info_barrier" as const,
   },
   {
-    kind: "message_truth" as const,
-    label: t("workspace.if.messageTruth"),
-    ph: t("workspace.if.messageTruthPh"),
-    model: "message_truth" as const,
+    kind: "rumor_truth" as const,
+    label: t("workspace.if.rumorTruth"),
+    ph: t("workspace.if.rumorTruthPh"),
+    model: "rumor_truth" as const,
   },
   {
     kind: "knowledge_carrier" as const,
@@ -77,7 +77,7 @@ type AiTarget =
   | { kind: "premise" }
   | { kind: "info_speed" }
   | { kind: "info_barrier" }
-  | { kind: "message_truth" }
+  | { kind: "rumor_truth" }
   | { kind: "knowledge_carrier" };
 
 const pendingAi = ref<AiTarget | null>(null);
@@ -96,7 +96,7 @@ function currentForTarget(p: AiTarget): string {
   if (p.kind === "premise") return draft.premise;
   if (p.kind === "info_speed") return draft.info_speed;
   if (p.kind === "info_barrier") return draft.info_barrier;
-  if (p.kind === "message_truth") return draft.message_truth;
+  if (p.kind === "rumor_truth") return draft.rumor_truth;
   return draft.knowledge_carrier;
 }
 
@@ -104,7 +104,7 @@ function applyAiResult(p: AiTarget, text: string) {
   if (p.kind === "premise") draft.premise = text;
   else if (p.kind === "info_speed") draft.info_speed = text;
   else if (p.kind === "info_barrier") draft.info_barrier = text;
-  else if (p.kind === "message_truth") draft.message_truth = text;
+  else if (p.kind === "rumor_truth") draft.rumor_truth = text;
   else draft.knowledge_carrier = text;
 }
 

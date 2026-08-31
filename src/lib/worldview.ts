@@ -39,8 +39,21 @@ export function worldviewFanTitleKey(
   slot: string | undefined | null,
 ): (typeof WORLDVIEW_FAN_SLOTS)[number]["titleKey"] | null {
   if (!slot) return null;
-  const def = WORLDVIEW_FAN_SLOTS.find((s) => s.slot === slot);
+  const def = WORLDVIEW_FAN_SLOTS.find(
+    (s) => s.slot === slot || s.slot === `wv_${slot}`,
+  );
   return def?.titleKey ?? null;
+}
+
+/** `wv_core_laws` / `core_laws` → `core_laws`；非六卡返回 null。 */
+export function worldviewJsonKeyForSlot(slot: string | undefined | null): string | null {
+  if (!slot?.trim()) return null;
+  const s = slot.trim();
+  for (const d of WORLDVIEW_FAN_SLOTS) {
+    const key = d.slot.slice("wv_".length);
+    if (s === d.slot || s === key) return key;
+  }
+  return null;
 }
 
 export function isStoryRulesSlot(slot: string | undefined | null): boolean {
