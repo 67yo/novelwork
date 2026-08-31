@@ -62,6 +62,7 @@ import StoryRulesBlockPanel from "@/components/StoryRulesBlockPanel.vue";
 import StoryRulesChatPanel from "@/components/StoryRulesChatPanel.vue";
 import WorldviewFanTitle from "@/components/WorldviewFanTitle.vue";
 import NovelFeaturesPicker from "@/components/NovelFeaturesPicker.vue";
+import ChapterBodyEditor from "@/components/ChapterBodyEditor.vue";
 import {
   emptyNovelFeatures,
   normalizeNovelFeatures,
@@ -256,12 +257,7 @@ type TtsDownloadProgress = {
   percent?: number;
 };
 const bodyTtsDownload = ref<TtsDownloadProgress | null>(null);
-const bodyTaEl = ref<HTMLTextAreaElement | null>(null);
-const bodyMirrorEl = ref<HTMLElement | null>(null);
-const bodyScrollTop = ref(0);
-const paraGutterTops = ref<{ index: number; top: number; bottom: number }[]>([]);
-/** 鼠标悬停段落；仅该段显示 AI 改写 icon */
-const hoveredParaIndex = ref<number | null>(null);
+const bodyEditor = ref<InstanceType<typeof ChapterBodyEditor> | null>(null);
 const pendingParaRewrite = ref<{ index: number; text: string } | null>(null);
 const paraRewriteNote = ref("");
 const paraRewriteBusy = ref(false);
@@ -668,7 +664,6 @@ function enterChapterBodyEdit() {
   bodyEditing.value = true;
   bodyAutosaved.value = false;
   lastSavedBody = bodyDraft.value;
-  nextTick(() => refreshParaGutters());
   if (bodySuggestOn.value) scheduleBodySuggest();
 }
 
@@ -677,8 +672,6 @@ function leaveChapterBodyEdit() {
   bodyDraft.value = "";
   bodyAutosaved.value = false;
   lastSavedBody = "";
-  paraGutterTops.value = [];
-  hoveredParaIndex.value = null;
   pendingParaRewrite.value = null;
   closeBodySuggest();
   void stopChapterTts();
@@ -686,52 +679,15 @@ function leaveChapterBodyEdit() {
 
 const bodyLines = computed(() => splitBodyLines(bodyDraft.value));
 
-const refreshParaGutters = useDebounceFn(() => {
-  const mirror = bodyMirrorEl.value;
-  const ta = bodyTaEl.value;
-  if (!mirror || !ta || !bodyEditing.value) {
-    paraGutterTops.value = [];
-    return;
+const bodyNouns = computed(() => {
+  const names: string[] = [];
+  for (const n of tree.value?.nodes ?? []) {
+    if (n.kind !== "character") continue;
+    const label = n.label?.trim();
+    if (label) names.push(label);
   }
-  mirror.style.width = `${ta.clientWidth}px`;
-  const spans = mirror.querySelectorAll<HTMLElement>("[data-para-i]");
-  const tops: { index: number; top: number; bottom: number }[] = [];
-  for (const el of spans) {
-    if (el.dataset.nonempty !== "1") continue;
-    const i = Number(el.dataset.paraI);
-    if (!Number.isFinite(i)) continue;
-    const top = el.offsetTop;
-    tops.push({ index: i, top, bottom: top + el.offsetHeight });
-  }
-  paraGutterTops.value = tops;
-}, 40);
-
-function onBodyTaScroll() {
-  bodyScrollTop.value = bodyTaEl.value?.scrollTop ?? 0;
-}
-
-function onBodyEditorPointerMove(ev: PointerEvent) {
-  const ta = bodyTaEl.value;
-  if (!ta || !bodyEditing.value || paraRewriteBusy.value) {
-    hoveredParaIndex.value = null;
-    return;
-  }
-  const rect = ta.getBoundingClientRect();
-  const y = ev.clientY - rect.top + ta.scrollTop;
-  let hit: number | null = null;
-  for (const g of paraGutterTops.value) {
-    if (y >= g.top && y < g.bottom) {
-      hit = g.index;
-      break;
-    }
-  }
-  hoveredParaIndex.value = hit;
-}
-
-function onBodyEditorPointerLeave() {
-  hoveredParaIndex.value = null;
-}
-
+  return [...new Set(names)];
+});
 
 async function persistChapterBody() {
   if (!selected.value || selected.value.kind !== "chapter" || bodySaveBusy.value) return;
@@ -771,7 +727,6 @@ watch(bodyDraft, () => {
   if (!bodyEditing.value) return;
   bodyAutosaved.value = false;
   scheduleBodyAutosave();
-  nextTick(() => refreshParaGutters());
   if (!bodySuggestOn.value) return;
   if (bodySuggestBusy.value) {
     bodySuggestGen += 1;
@@ -813,7 +768,6 @@ async function confirmParaRewrite() {
     pendingParaRewrite.value = null;
     paraRewriteNote.value = "";
     await persistChapterBody();
-    nextTick(() => refreshParaGutters());
   } catch (e) {
     paraRewriteError.value = String(e);
   } finally {
@@ -848,8 +802,7 @@ const scheduleBodySuggest = useDebounceFn(() => {
 async function requestBodySuggest() {
   if (!bodySuggestOn.value || !bodyEditing.value || paraRewriteBusy.value || pendingParaRewrite.value) return;
   if (!selected.value || selected.value.kind !== "chapter") return;
-  const ta = bodyTaEl.value;
-  bodySuggestInsertAt = ta?.selectionStart ?? bodyDraft.value.length;
+  bodySuggestInsertAt = bodyEditor.value?.getCursor() ?? bodyDraft.value.length;
   const { current, prevParagraph } = bodySuggestContext(bodyDraft.value, bodySuggestInsertAt);
   if (bodySuggestBusy.value) {
     bodySuggestGen += 1;
@@ -877,10 +830,7 @@ function applyBodySuggest(item: string) {
   bodyDraft.value = text;
   bodySuggestInsertAt = cursor;
   nextTick(() => {
-    const ta = bodyTaEl.value;
-    if (!ta) return;
-    ta.focus();
-    ta.setSelectionRange(cursor, cursor);
+    bodyEditor.value?.setSelection(cursor);
   });
 }
 
@@ -1274,7 +1224,6 @@ onMounted(async () => {
     if (bodyTts.value === "idle") return;
     selectBodyTtsRange(ev.payload.start, ev.payload.end);
   });
-  window.addEventListener("resize", refreshParaGutters);
 });
 onUnmounted(() => {
   unlistenChapterProgress?.();
@@ -1289,7 +1238,6 @@ onUnmounted(() => {
   unlistenChapterTtsDownload = null;
   unlistenChapterTtsChunk?.();
   unlistenChapterTtsChunk = null;
-  window.removeEventListener("resize", refreshParaGutters);
   stopChapterTick();
   void stopChapterTts();
   // Only clear if still this novel — late clear must not wipe the next workspace.
@@ -1703,21 +1651,12 @@ const ttsDownloadDetail = computed(() => {
 });
 
 function selectBodyTtsRange(start: number, end: number) {
-  const ta = bodyTaEl.value;
-  if (!ta || !bodyEditing.value) return;
-  const len = ta.value.length;
+  if (!bodyEditing.value || !bodyEditor.value) return;
+  const len = bodyDraft.value.length;
   const s = Math.max(0, Math.min(Math.floor(start), len));
   const e = Math.max(s, Math.min(Math.floor(end), len));
   if (e <= s) return;
-  ta.focus({ preventScroll: true });
-  ta.setSelectionRange(s, e);
-  const sh = ta.scrollHeight;
-  const ch = ta.clientHeight;
-  if (sh > ch) {
-    const y = (s / Math.max(len, 1)) * sh - ch * 0.35;
-    ta.scrollTop = Math.max(0, Math.min(sh - ch, y));
-    bodyScrollTop.value = ta.scrollTop;
-  }
+  bodyEditor.value.setSelection(s, e);
 }
 
 async function toggleChapterTts() {
@@ -5240,56 +5179,18 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
           </template>
           <template v-else>
             <div class="flex min-h-0 w-full flex-1 flex-col gap-2">
-            <div
-              class="relative flex min-h-0 w-full flex-1"
-              @pointermove="onBodyEditorPointerMove"
-              @pointerleave="onBodyEditorPointerLeave"
-            >
-              <div
-                class="relative w-6 shrink-0 self-stretch overflow-hidden"
-                :aria-label="t('workspace.paraRewriteGutter')"
-              >
-                <button
-                  v-for="g in paraGutterTops"
-                  v-show="hoveredParaIndex === g.index"
-                  :key="g.index"
-                  type="button"
-                  class="absolute left-0.5 z-[1] flex h-5 w-5 items-center justify-center rounded text-amber-800 hover:bg-amber-100 disabled:pointer-events-none disabled:opacity-40 dark:text-amber-200 dark:hover:bg-amber-950"
-                  :style="{ top: `${g.top - bodyScrollTop}px` }"
-                  :title="t('workspace.paraRewrite')"
-                  :aria-label="t('workspace.paraRewrite')"
-                  :disabled="paraRewriteBusy || bodySaveBusy"
-                  @click="openParaRewrite(g.index)"
-                >
-                  <Sparkles class="h-3.5 w-3.5" />
-                </button>
-              </div>
-              <div class="relative min-h-0 min-w-0 flex-1">
-                <textarea
-                  ref="bodyTaEl"
-                  v-model="bodyDraft"
-                  class="absolute inset-0 resize-none overflow-y-auto rounded-md border border-input bg-transparent px-3 py-2 font-sans text-sm leading-relaxed shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                  :disabled="bodySaveBusy || paraRewriteBusy"
-                  :placeholder="t('workspace.editBodyPh')"
-                  :aria-label="t('workspace.editBody')"
-                  @scroll="onBodyTaScroll"
-                />
-                <!-- 与 textarea 同宽同排版，用于量段落首行 top -->
-                <div
-                  ref="bodyMirrorEl"
-                  class="pointer-events-none invisible absolute left-0 top-0 -z-10 px-3 py-2 font-sans text-sm leading-relaxed"
-                  aria-hidden="true"
-                >
-                  <div
-                    v-for="(line, i) in bodyLines"
-                    :key="i"
-                    :data-para-i="i"
-                    :data-nonempty="line.trim() ? '1' : '0'"
-                    class="whitespace-pre-wrap break-words"
-                  >{{ line || "\u00a0" }}</div>
-                </div>
-              </div>
-            </div>
+            <ChapterBodyEditor
+              v-if="bodyEditing"
+              ref="bodyEditor"
+              v-model="bodyDraft"
+              :placeholder="t('workspace.editBodyPh')"
+              :disabled="bodySaveBusy || paraRewriteBusy"
+              :nouns="bodyNouns"
+              :rewrite-label="t('workspace.paraRewrite')"
+              :rewrite-disabled="paraRewriteBusy || bodySaveBusy"
+              :aria-label="t('workspace.editBody')"
+              @rewrite="openParaRewrite"
+            />
             <div
               v-if="bodySuggestOn"
               class="max-h-36 shrink-0 overflow-y-auto rounded-md border bg-muted/20 px-2 py-1.5"
