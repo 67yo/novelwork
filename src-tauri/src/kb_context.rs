@@ -23,6 +23,8 @@ pub const MEMORY_FACT_CAP: usize = 300;
 pub const MEMORY_BLOCK_CAP: usize = 2000;
 /// Knowledge cards total in chapter_context.
 pub const CHAPTER_KNOWLEDGE_TOTAL_CAP: usize = 2000;
+/// Local MiniLM output width (`paraphrase-multilingual-MiniLM-L12-v2`).
+pub const MINILM_DIMS: usize = 384;
 
 pub fn truncate_chars(s: &str, n: usize) -> String {
     let t: String = s.chars().take(n).collect();
@@ -100,23 +102,8 @@ pub fn retrieve_knowledge(
 
     let mut recall_bonus: std::collections::HashMap<String, usize> =
         std::collections::HashMap::new();
-    // Embedding boost when vectors exist (recall stage only)
-    if let Ok(Some(qvec)) = embed_query_blocking(db, query) {
-        for (id, _, _) in &rows {
-            let Some((bid, idx_s)) = id.split_once('#') else {
-                continue;
-            };
-            let Ok(idx) = idx_s.parse::<i64>() else {
-                continue;
-            };
-            if let Ok(Some(vec)) = db.get_knowledge_embedding(bid, idx) {
-                let sim = cosine(&qvec, &vec);
-                if sim > 0.15 {
-                    let bonus = (sim * 20.0) as usize;
-                    *recall_bonus.entry(id.clone()).or_default() += bonus.max(1);
-                }
-            }
-        }
+    if let Ok(bonus) = sqlite_vec_recall_bonus(book_ids, query, recall_pool_size(k)) {
+        recall_bonus = bonus;
     }
 
     retrieve_knowledge_from_rows(&rows, query, k, chunk_cap, Some(&recall_bonus))
@@ -292,31 +279,17 @@ pub fn rerank_knowledge_candidates(
     scored
 }
 
-fn cosine(a: &[f32], b: &[f32]) -> f32 {
-    if a.len() != b.len() || a.is_empty() {
-        return 0.0;
-    }
-    let mut dot = 0.0f32;
-    let mut na = 0.0f32;
-    let mut nb = 0.0f32;
-    for i in 0..a.len() {
-        dot += a[i] * b[i];
-        na += a[i] * a[i];
-        nb += b[i] * b[i];
-    }
-    let d = na.sqrt() * nb.sqrt();
-    if d < 1e-8 {
-        0.0
-    } else {
-        dot / d
-    }
-}
-
-/// Sync embed for retrieve path.
-fn embed_query_blocking(_db: &Db, query: &str) -> Result<Option<Vec<f32>>> {
-    let q = query.to_string();
-    let vectors = embed_texts_blocking(&[q], None)?;
-    Ok(vectors.into_iter().next())
+fn sqlite_vec_recall_bonus(
+    book_ids: &[String],
+    query: &str,
+    k: usize,
+) -> Result<std::collections::HashMap<String, usize>> {
+    let Ok(handle) = tokio::runtime::Handle::try_current() else {
+        return Ok(Default::default());
+    };
+    tokio::task::block_in_place(|| {
+        handle.block_on(crate::knowledge_vec::recall_bonus(book_ids, query, k))
+    })
 }
 
 static LOCAL_EMBEDDER: Lazy<Mutex<Option<fastembed::TextEmbedding>>> =
@@ -574,7 +547,58 @@ pub async fn embed_texts(
         .map_err(|e| anyhow!("embed join: {e}"))?
 }
 
-/// Index all chunks for a book with local MiniLM.
+/// rig `EmbeddingModel` over the local MiniLM (no `rig-fastembed` / ort clash).
+#[derive(Clone, Default)]
+pub struct MiniLmEmbedding;
+
+impl MiniLmEmbedding {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl rig_core::embeddings::EmbeddingModel for MiniLmEmbedding {
+    const MAX_DOCUMENTS: usize = 16;
+    type Client = ();
+
+    fn make(_client: &Self::Client, _model: impl Into<String>, _dims: Option<usize>) -> Self {
+        Self
+    }
+
+    fn ndims(&self) -> usize {
+        MINILM_DIMS
+    }
+
+    fn embed_texts(
+        &self,
+        texts: impl IntoIterator<Item = String> + rig_core::wasm_compat::WasmCompatSend,
+    ) -> impl std::future::Future<
+        Output = Result<Vec<rig_core::embeddings::Embedding>, rig_core::embeddings::EmbeddingError>,
+    > + rig_core::wasm_compat::WasmCompatSend {
+        let texts: Vec<String> = texts.into_iter().collect();
+        async move {
+            let t2 = texts.clone();
+            let vectors = tokio::task::spawn_blocking(move || embed_texts_blocking(&t2, None))
+                .await
+                .map_err(|e| {
+                    rig_core::embeddings::EmbeddingError::ProviderError(e.to_string())
+                })?
+                .map_err(|e| {
+                    rig_core::embeddings::EmbeddingError::ProviderError(e.to_string())
+                })?;
+            Ok(texts
+                .into_iter()
+                .zip(vectors)
+                .map(|(document, vec)| rig_core::embeddings::Embedding {
+                    document,
+                    vec: vec.iter().copied().map(f64::from).collect(),
+                })
+                .collect())
+        }
+    }
+}
+
+/// Index all chunks for a book with local MiniLM into `rig-sqlite`.
 pub async fn index_book_embeddings(
     db: &Db,
     book_id: &str,
@@ -582,17 +606,21 @@ pub async fn index_book_embeddings(
 ) -> Result<usize> {
     let chunks = db.list_knowledge_chunks(book_id)?;
     if chunks.is_empty() {
+        crate::knowledge_vec::delete_book(book_id).await.ok();
         return Ok(0);
     }
     let total = chunks.len();
+    let pairs: Vec<(u32, String)> = chunks
+        .iter()
+        .map(|c| (c.idx, c.content.clone()))
+        .collect();
+    let mut all_vecs = Vec::with_capacity(total);
     let mut n = 0;
     for batch in chunks.chunks(16) {
         let texts: Vec<String> = batch.iter().map(|c| c.content.clone()).collect();
         let vectors = embed_texts(&texts, app.clone()).await?;
-        for (c, vec) in batch.iter().zip(vectors.into_iter()) {
-            db.upsert_knowledge_embedding(book_id, c.idx as i64, &vec)?;
-            n += 1;
-        }
+        n += vectors.len();
+        all_vecs.extend(vectors);
         let percent = 95 + ((n as f64 / total as f64) * 5.0).round() as u32;
         emit_kb_model_progress(
             app.as_ref(),
@@ -604,6 +632,7 @@ pub async fn index_book_embeddings(
             }),
         );
     }
+    crate::knowledge_vec::index_book(book_id, &pairs, &all_vecs).await?;
     emit_kb_model_progress(
         app.as_ref(),
         serde_json::json!({

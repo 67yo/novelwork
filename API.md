@@ -29,7 +29,7 @@ Cursor / 客户端示例：
 }
 ```
 
-兼容说明：Cursor / ADK `McpHttpClientBuilder` 等标准 Streamable HTTP 客户端即可；勿再假定「纯手写 JSON-RPC + GET 说明页」。
+兼容说明：Cursor / 其它标准 Streamable HTTP 客户端即可；勿再假定「纯手写 JSON-RPC + GET 说明页」。
 
 ---
 
@@ -258,6 +258,8 @@ Accept: application/json, text/event-stream
 
 **`kind`（边）**：`chapter` \| `volume` \| `character` \| `side_plot` \| `knowledge` 等
 
+**`source_handle` / `target_handle`**：卷/章卡 `top`/`bottom`（脊柱）、`left`（人物/知识）、`right`（剧情）。根节点固定槽另用 `wv`（世界大纲扇形）、`sr`（故事规则）、`wp`（生成/精修枢纽）。
+
 | TreeNode 字段 | 说明 |
 |---------------|------|
 | `label` | 显示名 / 章标题 |
@@ -302,7 +304,7 @@ MCP 条目另含：`formatted`（写作注入 Markdown，与 `character_fmt` 同
 | `extract_prompt` | 检索/提取需求 |
 | `extracted` | 可编辑特征文本（槽位卡写作注入常由 fmt 动态拼装） |
 | `from_canon` | 遗留标记（旧「同步设定卡」）；写作不再按此注入公共库 |
-| `slot` | 根固定槽位 id（空=普通知识卡）。世界观：`wv_core_laws` / `wv_spatiotemporal` / `wv_social_power` / `wv_history_culture` / `wv_existence` / `wv_info_flow`；子卡：`wv_axiom` / `wv_location` / `wv_race` / `wv_faction` / `wv_religion` / `wv_major_event`；故事规则父：`story_rules`；子：`sr_surface_setting` / `sr_story_engine` / `sr_fulfillment_system` / `sr_constraint_redlines` |
+| `slot` | 根固定槽位 id（空=普通知识卡）。世界观：`wv_core_laws` / `wv_spatiotemporal` / `wv_social_power` / `wv_history_culture` / `wv_existence` / `wv_info_flow`；子卡：`wv_axiom` / `wv_location` / `wv_race` / `wv_faction` / `wv_religion` / `wv_major_event`；故事规则父：`story_rules`；子：`sr_surface_setting` / `sr_story_engine` / `sr_fulfillment_system` / `sr_constraint_redlines`；**生成/精修枢纽**：`write_prompts`（根上固定，不可删；左右挂普通知识卡 = 生成 / 精修；本卡与子卡不进 `linked_knowledge` / 章节继承，由应用接到用户提示词后） |
 | `core_laws` | 仅 `wv_core_laws`：`premise`、`taboos[]`、`power_system`、`power_expression` |
 | `world_axiom` | 仅 `wv_axiom`：{name,statement,boundary,cost,mechanism} |
 | `spatiotemporal` | 仅 `wv_spatiotemporal`：`premise`、`era`、`ecology`、`world_pattern`、`atmosphere` |
@@ -450,6 +452,8 @@ MCP 条目另含：`formatted`（写作注入 Markdown，与 `character_fmt` 同
 
 工作台**当前选中卡片**时，`novel_id` 与（写章/改卡类工具的）`node_id` **可省略**，服务端填入选中项。外部客户端仍可显式传入。未选中且未传参则报错。`upsert_*` 的 `node_id` 除外：省略表示**新建**，不会套用当前选中。
 
+`node_id` 除树上真实 id 外，也可传 **「第N章」/ 章号 `3` / 唯一标题**（人物卡可用唯一人名）。写章工具裁剪后没有 `get_tree` 时仍可据此定位章节。找不到时错误文案会带可用章节列表。
+
 ### 5.1 `list_novels`
 
 **请求**
@@ -572,7 +576,7 @@ MCP 条目另含：`formatted`（写作注入 Markdown，与 `character_fmt` 同
 ### 5.3b `get_novel_info`
 
 小说简介快照：书名/简介/字数计划，以及**根节点**关联的人物、剧情卡、知识卡，外加可选 **`volumes` 分卷摘要**。公共知识库不是小说设定源（请用树上知识卡）。  
-了解一本书时优先用本工具，不必拉完整 `get_tree`。写某一章仍用 `get_chapter_info`。
+了解一本书时优先用本工具，不必拉完整 `get_tree`。写某一章用 `get_chapter_write_context`。
 
 根上关联 = `linked_*_ids` ∪ 连到根的边（顺序：列表在前，边补漏）。
 
@@ -696,17 +700,17 @@ MCP 条目另含：`formatted`（写作注入 Markdown，与 `character_fmt` 同
 
 工作台**当前点中的卡片**（进程内记忆，不落盘）。选中时前端写入 `novel_id` + `node_id`；本工具再读树上的活数据。离开工作台会清空。
 
-用户说「这张卡 / 当前选中」时优先用本工具。写某一章仍用 `get_chapter_info`。
+用户说「这张卡 / 当前选中」时优先用本工具。写某一章用 `get_chapter_write_context`。改卡/细纲不要带正文。
 
 **请求**
 
 ```json
-{ "include_content": true }
+{ "include_content": false }
 ```
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `include_content` | boolean | 否 | 默认 `true`；章/剧情卡是否附带正文 Markdown |
+| `include_content` | boolean | 否 | 默认 `false`；章/剧情卡是否附带正文 Markdown |
 
 **未选中**
 
@@ -750,9 +754,7 @@ MCP 条目另含：`formatted`（写作注入 Markdown，与 `character_fmt` 同
 
 ### 5.4b `layout_tree`
 
-工作台「一键排版」的 MCP 版：按四带（知识 | 人物 | 根+章节 | 剧情）重写节点 `position` 并落盘。工作台打开时会收到 `novel-tree-changed` 刷新。
-
-新建卡片时服务端已自动排一次；本工具用于手动挪卡之后再整列。
+按四带（知识 | 人物 | 根+章节 | 剧情）重写节点 `position` 并落盘。**工作台已去掉一键排版**（卡片位置手动拖动保存）；本工具仍可供 MCP / 全局 Chat 整列。工作台打开时会收到 `novel-tree-changed` 刷新。
 
 **请求**
 
@@ -774,7 +776,7 @@ MCP 条目另含：`formatted`（写作注入 Markdown，与 `character_fmt` 同
 
 ### 5.5 `add_chapter`
 
-在末章之后（按画布 y 排序）追加章节卡；没有章节时挂到根。边为上一节点 **bottom → 新章 top**（首章即根.bottom → 首章.top）。写入后自动一键排版。  
+在末章之后（按画布 y 排序）追加章节卡；没有章节时挂到根。边为上一节点 **bottom → 新章 top**（首章即根.bottom → 首章.top）。新卡放在宿主下方，不自动排版。  
 `link_to` 可指向**分卷**：挂到该卷末章，卷下尚无章则挂分卷本身（`kind: "chapter"` 边）。
 
 **请求**
@@ -862,7 +864,7 @@ MCP 条目另含：`formatted`（写作注入 Markdown，与 `character_fmt` 同
 
 ### 5.6b `generate_detailed_outline`
 
-由本章 **简纲**（`outline`）进化 **细纲**（`detailed_outline`）并写回树。正文生成前若细纲为空会自动调用等价逻辑；本工具可强制重写。
+由本章 **简纲**（`outline`）进化 **细纲**（`detailed_outline`）并写回树。条数按每章 `word_count_min/max` 估算（约 320 字/场面），避免条数过多导致正文超字。正文生成前若细纲为空会自动调用等价逻辑；本工具可强制重写。
 
 **请求**
 
@@ -873,7 +875,7 @@ MCP 条目另含：`formatted`（写作注入 Markdown，与 `character_fmt` 同
 **返回**
 
 ```json
-{ "node_id": "ch-uuid", "detailed_outline": ["…"], "ai_guidance": "…" }
+{ "ok": true, "node_id": "ch-uuid", "label": "细纲", "detailed_outline": ["…"], "ai_guidance": "…" }
 ```
 
 ---
@@ -921,7 +923,7 @@ AI 重写本章细纲中的**一条**（0-based `index`），保留其余条目�
 ### 5.8 `get_chapter_content`
 
 读取章节/支线 Markdown **正文**（纯文本，无 JSON 包装）。  
-**生成新章正文时不要调用**（用 `get_chapter_info` 取约束即可，避免旧稿污染生成条件）。**精修/改稿**已有正文时，在 `get_chapter_info` 之后调用本接口读旧稿。
+**生成新章正文时不要调用**（用 `get_chapter_write_context` 取约束即可，避免旧稿污染生成条件）。**精修/改稿**已有正文时，在 `get_chapter_write_context` 之后调用本接口读旧稿。
 
 **请求**
 
@@ -935,27 +937,27 @@ AI 重写本章细纲中的**一条**（0-based `index`），保留其余条目�
 
 ### 5.8b `get_chapter_info`
 
-章节卡快照：**不含正文**；含大纲、关联人物、关联剧情卡、**关联知识卡**与 `ai_guidance`。  
-生成新章：仅依据本接口 → 写全新正文 → `set_chapter_content`。精修/改稿：本接口 + `get_chapter_content` → 改稿 → `set_chapter_content`。
+章节卡快照：**不含正文**；含大纲、关联人物、关联剧情卡、**本章直连知识卡**与 `ai_guidance`。  
+写章请用 `get_chapter_write_context`（本接口知识**不含**根/卷继承）。
 
-剧情：**所有章节继承根节点关联的剧情卡与知识卡；若章节挂在分卷下，另继承该分卷关联卡**。  
+剧情：**章节仍继承根/分卷剧情卡**（只读）。**知识卡不向章/卷继承**（世界观、故事规则、根或卷直连知识只留在本节点）。  
 - `volume`：父分卷 `{ id, label, volume, formatted }`（无则为 `null`；**不含**过时 `outline`）。  
 - `linked_plots`：`inherited_from` = `root` | `volume` | `chapter`（兼容字段 `inherited_from_root`）；根/卷继承只读，**仅本章可排序**。  
 - `linked_side_plot_ids`：仅本章剧情 id（不含根/卷继承）。  
 - `linked_root_plot_ids` / `linked_volume_plot_ids`：根 / 分卷继承剧情 id。  
-- `linked_knowledge_ids` / `linked_knowledge`：本章 ∪ 分卷 ∪ 根并集（条目含 `formatted`/`slot`/结构化载荷）。  
+- `linked_knowledge_ids` / `linked_knowledge`：仅本章直连（条目含 `formatted`/`slot`/结构化载荷）。  
 - `linked_characters`：与 §6.1 单人 entry 同形（含 `formatted`、`character_relations`、完整 `character`）。
 
 返回中的 **`ai_guidance`** 供写章 AI 直接遵守：
 
 1. **剧情**（`plots`）：根 / 分卷 / 本章分别按各自 order；不得混序或改写要点。  
 2. **人物**（`characters`）：`linked_characters` 为本节**必须出场**的人物；须符合结构化字段与 `formatted`；关系见 `character_relations`。  
-3. **知识卡**（`knowledge`）：`linked_knowledge` 为本章**写作硬约束**；**顺序**为根 → 分卷 → 本章（各层按其 `linked_knowledge_ids`；根上六世界观 + 故事规则固定最前）；优先 `extracted`/`formatted`（槽位卡由 fmt 拼装）。  
+3. **知识卡**（`knowledge`）：`linked_knowledge` 为**本章直连**写作约束。根上世界观/故事规则不出现在本接口；写章用 `get_chapter_write_context`。  
 4. **叙事连贯**（`narrative_coherence`）：时间因果、人物一致、细节统一、段落衔接、逻辑自洽、节奏情绪、信息有效；禁止不合理、不连贯、前后冲突的叙述。  
 5. **禁止项**（`forbidden`）：逻辑冲突、矛盾事实、人设崩坏、擅自加设定、机械降神、硬切场景、说明文对话、重复注水、元叙述等。  
-6. **字数**（`length`）：符合 `get_novel_info` 的 `word_count_min`/`max`（约 ±60 字）。  
+6. **字数**（`length`）：瞄准 `word_count_min`/`max` 中位；±60 不是反复重写门槛。  
 7. **输出**（`output`）：只输出 Markdown 正文，不要清单/自我评价。  
-8. **正文用法**（`content_usage`）：本接口不含正文；生成新章若无细纲先 `generate_detailed_outline`，再按细纲写正文，禁止调 `get_chapter_content`；精修（含「精修第 N 章」）才另读旧稿。
+8. **正文用法**（`content_usage`）：写章用 `get_chapter_write_context`。本接口不含正文。
 
 **请求**
 
@@ -969,7 +971,7 @@ AI 重写本章细纲中的**一条**（0-based `index`），保留其余条目�
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `novel_id` | string | 否 | 工作台已选中时可省略 |
-| `node_id` | string | 否 | 章节（或支线）节点；工作台已选中时可省略 |
+| `node_id` | string | 否 | 章节（或支线）节点 id、「第N章」或唯一标题；工作台已选中时可省略 |
 
 **返回样本**
 
@@ -1078,7 +1080,7 @@ AI 重写本章细纲中的**一条**（0-based `index`），保留其余条目�
 | `ai_guidance.knowledge` | 关联知识卡为写作手法/文风等硬约束（`extracted`/`formatted` 及结构化槽位字段） |
 | `ai_guidance.narrative_coherence` | 叙事合理连贯：时间因果、人设一致、细节统一、段落衔接、逻辑自洽等 |
 | `ai_guidance.forbidden` | 禁止逻辑冲突、矛盾事实、人设崩坏、擅自加设定、机械降神、元叙述等 |
-| `ai_guidance.length` | 字数符合全书每章目标（约 ±60） |
+| `ai_guidance.length` | 瞄准每章目标中位；`in_band` 后禁止再为篇幅重写 |
 | `ai_guidance.output` | 只输出 Markdown 正文 |
 | `ai_guidance.content_usage` | 本接口不含正文；生成须先有细纲（空则 `generate_detailed_outline`）；生成勿调 `get_chapter_content`；精修才另读旧稿 |
 | `node` | 完整 `TreeNode`（含 `detailed_outline`） |
@@ -1089,11 +1091,70 @@ AI 重写本章细纲中的**一条**（0-based `index`），保留其余条目�
 | `linked_plots[].order` | 根 / 卷 / 本章各自从 `0` 起；看 `inherited_from` |
 | `linked_plots[].inherited_from` | `root` \| `volume` \| `chapter` |
 | `linked_characters` | 本章必出人物（同 §6.1 entry，含 `order`） |
-| `linked_knowledge` / `linked_knowledge_ids` | 根 → 分卷 → 本章并集（顺序同左；含 `formatted`/`slot`/结构化载荷；`order` 为全局下标） |
+| `linked_knowledge` / `linked_knowledge_ids` | 仅本章直连（含 `formatted`/`slot`/结构化载荷） |
 
-工作台：画布把知识卡连到根 / 分卷 / 章节会写入对应 `linked_knowledge_ids`；左侧编辑栏可**拖拽排序**本节点知识（继承项只读；根上六世界观 + 故事规则固定置顶不参与排序）。预生成/精修与 MCP 写章均须严格遵守知识卡约束，并按根→卷→章顺序理解 `linked_knowledge`。
+工作台：画布把知识卡连到根 / 分卷 / 章节会写入对应 `linked_knowledge_ids`；左侧可拖拽排序**本节点直连**知识。世界观/故事规则与根、卷知识不向章继承。
 
-**全局 Chat「生成/重写第 N 章」**（软约束，非工作台 `generate_chapter` 命令）：助手须先 `get_novel_info` + `get_chapter_info`；新生成禁止 `get_chapter_content`；用户要求重写/改稿已有正文时再读 `get_chapter_content`。落盘前自检：章纲节拍、剧情 order、人物出场与人设、知识卡 `extracted`、字数在 `word_count_min`–`max` 的 ±60 内；通过后再 `set_chapter_content`。详见 `Project.md` §6 与 `/novel` skill。
+**全局 Chat「生成/重写第 N 章」**：系统指令要求先 `get_chapter_write_context` 并遵守返回的 `ai_guidance`（已有根 → `include_root=false`；同卷已有 → `include_volume=false`；沿用当前 session）。Chat 写章轮次只暴露 `get_chapter_write_context` / `generate_detailed_outline` / `get_chapter_content` / `set_chapter_content`。**改人物/剧情/知识卡**只暴露 `get_selected_card` / `get_character_card` / `upsert_*` / `fill_knowledge_card` / `link_nodes` / `unlink_nodes`；**生成/重写细纲**只暴露 `get_selected_card` / `generate_detailed_outline` / `regenerate_detailed_outline_item` / `update_chapter_outline`。新生成禁止 `get_chapter_content`；改稿再读旧稿。`set_chapter_content` / `upsert_*` 成功后历史里去掉整段正文或整卡 JSON；load 时只保留最近 2 轮 user + 更早轮次摘要。绑定小说且非写章时按章节记忆做 `dynamic_context`（不含公共库）。`/novel` skill 只在用户显式输入时注入并放开全部工具。Chat 按设置里的 **AI API** 协议选 rig 客户端（Completions / Responses / DeepSeek / BigModel / Anthropic / Gemini 等；阿里云走 Completions）。详见 `Project.md` §6。
+
+---
+
+### 5.8c `get_chapter_write_context`
+
+写章专用材料包：**不含正文**。一次返回根（可选）+ 分卷（可选）+ 本章；人物/剧情/知识按 id **去重（先到优先）**。同一 Chat session 已提交过根/卷时关掉对应 include，避免重复 token。
+
+**请求**
+
+```json
+{
+  "novel_id": "n-uuid",
+  "node_id": "ch-uuid",
+  "include_root": true,
+  "include_volume": true
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `novel_id` | string | 否 | 工作台已选中时可省略 |
+| `node_id` | string / integer | 否 | 章节 id、「第N章」、章号或唯一标题；工作台已选中时可省略 |
+| `include_root` | bool | 否 | 默认 `true`。本会话已有根材料时传 `false`（仍从章/卷结果中剔除根卡 id） |
+| `include_volume` | bool | 否 | 默认 `true`。同卷已提交时传 `false`。无分卷则 `volume` 为 null |
+
+**返回**（紧凑 JSON）
+
+```json
+{
+  "included": { "root": true, "volume": false, "chapter": true },
+  "root": {
+    "title": "书名",
+    "synopsis": "…",
+    "features_text": "…",
+    "word_count_min": 3000,
+    "word_count_max": 4000,
+    "linked_characters": [{ "id": "c1", "label": "陈默", "formatted": "…" }],
+    "linked_plots": [{ "id": "p1", "label": "主线", "outline": "…", "scope": "root" }],
+    "linked_knowledge": [{ "id": "k1", "label": "核心法则", "slot": "wv_core_laws", "formatted": "…", "scope": "root" }]
+  },
+  "volume": null,
+  "chapter": {
+    "id": "ch-uuid",
+    "label": "第19章",
+    "outline": "简纲",
+    "detailed_outline": ["细纲1"],
+    "word_count_min": 3000,
+    "word_count_max": 4000,
+    "linked_characters": [],
+    "linked_plots": [],
+    "linked_knowledge": []
+  },
+  "ai_guidance": {}
+}
+```
+
+人物条目仅 `id`/`label`/`formatted`/`character_relations`（无完整 `character` 再拷一份）。知识仅 `formatted`（不再重复 `extracted`）。`include_root=false` 时 `ai_guidance` 为短 note。
+
+根上 `slot=write_prompts`（生成/精修）及其左右子卡**不**出现在各层 `linked_knowledge`。Chat 写章由应用把对应侧知识接到用户消息后；后端 `generate_chapter` / `refine_chapter` 接到 `user_brief` 后。不要把这些卡再塞进写章上下文。
 
 ---
 
@@ -1112,12 +1173,15 @@ AI 重写本章细纲中的**一条**（0-based `index`），保留其余条目�
 **返回**
 
 ```json
-{ "ok": true, "word_count": 1234 }
+{ "ok": true, "word_count": 1234, "word_count_min": 2000, "word_count_max": 3000, "in_band": true, "ai_guidance": "字数已在允许区间，禁止再为篇幅改正文。" }
 ```
 
 | 字段 | 说明 |
 |------|------|
 | `word_count` | 非空白字符数（写入树节点） |
+| `word_count_min` / `word_count_max` | 本书每章目标 |
+| `in_band` | 是否落在目标 ±60。`true` 时禁止再为篇幅重写 |
+| `ai_guidance` | 交卷/只删冗一轮 |
 
 仅允许 `chapter` / `side_plot` 节点。
 
@@ -1169,7 +1233,7 @@ AI 重写本章细纲中的**一条**（0-based `index`），保留其余条目�
 
 ### 5.9c `set_chapter_memory`
 
-手动覆盖或清空某章记忆（`items` 为空数组则清除 SQLite + Lance）。
+手动覆盖或清空某章记忆（`items` 为空数组则清除 SQLite 列表 + Lance 向量）。
 
 **请求**
 
@@ -1286,7 +1350,7 @@ AI 重写本章细纲中的**一条**（0-based `index`），保留其余条目�
 | 参数 | 说明 |
 |------|------|
 | `novel_id` | 可省略（当前选中书） |
-| `node_id` | 人物节点 id；**省略则返回本书全部人物** |
+| `node_id` | 人物节点 id 或唯一人名；**省略则只返回 id/label 列表**（读完整卡必须带 `node_id`） |
 
 **返回（单人）**
 
@@ -1331,9 +1395,9 @@ AI 重写本章细纲中的**一条**（0-based `index`），保留其余条目�
 
 单人查询**不含** `order`；`get_novel_info` / `get_chapter_info` 的 `linked_characters` 以及全书列表条目含 `order`（从 0 起）。
 
-**返回（全书）**：`{ "count": N, "characters": [ … ] }`
+**返回（全书列表）**：`{ "count": N, "characters": [{ "id", "label" }], "ai_guidance": "…" }`
 
-`get_novel_info` / `get_chapter_info` 的 `linked_characters` 条目形状与上相同（含 `formatted`、完整 `character`）。
+`get_novel_info` / `get_chapter_info` 的 `linked_characters` 条目形状与单人相同（含 `formatted`、完整 `character`）。
 
 写章注入请优先读 `formatted`；结构化读写用 `character.*`。`get_selected_card` 仅返回原始 `TreeNode`（无 `formatted`），人物请改用本工具。
 
@@ -1341,7 +1405,7 @@ AI 重写本章细纲中的**一条**（0-based `index`），保留其余条目�
 
 ### 6.2 `upsert_character_card`
 
-无 `node_id` 则新建（写入后自动一键排版）；有则更新。新建默认挂**章节卡**（同前）。
+无 `node_id` 则新建；有则更新。新建默认挂**章节卡**（同前）。新卡不自动排版，需要整列时用 `layout_tree`。
 
 **更新是深度合并**：省略的结构化字段保留原值；可传：
 - `character`：`CharacterCard` 本体，**或** `get_character_card` 返回的整条 entry（含 `formatted` 的包装会自动摊平）
@@ -1422,8 +1486,12 @@ AI 重写本章细纲中的**一条**（0-based `index`），保留其余条目�
 
 ```json
 {
-  "node": { … TreeNode … },
-  "character": { "id", "label", "character", "formatted", "character_relations" }
+  "ok": true,
+  "created": false,
+  "node_id": "char-uuid",
+  "label": "李四",
+  "kind": "character",
+  "ai_guidance": "已写入。勿把整卡贴回对话；再改同一张卡继续 upsert，省略未改字段。"
 }
 ```
 
@@ -1448,7 +1516,7 @@ AI 重写本章细纲中的**一条**（0-based `index`），保留其余条目�
 | `status` | `active` \| `resolved` \| `deferred` |
 | `link_to` | 章或根的**节点 id**；也可写 `root` / `novel`（解析成小说根的真实 id，不是字面 `"root"`）。**新建且省略时挂当前选中章，否则末章，再否则根**。边为 **章.right → 剧情.left** |
 
-**返回**：剧情 `TreeNode`（`kind: "side_plot"`）
+**返回**：`{ "ok": true, "node_id", "label", "kind": "side_plot", "ai_guidance" }`（不回整张 TreeNode）
 
 ---
 
@@ -1458,7 +1526,7 @@ AI 重写本章细纲中的**一条**（0-based `index`），保留其余条目�
 
 **更新是部分字段**：省略的 `book_ids` / `extract_prompt` / `extracted` **保留原值**（便于 AI 只写回 `extracted`）。
 
-世界观 / 故事规则固定槽：传 `slot`（如 `wv_core_laws`、`sr_surface_setting`）可省略 `node_id`；传结构化 payload（`core_laws`、`surface_setting` 等）会自动同步 `extracted`（与写作注入同形）。固定槽不会重复新建，也不会被挂到章节下。
+世界观 / 故事规则固定槽：传 `slot`（如 `wv_core_laws`、`sr_surface_setting`）可省略 `node_id`；传结构化 payload（`core_laws`、`surface_setting` 等）会自动同步 `extracted`（与写作注入同形）。固定槽不会重复新建，也不会被挂到章节下。`slot=write_prompts` 同样就地更新、不可当新卡挂到章下。
 
 选库后两条路：
 
@@ -1484,17 +1552,17 @@ AI 重写本章细纲中的**一条**（0-based `index`），保留其余条目�
 
 ```json
 {
-  "node": { "id": "kn-uuid", "kind": "knowledge", "label": "…", "knowledge": { … } },
-  "formatted": "……写作注入正文……",
-  "extracted": "……同 formatted（注入体）……",
+  "ok": true,
+  "created": false,
+  "node_id": "kn-uuid",
+  "label": "修炼设定卡",
+  "kind": "knowledge",
   "slot": "",
-  "book_ids": ["kb-uuid"],
-  "extract_prompt": "…",
-  "core_laws": null
+  "ai_guidance": "已写入。勿把整卡贴回对话；再改同一张卡继续 upsert，省略未改字段。"
 }
 ```
 
-有结构化载荷时，与 `linked_knowledge` 相同：非空则摊到顶层（`core_laws` / `world_axiom` / `surface_setting` / …）。`slot=story_rules` 时另含 `blocks`。
+请求可带结构化载荷（`core_laws` / `surface_setting` / …），写入后自动同步 `extracted`；回执不再回这些字段。`slot=story_rules` 同理。
 
 新建且未传 `link_to` 时挂当前选中章，否则末章，再否则小说根。边为 **章.left ← 知识.right**。`link_to` 为 `"root"` / `"novel"` 时解析为根节点真实 id（树里的根 id 通常是 UUID，不是 `"root"`）。
 
@@ -1521,7 +1589,7 @@ AI 重写本章细纲中的**一条**（0-based `index`），保留其余条目�
 | `book_ids` | 否 | 有则先写入卡片再导入；否则用卡上已有 `book_ids` |
 | `max_chars` | 否 | 导入正文上限，默认 `14000` |
 
-**返回**：更新后的知识 `TreeNode`
+**返回**：`{ "ok": true, "node_id", "label", "extracted_chars", "ai_guidance" }`（不回整张 TreeNode / extracted 正文）
 
 ---
 
@@ -1616,6 +1684,8 @@ AI 重写本章细纲中的**一条**（0-based `index`），保留其余条目�
 ---
 
 ### 6.6 `unlink_nodes`
+
+世界观 / 故事规则卡的连线不可断开。`write_prompts`（生成/精修）**只**锁与根的那条边；左右子卡可以断开。
 
 **按边 id**
 

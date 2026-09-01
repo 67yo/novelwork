@@ -9,10 +9,6 @@ import type { SettingsView } from "./api";
 function emptySettings(over: Partial<SettingsView> = {}): SettingsView {
   return {
     compat_providers: [],
-    gemini_api_key_masked: "",
-    gemini_api_key_configured: false,
-    claude_api_key_masked: "",
-    claude_api_key_configured: false,
     default_model: "deepseek-chat",
     create_model: "deepseek-v4-flash",
     generate_model: "deepseek-v4-flash",
@@ -33,6 +29,12 @@ function emptySettings(over: Partial<SettingsView> = {}): SettingsView {
     mcp_port: 17832,
     mcp_enabled: true,
     mcp_lan: false,
+    ai_interaction_log: false,
+    ai_log_dir: "",
+    comfyui_url: "http://127.0.0.1:8188",
+    comfyui_workflow: "",
+    comfyui_prompt_node: "",
+    comfyui_image_workflow: "",
     ...over,
   };
 }
@@ -42,16 +44,6 @@ console.assert(catalogModelIds(none).length === 0, "no keys → no catalog ids")
 console.assert(
   modelSelectOptions(none, "deepseek-v4-flash", " (旧)").length === 0,
   "no keys → no select options even with saved chat_model",
-);
-
-const withGemini = emptySettings({ gemini_api_key_configured: true });
-console.assert(
-  catalogModelIds(withGemini).includes("gemini:gemini-pro"),
-  "gemini configured → gemini:ref",
-);
-console.assert(
-  !catalogModelIds(withGemini).some((id) => id.includes("claude")),
-  "gemini only → no claude",
 );
 
 const withCompat = emptySettings({
@@ -108,6 +100,28 @@ console.assert(
 console.assert(
   resolvePreferredModelId(dup, "gpt-4") === "compat:a:gpt-4",
   "bare name → first provider",
+);
+
+const gem = emptySettings({
+  compat_providers: [
+    {
+      id: "g",
+      label: "Gemini",
+      protocol: "gemini",
+      base_url: "https://generativelanguage.googleapis.com",
+      api_key_masked: "AIza",
+      api_key_configured: true,
+      models: ["gemini-pro"],
+    },
+  ],
+});
+console.assert(
+  resolvePreferredModelId(gem, "gemini:gemini-pro") === "compat:g:gemini-pro",
+  "legacy gemini: prefix → AI API provider",
+);
+console.assert(
+  !catalogModelIds(gem).some((id) => id.startsWith("gemini:")),
+  "no standalone gemini: catalog ids",
 );
 
 console.log("chatModel.selfcheck ok");

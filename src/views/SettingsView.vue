@@ -30,6 +30,9 @@ const uiLocale = ref<LocalePreference>("system");
 const mcpPort = ref(17832);
 const mcpEnabled = ref(true);
 const mcpLan = ref(false);
+const aiLogEnabled = ref(false);
+const aiLogDir = ref("");
+const aiLogBusy = ref(false);
 const comfyUrl = ref("http://127.0.0.1:8188");
 const comfyWorkflow = ref("");
 const comfyImageWorkflow = ref("");
@@ -38,17 +41,45 @@ const mcpStatus = ref<McpStatus | null>(null);
 const mcpBusy = ref(false);
 const settings = ref<SettingsView | null>(null);
 const providers = ref<DraftProvider[]>([]);
-const geminiKey = ref("");
-const claudeKey = ref("");
 const show = ref<Record<string, boolean>>({});
 const msg = ref("");
 const err = ref("");
 const saving = ref(false);
 const refreshBusyId = ref<string | null>(null);
 
+const PROTOCOL_PRESETS: Record<string, { url: string; label: string }> = {
+  openai: { url: "https://api.openai.com/v1", label: "OpenAI" },
+  openai_responses: { url: "https://api.openai.com/v1", label: "OpenAI" },
+  deepseek: { url: "https://api.deepseek.com/v1", label: "DeepSeek" },
+  zai: { url: "https://open.bigmodel.cn/api/paas/v4", label: "BigModel" },
+  aliyun: { url: "https://dashscope.aliyuncs.com/compatible-mode/v1", label: "Aliyun" },
+  anthropic: { url: "https://api.anthropic.com", label: "Anthropic" },
+  gemini: { url: "https://generativelanguage.googleapis.com", label: "Gemini" },
+  groq: { url: "https://api.groq.com/openai/v1", label: "Groq" },
+  moonshot: { url: "https://api.moonshot.cn/v1", label: "Kimi" },
+  mistral: { url: "https://api.mistral.ai", label: "Mistral" },
+  openrouter: { url: "https://openrouter.ai/api/v1", label: "OpenRouter" },
+  together: { url: "https://api.together.xyz", label: "Together" },
+  xai: { url: "https://api.x.ai", label: "xAI" },
+  ollama: { url: "http://localhost:11434", label: "Ollama" },
+  hyperbolic: { url: "https://api.hyperbolic.xyz", label: "Hyperbolic" },
+  huggingface: { url: "https://router.huggingface.co", label: "Hugging Face" },
+  minimax: { url: "https://api.minimaxi.com/v1", label: "MiniMax" },
+  mira: { url: "https://api.mira.network", label: "Mira" },
+  perplexity: { url: "https://api.perplexity.ai", label: "Perplexity" },
+  venice: { url: "https://api.venice.ai/api/v1", label: "Venice" },
+  cohere: { url: "https://api.cohere.ai", label: "Cohere" },
+  azure: { url: "https://YOUR_RESOURCE.openai.azure.com", label: "Azure" },
+  llamafile: { url: "http://localhost:8080", label: "Llamafile" },
+  xiaomimimo: { url: "https://api.xiaomimimo.com/v1", label: "Xiaomi MiMo" },
+  doubleword: { url: "https://api.doubleword.ai/v1", label: "Doubleword" },
+};
+
+const PROTOCOL_OPTIONS = Object.keys(PROTOCOL_PRESETS);
+
 const adding = ref(false);
-const addLabel = ref("");
-const addProtocol = ref("openai");
+const addLabel = ref("DeepSeek");
+const addProtocol = ref("deepseek");
 const addBaseUrl = ref("https://api.deepseek.com/v1");
 const addKey = ref("");
 const addFetched = ref<string[]>([]);
@@ -89,13 +120,13 @@ async function load() {
   mcpPort.value = s.mcp_port || 17832;
   mcpEnabled.value = s.mcp_enabled !== false;
   mcpLan.value = !!s.mcp_lan;
+  aiLogEnabled.value = !!s.ai_interaction_log;
+  aiLogDir.value = s.ai_log_dir || "";
   comfyUrl.value = s.comfyui_url || "http://127.0.0.1:8188";
   comfyWorkflow.value = s.comfyui_workflow || "";
   comfyImageWorkflow.value = s.comfyui_image_workflow || "";
   comfyNode.value = s.comfyui_prompt_node || "";
   setLocalePreference(uiLocale.value);
-  geminiKey.value = "";
-  claudeKey.value = "";
   void refreshMcpStatus();
 }
 
@@ -117,6 +148,18 @@ async function restartMcp() {
     err.value = String(e);
   } finally {
     mcpBusy.value = false;
+  }
+}
+
+async function openAiLog() {
+  aiLogBusy.value = true;
+  err.value = "";
+  try {
+    aiLogDir.value = await api.openAiLogDir();
+  } catch (e) {
+    err.value = String(e);
+  } finally {
+    aiLogBusy.value = false;
   }
 }
 
@@ -191,13 +234,32 @@ function openAdd() {
 }
 
 function resetAddForm() {
-  addLabel.value = "";
-  addProtocol.value = "openai";
-  addBaseUrl.value = "https://api.deepseek.com/v1";
+  addLabel.value = "DeepSeek";
+  addProtocol.value = "deepseek";
+  addBaseUrl.value = PROTOCOL_PRESETS.deepseek.url;
   addKey.value = "";
   addFetched.value = [];
   addSelected.value = new Set();
   addErr.value = "";
+}
+
+function protocolLabel(id: string) {
+  return t(`settings.protocol.${id}`);
+}
+
+function protocolAllowsEmptyKey(id: string) {
+  return id === "ollama" || id === "llamafile";
+}
+
+function applyAddProtocol() {
+  const preset = PROTOCOL_PRESETS[addProtocol.value] || PROTOCOL_PRESETS.openai;
+  addBaseUrl.value = preset.url;
+  const presetLabels = Object.values(PROTOCOL_PRESETS)
+    .map((p) => p.label)
+    .filter(Boolean);
+  if (!addLabel.value.trim() || presetLabels.includes(addLabel.value.trim())) {
+    addLabel.value = preset.label;
+  }
 }
 
 function cancelAdd() {
@@ -209,7 +271,11 @@ async function fetchAddModels() {
   addErr.value = "";
   addBusy.value = true;
   try {
-    const ids = await api.fetchCompatModels(addBaseUrl.value.trim(), addKey.value.trim());
+    const ids = await api.fetchCompatModels(
+      addBaseUrl.value.trim(),
+      addKey.value.trim(),
+      addProtocol.value,
+    );
     addFetched.value = ids;
     addSelected.value = new Set(ids);
     if (!ids.length) addErr.value = t("settings.compatNoModels");
@@ -235,7 +301,11 @@ function selectAllAdd(on: boolean) {
 
 function confirmAdd() {
   addErr.value = "";
-  if (!addLabel.value.trim() || !addBaseUrl.value.trim() || !addKey.value.trim()) {
+  if (!addLabel.value.trim() || !addBaseUrl.value.trim()) {
+    addErr.value = t("settings.compatNeedFields");
+    return;
+  }
+  if (!protocolAllowsEmptyKey(addProtocol.value) && !addKey.value.trim()) {
     addErr.value = t("settings.compatNeedFields");
     return;
   }
@@ -252,7 +322,7 @@ function confirmAdd() {
       base_url: addBaseUrl.value.trim(),
       api_key: addKey.value.trim(),
       models: [...addSelected.value].sort(),
-      api_key_configured: true,
+      api_key_configured: protocolAllowsEmptyKey(addProtocol.value) || !!addKey.value.trim(),
       api_key_masked: "",
     },
   ];
@@ -307,12 +377,11 @@ async function save() {
         api_key: opt(p.api_key),
         models: p.models,
       })),
-      gemini_api_key: opt(geminiKey.value),
-      claude_api_key: opt(claudeKey.value),
       ui_locale: uiLocale.value,
       mcp_port: Number(mcpPort.value) || 17832,
       mcp_enabled: mcpEnabled.value,
       mcp_lan: mcpLan.value,
+      ai_interaction_log: aiLogEnabled.value,
       comfyui_url: comfyUrl.value.trim() || "http://127.0.0.1:8188",
       comfyui_workflow: comfyWorkflow.value,
       comfyui_prompt_node: comfyNode.value.trim(),
@@ -323,6 +392,8 @@ async function save() {
     mcpPort.value = s.mcp_port || 17832;
     mcpEnabled.value = s.mcp_enabled !== false;
     mcpLan.value = !!s.mcp_lan;
+    aiLogEnabled.value = !!s.ai_interaction_log;
+    aiLogDir.value = s.ai_log_dir || "";
     void refreshMcpStatus();
     msg.value = t("settings.saved");
     await api.refreshModelCatalog();
@@ -349,10 +420,9 @@ const activeSection = ref("language");
 
 const settingsSections = computed(() => [
   { id: "language", label: t("settings.language") },
+  { id: "ai-log", label: t("settings.aiLog") },
   { id: "skills", label: t("settings.skills") },
   { id: "compat", label: t("settings.compatTitle") },
-  { id: "gemini", label: "Gemini" },
-  { id: "claude", label: "Claude" },
 ]);
 
 function scrollToSection(id: string) {
@@ -419,6 +489,27 @@ function scrollToSection(id: string) {
         >
           <option v-for="opt in LOCALE_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
         </select>
+      </CardContent>
+    </Card>
+
+    <Card id="settings-ai-log" class="scroll-mt-4">
+      <CardHeader>
+        <CardTitle>{{ t("settings.aiLog") }}</CardTitle>
+        <p class="text-sm text-muted-foreground">{{ t("settings.aiLogHint") }}</p>
+      </CardHeader>
+      <CardContent class="space-y-4">
+        <label class="flex items-center gap-2 text-sm">
+          <input v-model="aiLogEnabled" type="checkbox" class="h-4 w-4" />
+          {{ t("settings.aiLogEnabled") }}
+        </label>
+        <p class="text-xs text-muted-foreground">{{ t("settings.aiLogWarn") }}</p>
+        <div class="space-y-1">
+          <label class="text-xs text-muted-foreground">{{ t("settings.aiLogPath") }}</label>
+          <p class="break-all font-mono text-xs">{{ aiLogDir || "—" }}</p>
+        </div>
+        <Button variant="outline" size="sm" :disabled="aiLogBusy" @click="openAiLog">
+          {{ t("settings.aiLogOpen") }}
+        </Button>
       </CardContent>
     </Card>
 
@@ -592,8 +683,11 @@ function scrollToSection(id: string) {
             <select
               v-model="addProtocol"
               class="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+              @change="applyAddProtocol"
             >
-              <option value="openai">OpenAI</option>
+              <option v-for="id in PROTOCOL_OPTIONS" :key="id" :value="id">
+                {{ protocolLabel(id) }}
+              </option>
             </select>
           </div>
           <div>
@@ -671,7 +765,14 @@ function scrollToSection(id: string) {
             <div class="flex items-start justify-between gap-2">
               <div class="min-w-0">
                 <p class="font-medium">{{ p.label || p.id }}</p>
-                <p class="text-xs text-muted-foreground">{{ p.protocol }}</p>
+                <select
+                  v-model="p.protocol"
+                  class="mt-1 flex h-8 w-full max-w-xs rounded-md border border-input bg-background px-2 text-xs"
+                >
+                  <option v-for="id in PROTOCOL_OPTIONS" :key="id" :value="id">
+                    {{ protocolLabel(id) }}
+                  </option>
+                </select>
                 <p class="mt-1 text-xs text-muted-foreground">
                   {{ t("settings.status") }}
                   <span :class="p.api_key_configured || p.api_key ? 'text-primary' : 'text-muted-foreground'">
@@ -730,60 +831,6 @@ function scrollToSection(id: string) {
             </p>
           </li>
         </ul>
-      </CardContent>
-    </Card>
-
-    <Card id="settings-gemini" class="scroll-mt-4">
-      <CardHeader>
-        <CardTitle>Gemini</CardTitle>
-        <p class="text-sm text-muted-foreground">
-          {{ t("settings.status") }}
-          <span :class="settings?.gemini_api_key_configured ? 'text-primary' : 'text-muted-foreground'">
-            {{ statusText(settings?.gemini_api_key_configured, settings?.gemini_api_key_masked) }}
-          </span>
-        </p>
-      </CardHeader>
-      <CardContent>
-        <label class="mb-1 block text-sm">{{ t("settings.apiKey") }}</label>
-        <div class="flex gap-2">
-          <Input
-            v-model="geminiKey"
-            :type="show.gemini ? 'text' : 'password'"
-            :placeholder="`AIza… (${t('settings.keyPlaceholder')})`"
-            class="flex-1"
-          />
-          <Button variant="outline" size="icon" type="button" @click="toggle('gemini')">
-            <Eye v-if="!show.gemini" class="h-4 w-4" />
-            <EyeOff v-else class="h-4 w-4" />
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-
-    <Card id="settings-claude" class="scroll-mt-4">
-      <CardHeader>
-        <CardTitle>Claude</CardTitle>
-        <p class="text-sm text-muted-foreground">
-          {{ t("settings.status") }}
-          <span :class="settings?.claude_api_key_configured ? 'text-primary' : 'text-muted-foreground'">
-            {{ statusText(settings?.claude_api_key_configured, settings?.claude_api_key_masked) }}
-          </span>
-        </p>
-      </CardHeader>
-      <CardContent>
-        <label class="mb-1 block text-sm">{{ t("settings.apiKey") }}</label>
-        <div class="flex gap-2">
-          <Input
-            v-model="claudeKey"
-            :type="show.claude ? 'text' : 'password'"
-            :placeholder="`sk-ant-… (${t('settings.keyPlaceholder')})`"
-            class="flex-1"
-          />
-          <Button variant="outline" size="icon" type="button" @click="toggle('claude')">
-            <Eye v-if="!show.claude" class="h-4 w-4" />
-            <EyeOff v-else class="h-4 w-4" />
-          </Button>
-        </div>
       </CardContent>
     </Card>
         </div>

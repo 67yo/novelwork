@@ -169,9 +169,9 @@ pub fn ensure_worldview_cards(tree: &mut NovelTree) -> bool {
         });
         if !edge_exists {
             let (sh, th) = if slot == STORY_RULES.0 {
-                ("right", "left")
+                ("sr", "left")
             } else {
-                ("top", "bottom")
+                ("wv", "bottom")
             };
             tree.edges.push(TreeEdge {
                 id: format!("e-{root_id}-{id}"),
@@ -184,6 +184,40 @@ pub fn ensure_worldview_cards(tree: &mut NovelTree) -> bool {
             });
         }
         changed = true;
+    }
+    let pairs: Vec<(String, &'static str, &'static str)> = tree
+        .nodes
+        .iter()
+        .filter_map(|n| {
+            let slot = n.knowledge.as_ref()?.slot.as_str();
+            let (sh, th) = if FAN.iter().any(|(s, _)| *s == slot) {
+                ("wv", "bottom")
+            } else if slot == STORY_RULES.0 {
+                ("sr", "left")
+            } else {
+                return None;
+            };
+            Some((n.id.clone(), sh, th))
+        })
+        .collect();
+    for (id, sh, th) in pairs {
+        if let Some(edge) = tree.edges.iter_mut().find(|e| {
+            e.kind == "knowledge"
+                && ((e.source == root_id && e.target == id)
+                    || (e.target == root_id && e.source == id))
+        }) {
+            if edge.source != root_id
+                || edge.target != id
+                || edge.source_handle.as_deref() != Some(sh)
+                || edge.target_handle.as_deref() != Some(th)
+            {
+                edge.source = root_id.clone();
+                edge.target = id;
+                edge.source_handle = Some(sh.into());
+                edge.target_handle = Some(th.into());
+                changed = true;
+            }
+        }
     }
     let fan = crate::story_rules_ops::ensure_story_rules_fan_cards(tree);
     changed || fan
@@ -304,7 +338,6 @@ pub fn apply_worldview_payload(tree: &mut NovelTree, worldview: &Value) -> Resul
     }
     sync_extracted(tree);
     crate::story_rules_ops::sync_story_rules_parent_extracted(tree);
-    crate::tree_layout::apply_auto_layout(tree);
     Ok(())
 }
 

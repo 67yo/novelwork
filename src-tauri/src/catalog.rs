@@ -1,6 +1,6 @@
 //! Fetch live model IDs from providers that have API keys configured.
 use crate::db::Db;
-use crate::models::ModelCatalog;
+use crate::models::{self, ModelCatalog};
 use anyhow::{anyhow, Result};
 use chrono::Utc;
 use serde::Deserialize;
@@ -9,8 +9,45 @@ pub fn models_list_url(base: &str) -> String {
     format!("{}/models", base.trim().trim_end_matches('/'))
 }
 
+fn strip_slash(base: &str) -> &str {
+    base.trim().trim_end_matches('/')
+}
+
 pub async fn fetch_openai_models(base_url: &str, api_key: &str) -> Result<Vec<String>> {
     fetch_openai_compat(&models_list_url(base_url), api_key).await
+}
+
+pub async fn fetch_provider_models(
+    protocol: &str,
+    base_url: &str,
+    api_key: &str,
+) -> Result<Vec<String>> {
+    match protocol {
+        models::PROTOCOL_ANTHROPIC => fetch_claude(api_key, base_url).await,
+        models::PROTOCOL_GEMINI => fetch_gemini(api_key, base_url).await,
+        models::PROTOCOL_OLLAMA => fetch_ollama(base_url).await,
+        models::PROTOCOL_AZURE => fetch_azure(base_url, api_key).await,
+        models::PROTOCOL_LLAMAFILE => {
+            let root = strip_slash(base_url);
+            let url = if root.ends_with("/v1") {
+                format!("{root}/models")
+            } else {
+                format!("{root}/v1/models")
+            };
+            fetch_openai_compat(&url, api_key).await
+        }
+        models::PROTOCOL_MISTRAL | models::PROTOCOL_XAI | models::PROTOCOL_HYPERBOLIC
+        | models::PROTOCOL_HUGGINGFACE | models::PROTOCOL_MIRA | models::PROTOCOL_PERPLEXITY => {
+            let root = strip_slash(base_url);
+            let url = if root.contains("/v1") {
+                models_list_url(root)
+            } else {
+                format!("{root}/v1/models")
+            };
+            fetch_openai_compat(&url, api_key).await
+        }
+        _ => fetch_openai_models(base_url, api_key).await,
+    }
 }
 
 pub async fn refresh(db: &Db) -> Result<ModelCatalog> {
@@ -19,10 +56,10 @@ pub async fn refresh(db: &Db) -> Result<ModelCatalog> {
     catalog.errors.clear();
 
     for p in settings.compat_providers.iter_mut() {
-        if p.api_key.trim().is_empty() || p.protocol != "openai" {
+        if !p.is_ready() {
             continue;
         }
-        match fetch_openai_models(&p.base_url, &p.api_key).await {
+        match fetch_provider_models(p.chat_protocol(), &p.base_url, &p.api_key).await {
             Ok(ids) => {
                 // Keep previously selected models that still exist; if none selected yet, take all.
                 if p.models.is_empty() {
@@ -44,32 +81,11 @@ pub async fn refresh(db: &Db) -> Result<ModelCatalog> {
     }
 
     catalog.compat = settings.all_compat_model_ids();
-    // 遗留字段：不再从旧单项 Key 拉列表，统一清空以免删光配置后仍显示模型名
     catalog.deepseek.clear();
     catalog.grok.clear();
     catalog.kimi.clear();
-
-    if !settings.gemini_api_key.trim().is_empty() {
-        match fetch_gemini(&settings.gemini_api_key).await {
-            Ok(ids) => catalog.gemini = ids,
-            Err(e) => {
-                catalog.errors.insert("gemini".into(), e.to_string());
-            }
-        }
-    } else {
-        catalog.gemini.clear();
-    }
-
-    if !settings.claude_api_key.trim().is_empty() {
-        match fetch_claude(&settings.claude_api_key).await {
-            Ok(ids) => catalog.claude = ids,
-            Err(e) => {
-                catalog.errors.insert("claude".into(), e.to_string());
-            }
-        }
-    } else {
-        catalog.claude.clear();
-    }
+    catalog.gemini.clear();
+    catalog.claude.clear();
 
     catalog.updated_at = Utc::now().to_rfc3339();
     db.save_settings(&settings)?;
@@ -85,10 +101,10 @@ pub async fn refresh_provider_models(db: &Db, provider_id: &str) -> Result<Vec<S
         .iter_mut()
         .find(|p| p.id == provider_id)
         .ok_or_else(|| anyhow!("provider not found"))?;
-    if p.api_key.trim().is_empty() {
+    if !p.is_ready() {
         return Err(anyhow!("api key not configured"));
     }
-    let ids = fetch_openai_models(&p.base_url, &p.api_key).await?;
+    let ids = fetch_provider_models(p.chat_protocol(), &p.base_url, &p.api_key).await?;
     p.models = ids.clone();
     db.save_settings(&settings)?;
 
@@ -109,7 +125,11 @@ async fn fetch_openai_compat(url: &str, api_key: &str) -> Result<Vec<String>> {
         id: String,
     }
     let client = reqwest::Client::new();
-    let resp = client.get(url).bearer_auth(api_key).send().await?;
+    let mut req = client.get(url);
+    if !api_key.trim().is_empty() {
+        req = req.bearer_auth(api_key);
+    }
+    let resp = req.send().await?;
     if !resp.status().is_success() {
         let status = resp.status();
         let text = resp.text().await.unwrap_or_default();
@@ -122,7 +142,7 @@ async fn fetch_openai_compat(url: &str, api_key: &str) -> Result<Vec<String>> {
     Ok(ids)
 }
 
-async fn fetch_gemini(api_key: &str) -> Result<Vec<String>> {
+async fn fetch_gemini(api_key: &str, base_url: &str) -> Result<Vec<String>> {
     #[derive(Deserialize)]
     struct Resp {
         models: Option<Vec<Item>>,
@@ -133,10 +153,10 @@ async fn fetch_gemini(api_key: &str) -> Result<Vec<String>> {
         #[serde(default, rename = "supportedGenerationMethods")]
         supported: Vec<String>,
     }
-    let url = format!(
-        "https://generativelanguage.googleapis.com/v1beta/models?key={}&pageSize=100",
-        api_key
-    );
+    let root = strip_slash(base_url)
+        .strip_suffix("/v1beta")
+        .unwrap_or(strip_slash(base_url));
+    let url = format!("{root}/v1beta/models?key={}&pageSize=100", api_key);
     let client = reqwest::Client::new();
     let resp = client.get(&url).send().await?;
     if !resp.status().is_success() {
@@ -164,7 +184,77 @@ async fn fetch_gemini(api_key: &str) -> Result<Vec<String>> {
     Ok(ids)
 }
 
-async fn fetch_claude(api_key: &str) -> Result<Vec<String>> {
+async fn fetch_claude(api_key: &str, base_url: &str) -> Result<Vec<String>> {
+    #[derive(Deserialize)]
+    struct Resp {
+        data: Vec<Item>,
+    }
+    #[derive(Deserialize)]
+    struct Item {
+        id: String,
+    }
+    let root = strip_slash(base_url);
+    let url = if root.ends_with("/v1") {
+        format!("{root}/models")
+    } else {
+        format!("{root}/v1/models")
+    };
+    let client = reqwest::Client::new();
+    let resp = client
+        .get(&url)
+        .header("x-api-key", api_key)
+        .header("anthropic-version", "2023-06-01")
+        .send()
+        .await?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+        return Err(anyhow!("{status}: {text}"));
+    }
+    let parsed: Resp = resp.json().await?;
+    let mut ids: Vec<_> = parsed.data.into_iter().map(|i| i.id).collect();
+    ids.sort();
+    ids.dedup();
+    Ok(ids)
+}
+
+async fn fetch_ollama(base_url: &str) -> Result<Vec<String>> {
+    #[derive(Deserialize)]
+    struct Resp {
+        models: Option<Vec<Item>>,
+    }
+    #[derive(Deserialize)]
+    struct Item {
+        name: Option<String>,
+        model: Option<String>,
+    }
+    let root = strip_slash(base_url)
+        .strip_suffix("/v1")
+        .unwrap_or(strip_slash(base_url));
+    let url = format!("{root}/api/tags");
+    let client = reqwest::Client::new();
+    let resp = client.get(&url).send().await?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+        return Err(anyhow!("{status}: {text}"));
+    }
+    let parsed: Resp = resp.json().await?;
+    let mut ids = Vec::new();
+    for m in parsed.models.unwrap_or_default() {
+        let id = m.name.or(m.model).unwrap_or_default();
+        if !id.is_empty() {
+            ids.push(id);
+        }
+    }
+    ids.sort();
+    ids.dedup();
+    Ok(ids)
+}
+
+async fn fetch_azure(base_url: &str, api_key: &str) -> Result<Vec<String>> {
+    let root = strip_slash(base_url);
+    let url = format!("{root}/openai/models?api-version=2024-10-21");
     #[derive(Deserialize)]
     struct Resp {
         data: Vec<Item>,
@@ -174,12 +264,7 @@ async fn fetch_claude(api_key: &str) -> Result<Vec<String>> {
         id: String,
     }
     let client = reqwest::Client::new();
-    let resp = client
-        .get("https://api.anthropic.com/v1/models")
-        .header("x-api-key", api_key)
-        .header("anthropic-version", "2023-06-01")
-        .send()
-        .await?;
+    let resp = client.get(&url).header("api-key", api_key).send().await?;
     if !resp.status().is_success() {
         let status = resp.status();
         let text = resp.text().await.unwrap_or_default();

@@ -3,16 +3,15 @@
 //! Payload / tool contract changes: sync per `.cursor/rules/mcp-sync.mdc` + `API.md`.
 
 use crate::commands::{
-    add_public_knowledge_card_inner, create_novel_with_tree, delete_tree_card_inner,
-    fill_knowledge_card_inner, generate_detailed_outline_inner, generate_story_rules_chat_inner,
-    generate_worldview_chat_inner, get_chapter, get_chapter_memory_inner, get_tree,
-    ingest_knowledge_source, knowledge_attach_host, last_chapter_anchor,
-    list_all_chapter_memory_inner,
-    regenerate_chapter_memory_inner, shot_character_looks,
-    submit_chapter_shots_comfyui_inner,
-    regenerate_detailed_outline_item_inner, resolve_link_host, save_chapter,
-    save_tree, set_chapter_memory_inner, upsert_public_knowledge_card_inner,
-    worldview_snapshot_value, ChatTurn,
+    add_public_knowledge_card_inner, chapter_length_feedback, create_novel_with_tree,
+    delete_tree_card_inner, fill_knowledge_card_inner, generate_detailed_outline_inner,
+    generate_story_rules_chat_inner, generate_worldview_chat_inner, get_chapter,
+    get_chapter_memory_inner, get_tree, ingest_knowledge_source, knowledge_attach_host,
+    last_chapter_anchor, list_all_chapter_memory_inner, regenerate_chapter_memory_inner,
+    regenerate_detailed_outline_item_inner, resolve_link_host, resolve_node_ref, save_chapter,
+    save_tree,
+    set_chapter_memory_inner, shot_character_looks, submit_chapter_shots_comfyui_inner,
+    upsert_public_knowledge_card_inner, worldview_snapshot_value, ChatTurn,
 };
 use crate::db::Db;
 use crate::kb_context::retrieve_knowledge;
@@ -25,8 +24,9 @@ use crate::models::{
 };
 use crate::paths::novel_meta_path;
 use crate::tree_links::{
-    self, chapter_effective_knowledge_ids, chapter_local_plot_ids, chapter_parent_volume_id,
-    root_plot_ids, volume_plot_ids,
+    self, chapter_effective_knowledge_ids, chapter_local_knowledge_ids, chapter_local_plot_ids,
+    chapter_parent_volume_id, root_character_ids, root_knowledge_ids, root_plot_ids,
+    volume_character_ids, volume_local_knowledge_ids, volume_local_plot_ids, volume_plot_ids,
 };
 use chrono::Utc;
 use rmcp::{
@@ -41,6 +41,7 @@ use rmcp::{
     },
 };
 use serde_json::{json, Map, Value};
+use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter};
@@ -414,11 +415,11 @@ fn tool_defs() -> Vec<Tool> {
         ),
         tool(
             "get_selected_card",
-            "The card currently selected in the workspace UI (process memory). Returns the live tree node; chapter/plot cards include Markdown body. Empty if nothing is selected.",
+            "The card currently selected in the workspace UI. Returns the live tree node; chapter/plot body is omitted unless include_content=true. Prefer this or get_character_card over get_tree/get_novel_info when editing cards.",
             json!({
                 "type":"object",
                 "properties":{
-                    "include_content":{"type":"boolean","default":true}
+                    "include_content":{"type":"boolean","default":false,"description":"章/剧情卡是否附带正文；改卡/细纲请保持 false"}
                 }
             }),
         ),
@@ -432,7 +433,7 @@ fn tool_defs() -> Vec<Tool> {
         ),
         tool(
             "layout_tree",
-            "Run one-click canvas layout (same as workspace 一键排版). Writes node positions. Adding cards already layouts once; call this to re-layout after manual moves.",
+            "Rewrite node positions with the four-band canvas layout. Workspace no longer auto-layouts; call this after adding many cards if the tree is piled up.",
             json!({
                 "type":"object",
                 "properties":{"novel_id":{"type":"string","description":"省略则用工作台当前选中"}}
@@ -440,7 +441,7 @@ fn tool_defs() -> Vec<Tool> {
         ),
         tool(
             "add_volume",
-            "Add an optional volume (分卷) under the novel root (root.bottom → volume.top). Volumes can link characters/plots/knowledge; chapters inherit root ∪ volume. Write structured `volume` payload (positioning / layers / conflicts / key_beats); do not use outline.",
+            "Add an optional volume (分卷) under the novel root (root.bottom → volume.top). Volumes can link characters/plots/knowledge (knowledge does not inherit to chapters). Write structured `volume` payload (positioning / layers / conflicts / key_beats); do not use outline.",
             json!({
                 "type":"object",
                 "properties":{
@@ -457,7 +458,7 @@ fn tool_defs() -> Vec<Tool> {
                 "type":"object",
                 "properties":{
                     "novel_id":{"type":"string","description":"省略则用工作台当前选中"},
-                    "node_id":{"type":"string","description":"分卷节点 id；省略则返回本书全部分卷"}
+                    "node_id":{"type":["string","integer"],"description":"分卷 id 或唯一标题；省略则返回本书全部分卷"}
                 }
             }),
         ),
@@ -468,7 +469,7 @@ fn tool_defs() -> Vec<Tool> {
                 "type":"object",
                 "properties":{
                     "novel_id":{"type":"string","description":"省略则用工作台当前选中"},
-                    "node_id":{"type":"string","description":"分卷节点 id"},
+                    "node_id":{"type":["string","integer"],"description":"分卷 id 或唯一标题"},
                     "title":{"type":"string"},
                     "volume":{"type":"object","description":"VolumePayload 部分字段，深度合并"},
                     "positioning":{"type":"string","description":"本卷定位"},
@@ -503,7 +504,7 @@ fn tool_defs() -> Vec<Tool> {
                 "type":"object",
                 "properties":{
                     "novel_id":{"type":"string","description":"省略则用工作台当前选中"},
-                    "node_id":{"type":"string","description":"省略则用工作台当前选中"},
+                    "node_id":{"type":["string","integer"],"description":"树上 id、「第N章」、章号或唯一标题；省略则用工作台当前选中"},
                     "title":{"type":"string"},
                     "outline":{"type":"string","description":"简纲（章节）或剧情要点"},
                     "detailed_outline":{"type":"array","items":{"type":"string"},"description":"细纲分条（仅章节）；正文据此扩充"}
@@ -512,12 +513,12 @@ fn tool_defs() -> Vec<Tool> {
         ),
         tool(
             "generate_detailed_outline",
-            "Evolve chapter detailed_outline (细纲) from brief outline (简纲) via AI. Writes tree. Call before writing body if detailed_outline is empty.",
+            "Evolve chapter detailed_outline from brief outline. Assembles materials server-side — do not get_tree/get_novel_info first. Beat count follows per-chapter word target. Writes tree. Call before writing body if detailed_outline is empty.",
             json!({
                 "type":"object",
                 "properties":{
                     "novel_id":{"type":"string","description":"省略则用工作台当前选中"},
-                    "node_id":{"type":"string","description":"章节节点；省略则用工作台当前选中"},
+                    "node_id":{"type":["string","integer"],"description":"树上 id、「第N章」、章号或唯一标题；省略则用工作台当前选中"},
                     "user_notes":{"type":"string","description":"可选补充要求"},
                     "model":{"type":"string"}
                 }
@@ -530,7 +531,7 @@ fn tool_defs() -> Vec<Tool> {
                 "type":"object",
                 "properties":{
                     "novel_id":{"type":"string","description":"省略则用工作台当前选中"},
-                    "node_id":{"type":"string","description":"章节节点；省略则用工作台当前选中"},
+                    "node_id":{"type":["string","integer"],"description":"树上 id、「第N章」、章号或唯一标题；省略则用工作台当前选中"},
                     "index":{"type":"integer","description":"细纲下标（从 0 起）"},
                     "user_notes":{"type":"string","description":"可选补充要求"},
                     "model":{"type":"string"}
@@ -540,45 +541,58 @@ fn tool_defs() -> Vec<Tool> {
         ),
         tool(
             "delete_node",
-            "Delete a chapter/volume/character/plot/knowledge card (not root). Deleting a volume reparents its chapters to root.",
+            "Delete a chapter/volume/character/plot/knowledge card (not root, not the write_prompts Generate/Refine hub). Deleting a volume reparents its chapters to root.",
             json!({
                 "type":"object",
                 "properties":{
                     "novel_id":{"type":"string","description":"省略则用工作台当前选中"},
-                    "node_id":{"type":"string","description":"省略则用工作台当前选中"}
+                    "node_id":{"type":["string","integer"],"description":"树上 id、「第N章」、章号或唯一标题；省略则用工作台当前选中"}
                 }
             }),
         ),
         tool(
             "get_chapter_content",
-            "Read chapter/plot Markdown body only. Use for refine/edit; do not call when generating fresh body from outline (use get_chapter_info instead).",
+            "Read chapter/plot Markdown body only. Use for refine/edit; do not call when generating fresh body from outline (use get_chapter_write_context instead).",
             json!({
                 "type":"object",
                 "properties":{
                     "novel_id":{"type":"string","description":"省略则用工作台当前选中"},
-                    "node_id":{"type":"string","description":"省略则用工作台当前选中"}
+                    "node_id":{"type":["string","integer"],"description":"树上 id、「第N章」、章号或唯一标题；省略则用工作台当前选中"}
                 }
             }),
         ),
         tool(
             "get_chapter_info",
-            "Chapter snapshot for writing (no body text): outline, linked cards, ai_guidance. For refine/edit of existing body use get_chapter_content separately.",
+            "Chapter snapshot (no body): local outline/cards only. Knowledge is not inherited. For generating/refining chapter body use get_chapter_write_context.",
             json!({
                 "type":"object",
                 "properties":{
                     "novel_id":{"type":"string","description":"省略则用工作台当前选中"},
-                    "node_id":{"type":"string","description":"省略则用工作台当前选中"}
+                    "node_id":{"type":["string","integer"],"description":"树上 id、「第N章」、章号或唯一标题；省略则用工作台当前选中"}
+                }
+            }),
+        ),
+        tool(
+            "get_chapter_write_context",
+            "Write-chapter bundle: optional root (worldview/story rules + root cards) + optional volume (direct cards + volume payload) + chapter cards/outline/detailed_outline. Dedupes character/plot/knowledge ids (first-seen wins). If this Chat already received root, pass include_root=false; if same volume already received, include_volume=false. Do not start a new session. No chapter body.",
+            json!({
+                "type":"object",
+                "properties":{
+                    "novel_id":{"type":"string","description":"省略则用工作台当前选中"},
+                    "node_id":{"type":["string","integer"],"description":"章节 id、「第N章」、章号或唯一标题；省略则用当前选中"},
+                    "include_root":{"type":"boolean","description":"本会话尚未提交根节点时 true（默认）。已有根材料则 false，不再返回根卡。"},
+                    "include_volume":{"type":"boolean","description":"本会话尚未提交本章所属分卷时 true（默认）。同卷已提交则 false。无分卷时忽略。"}
                 }
             }),
         ),
         tool(
             "set_chapter_content",
-            "Write chapter Markdown body.",
+            "Write chapter Markdown body. Returns word_count and in_band. If in_band, do not rewrite for length.",
             json!({
                 "type":"object",
                 "properties":{
                     "novel_id":{"type":"string","description":"省略则用工作台当前选中"},
-                    "node_id":{"type":"string","description":"省略则用工作台当前选中"},
+                    "node_id":{"type":["string","integer"],"description":"树上 id、「第N章」、章号或唯一标题；省略则用工作台当前选中"},
                     "content":{"type":"string"}
                 },
                 "required":["content"]
@@ -591,7 +605,7 @@ fn tool_defs() -> Vec<Tool> {
                 "type":"object",
                 "properties":{
                     "novel_id":{"type":"string","description":"省略则用工作台当前选中"},
-                    "node_id":{"type":"string","description":"省略则用工作台当前选中"}
+                    "node_id":{"type":["string","integer"],"description":"树上 id、「第N章」、章号或唯一标题；省略则用工作台当前选中"}
                 }
             }),
         ),
@@ -612,7 +626,7 @@ fn tool_defs() -> Vec<Tool> {
                 "type":"object",
                 "properties":{
                     "novel_id":{"type":"string","description":"省略则用工作台当前选中"},
-                    "node_id":{"type":"string","description":"省略则用工作台当前选中"},
+                    "node_id":{"type":["string","integer"],"description":"树上 id、「第N章」、章号或唯一标题；省略则用工作台当前选中"},
                     "items":{"type":"array","items":{"type":"string"}}
                 },
                 "required":["items"]
@@ -625,7 +639,7 @@ fn tool_defs() -> Vec<Tool> {
                 "type":"object",
                 "properties":{
                     "novel_id":{"type":"string","description":"省略则用工作台当前选中"},
-                    "node_id":{"type":"string","description":"省略则用工作台当前选中"}
+                    "node_id":{"type":["string","integer"],"description":"树上 id、「第N章」、章号或唯一标题；省略则用工作台当前选中"}
                 }
             }),
         ),
@@ -636,7 +650,7 @@ fn tool_defs() -> Vec<Tool> {
                 "type":"object",
                 "properties":{
                     "novel_id":{"type":"string","description":"省略则用工作台当前选中"},
-                    "node_id":{"type":"string","description":"省略则用工作台当前选中"},
+                    "node_id":{"type":["string","integer"],"description":"树上 id、「第N章」、章号或唯一标题；省略则用工作台当前选中"},
                     "shots":{"type":"array","items":{"type":"object"}}
                 },
                 "required":["shots"]
@@ -649,7 +663,7 @@ fn tool_defs() -> Vec<Tool> {
                 "type":"object",
                 "properties":{
                     "novel_id":{"type":"string","description":"省略则用工作台当前选中"},
-                    "node_id":{"type":"string","description":"省略则用工作台当前选中"}
+                    "node_id":{"type":["string","integer"],"description":"树上 id、「第N章」、章号或唯一标题；省略则用工作台当前选中"}
                 }
             }),
         ),
@@ -660,7 +674,7 @@ fn tool_defs() -> Vec<Tool> {
                 "type":"object",
                 "properties":{
                     "novel_id":{"type":"string","description":"省略则用工作台当前选中"},
-                    "node_id":{"type":"string","description":"省略则用工作台当前选中"}
+                    "node_id":{"type":["string","integer"],"description":"树上 id、「第N章」、章号或唯一标题；省略则用工作台当前选中"}
                 }
             }),
         ),
@@ -671,7 +685,7 @@ fn tool_defs() -> Vec<Tool> {
                 "type":"object",
                 "properties":{
                     "novel_id":{"type":"string","description":"省略则用工作台当前选中"},
-                    "node_id":{"type":"string","description":"省略则用工作台当前选中"}
+                    "node_id":{"type":["string","integer"],"description":"树上 id、「第N章」、章号或唯一标题；省略则用工作台当前选中"}
                 }
             }),
         ),
@@ -682,7 +696,7 @@ fn tool_defs() -> Vec<Tool> {
                 "type":"object",
                 "properties":{
                     "novel_id":{"type":"string","description":"省略则用工作台当前选中"},
-                    "node_id":{"type":"string","description":"省略则用工作台当前选中"},
+                    "node_id":{"type":["string","integer"],"description":"树上 id、「第N章」、章号或唯一标题；省略则用工作台当前选中"},
                     "user_notes":{"type":"string","description":"抽取注意事项，可空"},
                     "memory_node_ids":{"type":"array","items":{"type":"string"},"description":"其他章 id，注入其记忆作对照去重"}
                 }
@@ -690,23 +704,23 @@ fn tool_defs() -> Vec<Tool> {
         ),
         tool(
             "get_character_card",
-            "Read one or all character cards with full structured fields plus formatted markdown (same as writing injection). Character JSON has no personality; use deep + voice.body_language. Omit node_id to list every character in the novel.",
+            "Read one character card (structured fields + formatted). Pass node_id. Omit node_id to list id/label only — do not dump every full card.",
             json!({
                 "type":"object",
                 "properties":{
                     "novel_id":{"type":"string","description":"省略则用工作台当前选中"},
-                    "node_id":{"type":"string","description":"人物卡节点 id；省略则返回本书全部人物卡"}
+                    "node_id":{"type":["string","integer"],"description":"人物卡 id 或唯一人名；省略则返回本书全部人物卡"}
                 }
             }),
         ),
         tool(
             "upsert_character_card",
-            "Create or update a character card (partial merge: omitted structured fields kept). Pass flat fields and/or `character` (CharacterCard or get_character_card entry). Top-level world_position / relations / core_belief / deep / voice / body_language also merge. Do not send personality (legacy; ignored). Updates: name optional if node_id set. New cards hang on a chapter unless link_to set.",
+            "Create or update a character card (partial merge). Returns ok/node_id/label only — do not echo the full card back. Pass flat fields and/or `character`. Do not send personality. New cards hang on a chapter unless link_to set.",
             json!({
                 "type":"object",
                 "properties":{
                     "novel_id":{"type":"string","description":"省略则用工作台当前选中"},
-                    "node_id":{"type":"string","description":"有则更新该人物卡；省略则新建"},
+                    "node_id":{"type":["string","integer"],"description":"有则更新该人物卡（id 或唯一人名）；省略则新建"},
                     "name":{"type":"string","description":"真名（节点 label）；更新时可省略保留原名"},
                     "character":{"type":"object","description":"人物卡 JSON（CharacterCard 本体，或 get_character_card 返回的整条 entry）；深度合并，不整卡清空"},
                     "world_position":{"type":"object"},
@@ -730,12 +744,12 @@ fn tool_defs() -> Vec<Tool> {
         ),
         tool(
             "upsert_plot_card",
-            "Create or update a plot card. New cards hang on a chapter (chapter.right → plot.left). Omit link_to: selection, else last chapter, else root.",
+            "Create or update a plot card. Returns ok/node_id/label only. New cards hang on a chapter (chapter.right → plot.left). Omit link_to: selection, else last chapter, else root.",
             json!({
                 "type":"object",
                 "properties":{
                     "novel_id":{"type":"string","description":"省略则用工作台当前选中"},
-                    "node_id":{"type":"string","description":"有则更新该剧情卡；省略则新建"},
+                    "node_id":{"type":["string","integer"],"description":"有则更新该剧情卡（id 或唯一标题）；省略则新建"},
                     "title":{"type":"string"},
                     "outline":{"type":"string"},
                     "status":{"type":"string"},
@@ -746,12 +760,12 @@ fn tool_defs() -> Vec<Tool> {
         ),
         tool(
             "upsert_knowledge_card",
-            "Create or update a tree knowledge card. Partial update: omitted flat fields kept. Worldview/story_rules: set slot or node_id + structured payload (core_laws, spatiotemporal, surface_setting, story_engine, …); extracted auto-synced from structure. Fixed root slots (wv_*, story_rules, sr_*) update in place — do not create duplicates.",
+            "Create or update a tree knowledge card (partial). Returns ok/node_id/label/slot only — do not echo extracted. Worldview/story_rules: set slot or node_id + structured payload; extracted auto-synced. Fixed root slots update in place.",
             json!({
                 "type":"object",
                 "properties":{
                     "novel_id":{"type":"string","description":"省略则用工作台当前选中"},
-                    "node_id":{"type":"string","description":"有则更新该知识卡；省略则新建或按 slot 匹配"},
+                    "node_id":{"type":["string","integer"],"description":"有则更新该知识卡（id 或唯一标题）；省略则新建或按 slot 匹配"},
                     "slot":{"type":"string","description":"固定槽位 id（wv_core_laws / story_rules / sr_surface_setting 等）；更新时可省略 node_id"},
                     "title":{"type":"string","description":"新建必填；更新可省略保留原标题"},
                     "book_ids":{"type":"array","items":{"type":"string"}},
@@ -773,12 +787,12 @@ fn tool_defs() -> Vec<Tool> {
         ),
         tool(
             "fill_knowledge_card",
-            "Full-import: copy associated public knowledge books into this knowledge card's extracted field (capped). Requires book_ids on the card or in args. For AI-processed write-back use search_knowledge then upsert_knowledge_card(extracted).",
+            "Full-import: copy associated public knowledge books into this knowledge card's extracted field (capped). Returns ok/extracted_chars only. Requires book_ids on the card or in args. For AI-processed write-back use search_knowledge then upsert_knowledge_card(extracted).",
             json!({
                 "type":"object",
                 "properties":{
                     "novel_id":{"type":"string","description":"省略则用工作台当前选中"},
-                    "node_id":{"type":"string","description":"省略则用工作台当前选中"},
+                    "node_id":{"type":["string","integer"],"description":"树上 id、「第N章」、章号或唯一标题；省略则用工作台当前选中"},
                     "book_ids":{"type":"array","items":{"type":"string"},"description":"有则写入卡片再导入；否则用卡上已有 book_ids"},
                     "max_chars":{"type":"integer","default":14000}
                 }
@@ -806,7 +820,7 @@ fn tool_defs() -> Vec<Tool> {
                     "extract_prompt":{"type":"string"},
                     "extracted":{"type":"string"},
                     "novel_id":{"type":"string","description":"从树上知识卡复制时用"},
-                    "node_id":{"type":"string","description":"树上知识卡；省略则用工作台当前选中"}
+                    "node_id":{"type":["string","integer"],"description":"树上知识卡 id 或唯一标题；省略则用工作台当前选中"}
                 }
             }),
         ),
@@ -851,7 +865,7 @@ fn tool_defs() -> Vec<Tool> {
         ),
         tool(
             "unlink_nodes",
-            "Remove edge(s) between two nodes (or by edge_id). Cannot unlink fixed worldview / story-rules knowledge cards.",
+            "Remove edge(s) between two nodes (or by edge_id). Cannot unlink worldview/story-rules cards, or the root↔write_prompts (Generate/Refine) edge. Child knowledge on write_prompts can be unlinked.",
             json!({
                 "type":"object",
                 "properties":{
@@ -975,7 +989,7 @@ async fn call_tool(ctx: McpCtx, name: &str, args: Value) -> Result<String, Strin
             if !book.archived {
                 return Err("请先归档后再删除".into());
             }
-            let _ = crate::knowledge::delete_chunks(&id).await;
+            let _ = crate::knowledge_vec::delete_book(&id).await;
             ctx.db.delete_knowledge(&id).map_err(|e| e.to_string())?;
             let _ = ctx.db.unlink_knowledge_from_novels(&id);
             Ok(json!({"ok": true, "id": id}).to_string())
@@ -1069,13 +1083,21 @@ async fn call_tool(ctx: McpCtx, name: &str, args: Value) -> Result<String, Strin
             get_chapter(novel_id, node_id)
         }
         "get_chapter_info" => get_chapter_info(&ctx, args),
+        "get_chapter_write_context" => get_chapter_write_context(&ctx, args),
         "set_chapter_content" => {
             let novel_id = arg_novel_id(&ctx, &args)?;
             let node_id = arg_node_id(&ctx, &args)?;
             let content = arg_str(&args, "content")?;
             let words = save_chapter(novel_id.clone(), node_id, content)?;
             emit_tree_changed(&ctx, &novel_id);
-            Ok(json!({"ok": true, "word_count": words}).to_string())
+            let (wmin, wmax) = ctx
+                .db
+                .get_novel(&novel_id)
+                .ok()
+                .flatten()
+                .map(|n| (n.word_count_min, n.word_count_max))
+                .unwrap_or((2000, 3000));
+            Ok(chapter_length_feedback(words, wmin, wmax).to_string())
         }
         "get_chapter_shots" => {
             let novel_id = arg_novel_id(&ctx, &args)?;
@@ -1209,6 +1231,18 @@ fn arg_str(args: &Value, key: &str) -> Result<String, String> {
         .ok_or_else(|| format!("missing {key}"))
 }
 
+/// 字符串或正整数（模型常把章号写成 `3` 而不是 `"第3章"`）。
+fn json_node_spec(v: Option<&Value>) -> Option<String> {
+    let v = v?;
+    if let Some(s) = v.as_str().map(str::trim).filter(|s| !s.is_empty()) {
+        return Some(s.to_string());
+    }
+    if let Some(n) = v.as_u64() {
+        return Some(n.to_string());
+    }
+    v.as_i64().filter(|n| *n > 0).map(|n| n.to_string())
+}
+
 fn workspace_sel(ctx: &McpCtx) -> Option<(String, String)> {
     ctx.selection.lock().unwrap().clone()
 }
@@ -1227,7 +1261,24 @@ fn arg_novel_id(ctx: &McpCtx, args: &Value) -> Result<String, String> {
 }
 
 fn arg_node_id(ctx: &McpCtx, args: &Value) -> Result<String, String> {
-    arg_or(args, "node_id", workspace_sel(ctx).map(|(_, id)| id))
+    let raw = json_node_spec(args.get("node_id"))
+        .or_else(|| json_node_spec(args.get("n")))
+        .or_else(|| workspace_sel(ctx).map(|(_, id)| id))
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| {
+            "missing node_id：请传入树上 id、「第N章」或标题，或在工作台选中一张卡片".to_string()
+        })?;
+    let novel_id = arg_novel_id(ctx, args)?;
+    let tree = get_tree(novel_id)?;
+    resolve_node_ref(&tree, &raw)
+}
+
+/// upsert 用：有 node_id 则解析到树上已有节点；省略表示新建（不用当前选中）。
+fn optional_resolved_node_id(tree: &NovelTree, args: &Value) -> Result<Option<String>, String> {
+    match json_node_spec(args.get("node_id")) {
+        Some(raw) => Ok(Some(resolve_node_ref(tree, &raw)?)),
+        None => Ok(None),
+    }
 }
 
 fn update_novel(ctx: &McpCtx, args: Value) -> Result<String, String> {
@@ -1411,7 +1462,7 @@ fn add_volume(ctx: &McpCtx, args: Value) -> Result<String, String> {
     let root_id = root.id.clone();
     tree.nodes.push(node);
     link_pair(&mut tree, &root_id, &id, "volume")?;
-    save_tree_notify(ctx, tree.clone(), true)?;
+    save_tree_notify(ctx, tree.clone(), false)?;
     let added = tree.nodes.iter().find(|n| n.id == id).unwrap();
     Ok(serde_json::to_string_pretty(&volume_json_entry(&tree, added)).unwrap_or_default())
 }
@@ -1419,11 +1470,7 @@ fn add_volume(ctx: &McpCtx, args: Value) -> Result<String, String> {
 fn get_volume(ctx: &McpCtx, args: Value) -> Result<String, String> {
     let novel_id = arg_novel_id(ctx, &args)?;
     let tree = get_tree(novel_id)?;
-    let node_id = args
-        .get("node_id")
-        .and_then(|v| v.as_str())
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty());
+    let node_id = optional_resolved_node_id(&tree, &args)?;
     if let Some(id) = node_id {
         let n = tree
             .nodes
@@ -1572,7 +1619,7 @@ fn add_chapter(ctx: &McpCtx, args: Value) -> Result<String, String> {
     };
     tree.nodes.push(node);
     link_pair(&mut tree, &host, &id, "chapter")?;
-    save_tree_notify(ctx, tree.clone(), true)?;
+    save_tree_notify(ctx, tree.clone(), false)?;
     let added = tree.nodes.iter().find(|n| n.id == id).cloned();
     Ok(serde_json::to_string_pretty(&added).unwrap_or_default())
 }
@@ -1813,11 +1860,7 @@ fn patch_character_card_from_args(
 fn get_character_card(ctx: &McpCtx, args: Value) -> Result<String, String> {
     let novel_id = arg_novel_id(ctx, &args)?;
     let tree = get_tree(novel_id)?;
-    let node_id = args
-        .get("node_id")
-        .and_then(|v| v.as_str())
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty());
+    let node_id = optional_resolved_node_id(&tree, &args)?;
     if let Some(id) = node_id {
         let n = tree
             .nodes
@@ -1829,6 +1872,7 @@ fn get_character_card(ctx: &McpCtx, args: Value) -> Result<String, String> {
         }
         return Ok(serde_json::to_string_pretty(&json!({
             "character": character_json_entry(&tree, n, None),
+            "ai_guidance": "再改用 upsert_character_card 部分字段；不要把整卡贴回对话。",
         }))
         .unwrap_or_default());
     }
@@ -1836,27 +1880,36 @@ fn get_character_card(ctx: &McpCtx, args: Value) -> Result<String, String> {
         .nodes
         .iter()
         .filter(|n| matches!(n.kind, NodeKind::Character))
-        .enumerate()
-        .map(|(i, n)| character_json_entry(&tree, n, Some(i)))
+        .map(|n| {
+            json!({
+                "id": n.id,
+                "label": n.label,
+            })
+        })
         .collect();
     Ok(serde_json::to_string_pretty(&json!({
         "count": chars.len(),
         "characters": chars,
+        "ai_guidance": "此为 id/label 列表。读完整卡请带 node_id。",
     }))
     .unwrap_or_default())
 }
 
-fn upsert_character_response(tree: &NovelTree, id: &str) -> Result<String, String> {
-    let n = tree
-        .nodes
-        .iter()
-        .find(|n| n.id == id)
-        .ok_or_else(|| "节点不存在".to_string())?;
-    Ok(serde_json::to_string_pretty(&json!({
-        "node": n,
-        "character": character_json_entry(tree, n, None),
-    }))
-    .unwrap_or_default())
+fn upsert_card_ack(kind: &str, id: &str, label: &str, created: bool, extra: Value) -> String {
+    let mut obj = json!({
+        "ok": true,
+        "created": created,
+        "node_id": id,
+        "label": label,
+        "kind": kind,
+        "ai_guidance": "已写入。勿把整卡贴回对话；再改同一张卡继续 upsert，省略未改字段。",
+    });
+    if let (Some(dst), Some(src)) = (obj.as_object_mut(), extra.as_object()) {
+        for (k, v) in src {
+            dst.insert(k.clone(), v.clone());
+        }
+    }
+    serde_json::to_string_pretty(&obj).unwrap_or_default()
 }
 
 fn json_linked_knowledge(tree: &NovelTree, ids: &[String]) -> Vec<Value> {
@@ -1898,6 +1951,75 @@ fn json_linked_knowledge(tree: &NovelTree, ids: &[String]) -> Vec<Value> {
         .collect()
 }
 
+fn take_unseen(ids: &[String], seen: &mut HashSet<String>) -> Vec<String> {
+    let mut out = Vec::new();
+    for id in ids {
+        if seen.insert(id.clone()) {
+            out.push(id.clone());
+        }
+    }
+    out
+}
+
+fn json_write_characters(tree: &NovelTree, ids: &[String]) -> Vec<Value> {
+    ids.iter()
+        .filter_map(|id| {
+            let c = tree.nodes.iter().find(|n| n.id == *id)?;
+            let formatted = c
+                .character
+                .as_ref()
+                .map(|ch| crate::character_fmt::format_character_full(&c.label, ch))
+                .unwrap_or_default();
+            Some(json!({
+                "id": c.id,
+                "label": c.label,
+                "formatted": formatted,
+                "character_relations": character_relations_json(tree, &c.id),
+            }))
+        })
+        .collect()
+}
+
+fn json_write_plots(tree: &NovelTree, ids: &[String], scope: &str) -> Vec<Value> {
+    ids.iter()
+        .filter_map(|id| {
+            let p = tree.nodes.iter().find(|n| n.id == *id)?;
+            Some(json!({
+                "id": p.id,
+                "label": p.label,
+                "outline": p.outline,
+                "status": p.side_plot.as_ref().map(|s| s.status.clone()).unwrap_or_else(|| "active".into()),
+                "absorbed": p.side_plot.as_ref().map(|s| s.absorbed).unwrap_or(false),
+                "scope": scope,
+            }))
+        })
+        .collect()
+}
+
+fn json_write_knowledge(tree: &NovelTree, ids: &[String], scope: &str) -> Vec<Value> {
+    ids.iter()
+        .filter_map(|id| {
+            let k = tree.nodes.iter().find(|n| n.id == *id)?;
+            if !matches!(k.kind, NodeKind::Knowledge) {
+                return None;
+            }
+            let formatted = crate::core_laws_fmt::knowledge_card_inject_body(tree, k);
+            let slot = k
+                .knowledge
+                .as_ref()
+                .map(|x| x.slot.clone())
+                .unwrap_or_default();
+            Some(json!({
+                "id": k.id,
+                "label": k.label,
+                "slot": slot,
+                "formatted": formatted,
+                "scope": scope,
+            }))
+        })
+        .collect()
+}
+
 /// 将 KnowledgeCardPayload 上非空结构化字段摊到 MCP 返回对象（与 §3 / linked_knowledge 一致）。
 fn insert_knowledge_structured_fields(
     obj: &mut serde_json::Map<String, Value>,
@@ -1932,10 +2054,7 @@ fn get_selected_card(ctx: &McpCtx, args: Value) -> Result<String, String> {
     let Some((novel_id, node_id)) = ctx.selection.lock().unwrap().clone() else {
         return Ok(json!({ "selected": false }).to_string());
     };
-    let include_content = args
-        .get("include_content")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(true);
+    let include_content = arg_bool(&args, "include_content", false);
     let tree = get_tree(novel_id.clone())?;
     let Some(node) = find_selected_node(&tree, &node_id).cloned() else {
         return Ok(json!({
@@ -2159,7 +2278,6 @@ fn apply_story_rules(ctx: &McpCtx, args: Value) -> Result<String, String> {
         .ok_or_else(|| "缺少 blocks".to_string())?;
     let mut tree = get_tree(novel_id)?;
     crate::story_rules_ops::apply_story_rules_payload(&mut tree, &blocks)?;
-    crate::tree_layout::apply_auto_layout(&mut tree);
     save_tree_notify(ctx, tree, false)?;
     get_story_rules(ctx, args)
 }
@@ -2192,7 +2310,6 @@ async fn generate_story_rules(ctx: &McpCtx, args: Value) -> Result<String, Strin
     if apply {
         let mut tree = get_tree(novel_id.clone())?;
         crate::story_rules_ops::apply_story_rules_payload(&mut tree, &result.blocks)?;
-        crate::tree_layout::apply_auto_layout(&mut tree);
         save_tree_notify(ctx, tree, false)?;
     }
     Ok(serde_json::to_string_pretty(&json!({
@@ -2208,9 +2325,6 @@ fn ensure_worldview(ctx: &McpCtx, args: Value) -> Result<String, String> {
     let mut tree = get_tree(novel_id)?;
     let created = crate::worldview_ops::ensure_worldview_cards(&mut tree);
     let fan = crate::story_rules_ops::ensure_story_rules_fan_cards(&mut tree);
-    if created || fan {
-        crate::tree_layout::apply_auto_layout(&mut tree);
-    }
     save_tree_notify(ctx, tree, false)?;
     Ok(json!({ "ok": true, "created": created || fan }).to_string())
 }
@@ -2271,12 +2385,12 @@ fn chapter_write_ai_guidance() -> Value {
     json!({
         "plots": "linked_plots 的 inherited_from 为 root|volume|chapter：根/分卷继承按各自 order；本章剧情严格按 linked_side_plot_ids 的 order 0→N。不得混序或改写要点。章节继承根 ∪ 所属分卷（若有）。",
         "characters": "linked_characters 为本章必须出场的人物；正文中须全部出现，并符合 character 结构化字段与 formatted 全文；人物关系见 character_relations。",
-        "knowledge": "linked_knowledge 为本章写作硬约束（知识储备），生成正文必须严格遵循。数组顺序 = 根 linked 顺序 → 分卷 linked 顺序 → 本章 linked 顺序（去重）；根上六世界观槽 + 故事规则永远在最前且不因用户排序挪动。约束范围包括但不限于：写作手法与叙述节奏、文风与语气、用词习惯与禁用词、关键词/专名替换、视角与时态、对话风格、修辞与氛围、信息密度、敏感表达规避、句式偏好等。优先遵守 extracted；若为空则遵守 extract_prompt 与 outline。禁止另起风格或忽略上述约束。",
+        "knowledge": "linked_knowledge 为写作硬约束。世界观/故事规则与根、卷直连知识不向章继承；写章用 get_chapter_write_context 分层取根→卷→章并去重。根上 slot=write_prompts（生成/精修）及其左右子卡不在 linked_knowledge 里，由应用接到用户提示词后。优先遵守 formatted。禁止另起风格。",
         "narrative_coherence": "生成本章正文须保证叙事合理、连贯、可读，并与 node.outline（简纲）、node.detailed_outline（细纲，优先）及前序章节记忆（若已提供）一致。①时间与因果：事件按可理解的时间顺序展开；后文不得推翻前文已确立的事实；场景/视角切换须有可感知过渡。②人物一致：决策与言行须符合人设与当前处境、认知；禁止无铺垫的性格、立场、关系或能力突变。③细节一致：人名、称谓、地名、物品、数量、伤势、天气、时辰等须前后统一。④段落衔接：相邻段落须有因果、时间或空间上的延续；禁止硬切、跳剪式跳跃导致读者无法重建过程。⑤逻辑自洽：禁止为推剧情而强行降智、反常行为或违背常识的设定（除非章纲/知识卡明确为世界观规则）。⑥节奏与情绪：变化须符合简纲/细纲与剧情卡推进，禁止情绪或基调无源反转。⑦信息有效：每段应推进情节或刻画人物/氛围，禁止无意义同义反复与凑字数。",
         "forbidden": "严禁：前后段落、场景或时间线逻辑冲突；同一事实在章内前后矛盾；人物言行与人设/当前处境不符且无解释；未在简纲/细纲或 linked_plots 中出现的重大新设定、无关支线或另起主线；缺乏因果铺垫的「机械降神」式巧合解决核心矛盾（除非大纲明确要求）；场景硬切、对话说明文式生硬灌设定；与 linked_plots 顺序或要点相悖的叙述；复制粘贴式重复段落；打破第四面墙；输出写作过程、自我评价、提纲清单或评分。",
-        "length": "正文字数须符合 get_novel_info 返回的 word_count_min / word_count_max（应用内允许 ±60 字误差）；不得明显低于下限或超过上限。",
+        "length": "正文字数瞄准 get_chapter_write_context 的 word_count_min/max 中位，按细纲条数均分篇幅。±60 只是标注带，不是反复重写门槛。一次写完；偏长只删冗、偏短只补场面。set_chapter_content 若 in_band=true 禁止再为字数改正文；明显超限也只改一轮，禁止整章重写。",
         "output": "只输出本章 Markdown 正文（可用 `# 章标题` 开头，或直接正文）；禁止输出注释、写作说明、「本章完」、检查清单或自我评分。",
-        "content_usage": "本接口不含正文。生成新章：若 node.detailed_outline 为空须先 generate_detailed_outline（由简纲进化细纲）；再仅依据 outline+detailed_outline、linked_* 与 ai_guidance **按细纲扩充**写全新正文，禁止调用 get_chapter_content，禁止参考磁盘旧稿。精修/改稿（含用户说「精修第 N 章」+自定义提示）：先 get_chapter_info 取约束，再 get_chapter_content 读旧稿，在旧稿上改完后 set_chapter_content。"
+        "content_usage": "写章用 get_chapter_write_context（不含正文）。本会话已提交过根则 include_root=false；同卷已提交则 include_volume=false；不要新开 session。生成新章：细纲空则先 generate_detailed_outline；禁止 get_chapter_content。精修：再 get_chapter_content 读旧稿后改。"
     })
 }
 
@@ -2441,6 +2555,133 @@ fn get_chapter_info(ctx: &McpCtx, args: Value) -> Result<String, String> {
     .unwrap_or_default())
 }
 
+fn arg_bool(args: &Value, key: &str, default: bool) -> bool {
+    args.get(key).and_then(|v| v.as_bool()).unwrap_or(default)
+}
+
+fn get_chapter_write_context(ctx: &McpCtx, args: Value) -> Result<String, String> {
+    let novel_id = arg_novel_id(ctx, &args)?;
+    let node_id = arg_node_id(ctx, &args)?;
+    let include_root = arg_bool(&args, "include_root", true);
+    let include_volume = arg_bool(&args, "include_volume", true);
+    let novel = ctx
+        .db
+        .get_novel(&novel_id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "小说不存在".to_string())?;
+    let tree = get_tree(novel_id)?;
+    let node = tree
+        .nodes
+        .iter()
+        .find(|n| n.id == node_id)
+        .ok_or_else(|| "节点不存在".to_string())?;
+    if !matches!(node.kind, NodeKind::Chapter) {
+        return Err("只能用于章节".into());
+    }
+
+    let mut seen_chars = HashSet::new();
+    let mut seen_plots = HashSet::new();
+    let mut seen_know = HashSet::new();
+
+    let root_chars = root_character_ids(&tree);
+    let root_plots = root_plot_ids(&tree);
+    let root_know = root_knowledge_ids(&tree);
+
+    let root = if include_root {
+        Some(json!({
+            "id": tree.nodes.iter().find(|n| matches!(n.kind, NodeKind::Novel)).map(|n| n.id.clone()),
+            "title": novel.title,
+            "synopsis": novel.synopsis,
+            "features_text": crate::novel_features::format_novel_features_block(&novel.features),
+            "word_count_min": novel.word_count_min,
+            "word_count_max": novel.word_count_max,
+            "linked_characters": json_write_characters(&tree, &take_unseen(&root_chars, &mut seen_chars)),
+            "linked_plots": json_write_plots(&tree, &take_unseen(&root_plots, &mut seen_plots), "root"),
+            "linked_knowledge": json_write_knowledge(&tree, &take_unseen(&root_know, &mut seen_know), "root"),
+        }))
+    } else {
+        for id in &root_chars {
+            seen_chars.insert(id.clone());
+        }
+        for id in &root_plots {
+            seen_plots.insert(id.clone());
+        }
+        for id in &root_know {
+            seen_know.insert(id.clone());
+        }
+        None
+    };
+
+    let vol_id = chapter_parent_volume_id(&tree, &node_id);
+    let volume = if let Some(vid) = vol_id.as_ref() {
+        let v_chars = volume_character_ids(&tree, vid);
+        let v_plots = volume_local_plot_ids(&tree, vid);
+        let v_know = volume_local_knowledge_ids(&tree, vid);
+        if include_volume {
+            tree.nodes.iter().find(|n| n.id == *vid).map(|v| {
+                json!({
+                    "id": v.id,
+                    "label": v.label,
+                    "formatted": v.volume.as_ref().map(crate::volume_fmt::format_volume_full).unwrap_or_default(),
+                    "linked_characters": json_write_characters(&tree, &take_unseen(&v_chars, &mut seen_chars)),
+                    "linked_plots": json_write_plots(&tree, &take_unseen(&v_plots, &mut seen_plots), "volume"),
+                    "linked_knowledge": json_write_knowledge(&tree, &take_unseen(&v_know, &mut seen_know), "volume"),
+                })
+            })
+        } else {
+            for id in v_chars {
+                seen_chars.insert(id);
+            }
+            for id in v_plots {
+                seen_plots.insert(id);
+            }
+            for id in v_know {
+                seen_know.insert(id);
+            }
+            None
+        }
+    } else {
+        None
+    };
+
+    let ch_chars = tree_links::union_linked_ids(
+        &tree,
+        &node_id,
+        &node.linked_character_ids,
+        NodeKind::Character,
+    );
+    let ch_plots = chapter_local_plot_ids(&tree, &node_id);
+    let ch_know = chapter_local_knowledge_ids(&tree, &node_id);
+    let chapter = json!({
+        "id": node.id,
+        "label": node.label,
+        "outline": node.outline,
+        "detailed_outline": node.detailed_outline,
+        "word_count_min": novel.word_count_min,
+        "word_count_max": novel.word_count_max,
+        "linked_characters": json_write_characters(&tree, &take_unseen(&ch_chars, &mut seen_chars)),
+        "linked_plots": json_write_plots(&tree, &take_unseen(&ch_plots, &mut seen_plots), "chapter"),
+        "linked_knowledge": json_write_knowledge(&tree, &take_unseen(&ch_know, &mut seen_know), "chapter"),
+    });
+
+    Ok(serde_json::to_string(&json!({
+        "included": {
+            "root": root.is_some(),
+            "volume": volume.is_some(),
+            "chapter": true,
+        },
+        "root": root,
+        "volume": volume,
+        "chapter": chapter,
+        "ai_guidance": if include_root {
+            chapter_write_ai_guidance()
+        } else {
+            json!({ "note": "沿用本会话已提交的根/卷约束；只使用本次返回的 chapter（及 volume，若 included.volume）。" })
+        },
+    }))
+    .unwrap_or_default())
+}
+
 fn update_outline(ctx: &McpCtx, args: Value) -> Result<String, String> {
     let novel_id = arg_novel_id(ctx, &args)?;
     let node_id = arg_node_id(ctx, &args)?;
@@ -2472,9 +2713,19 @@ fn update_outline(ctx: &McpCtx, args: Value) -> Result<String, String> {
             .filter(|s| !s.is_empty())
             .collect();
     }
-    let out = n.clone();
+    let kind = match n.kind {
+        NodeKind::Chapter => "chapter",
+        NodeKind::SidePlot => "side_plot",
+        _ => "node",
+    };
+    let ack = json!({
+        "outline": n.outline,
+        "detailed_outline": n.detailed_outline,
+    });
+    let id = n.id.clone();
+    let label = n.label.clone();
     save_tree_notify(ctx, tree, false)?;
-    Ok(serde_json::to_string_pretty(&out).unwrap_or_default())
+    Ok(upsert_card_ack(kind, &id, &label, false, ack))
 }
 
 async fn mcp_generate_detailed_outline(ctx: &McpCtx, args: Value) -> Result<String, String> {
@@ -2505,7 +2756,9 @@ async fn mcp_generate_detailed_outline(ctx: &McpCtx, args: Value) -> Result<Stri
     Ok(serde_json::to_string_pretty(&json!({
         "node_id": node_id,
         "detailed_outline": items,
-        "ai_guidance": "细纲已写入节点 detailed_outline。写正文须按细纲扩充；可用 update_chapter_outline 手改分条；单条重写用 regenerate_detailed_outline_item。",
+        "ai_guidance": "细纲已写入。条数已按本章字数目标控制；写正文按条均分篇幅、瞄准中位，禁止把一条扩成半章。手改用 update_chapter_outline；单条重写用 regenerate_detailed_outline_item。材料已由本工具组装，不要再 get_tree。",
+        "ok": true,
+        "label": "细纲",
     }))
     .unwrap_or_default())
 }
@@ -2552,6 +2805,8 @@ async fn mcp_regenerate_detailed_outline_item(ctx: &McpCtx, args: Value) -> Resu
         "item": item,
         "detailed_outline": list,
         "ai_guidance": "已重写 detailed_outline[index]。可用 update_chapter_outline 调整顺序或全文；写正文按整份细纲扩充。",
+        "ok": true,
+        "label": "细纲",
     }))
     .unwrap_or_default())
 }
@@ -2559,11 +2814,7 @@ async fn mcp_regenerate_detailed_outline_item(ctx: &McpCtx, args: Value) -> Resu
 fn upsert_character(ctx: &McpCtx, args: Value) -> Result<String, String> {
     let novel_id = arg_novel_id(ctx, &args)?;
     let mut tree = get_tree(novel_id)?;
-    let node_id = args
-        .get("node_id")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
-        .filter(|s| !s.is_empty());
+    let node_id = optional_resolved_node_id(&tree, &args)?;
     let name_arg = args
         .get("name")
         .and_then(|v| v.as_str())
@@ -2635,7 +2886,13 @@ fn upsert_character(ctx: &McpCtx, args: Value) -> Result<String, String> {
         args.get("link_to").and_then(|v| v.as_str()),
     )?;
     save_tree_notify(ctx, tree.clone(), created)?;
-    upsert_character_response(&tree, &id)
+    let label = tree
+        .nodes
+        .iter()
+        .find(|n| n.id == id)
+        .map(|n| n.label.clone())
+        .unwrap_or_default();
+    Ok(upsert_card_ack("character", &id, &label, created, json!({})))
 }
 
 fn upsert_plot(ctx: &McpCtx, args: Value) -> Result<String, String> {
@@ -2652,11 +2909,7 @@ fn upsert_plot(ctx: &McpCtx, args: Value) -> Result<String, String> {
         .and_then(|v| v.as_str())
         .unwrap_or("active")
         .to_string();
-    let node_id = args
-        .get("node_id")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
-        .filter(|s| !s.is_empty());
+    let node_id = optional_resolved_node_id(&tree, &args)?;
     let created = node_id.is_none();
     let id = if let Some(id) = node_id {
         let n = tree
@@ -2717,8 +2970,13 @@ fn upsert_plot(ctx: &McpCtx, args: Value) -> Result<String, String> {
         args.get("link_to").and_then(|v| v.as_str()),
     )?;
     save_tree_notify(ctx, tree.clone(), created)?;
-    let out = tree.nodes.iter().find(|n| n.id == id).cloned();
-    Ok(serde_json::to_string_pretty(&out).unwrap_or_default())
+    let label = tree
+        .nodes
+        .iter()
+        .find(|n| n.id == id)
+        .map(|n| n.label.clone())
+        .unwrap_or_default();
+    Ok(upsert_card_ack("side_plot", &id, &label, created, json!({})))
 }
 
 fn arg_str_vec(args: &Value, key: &str) -> Option<Vec<String>> {
@@ -2891,11 +3149,7 @@ fn upsert_knowledge_card(ctx: &McpCtx, args: Value) -> Result<String, String> {
         .map(str::trim)
         .filter(|s| !s.is_empty());
     let mut tree = get_tree(novel_id)?;
-    let mut node_id = args
-        .get("node_id")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
-        .filter(|s| !s.is_empty());
+    let mut node_id = optional_resolved_node_id(&tree, &args)?;
     let mut created = node_id.is_none();
 
     if let Some(slot) = slot_arg {
@@ -3012,28 +3266,18 @@ fn upsert_knowledge_card(ctx: &McpCtx, args: Value) -> Result<String, String> {
         .iter()
         .find(|n| n.id == id)
         .ok_or_else(|| "节点不存在".to_string())?;
-    let formatted = crate::core_laws_fmt::knowledge_card_inject_body(&tree, n);
-    let kn = n.knowledge.as_ref();
-    let mut out = json!({
-        "node": n,
-        "formatted": formatted,
-        "slot": kn.map(|k| k.slot.clone()).unwrap_or_default(),
-        "extracted": formatted,
-        "book_ids": kn.map(|k| k.book_ids.clone()).unwrap_or_default(),
-        "extract_prompt": kn.map(|k| k.extract_prompt.clone()).unwrap_or_default(),
-    });
-    if let Some(obj) = out.as_object_mut() {
-        if let Some(p) = kn {
-            insert_knowledge_structured_fields(obj, p);
-        }
-        if kn.map(|k| k.slot.trim()) == Some("story_rules") {
-            obj.insert(
-                "blocks".into(),
-                crate::story_rules_ops::story_rules_blocks_snapshot(&tree),
-            );
-        }
-    }
-    Ok(serde_json::to_string_pretty(&out).unwrap_or_default())
+    let slot = n
+        .knowledge
+        .as_ref()
+        .map(|k| k.slot.clone())
+        .unwrap_or_default();
+    Ok(upsert_card_ack(
+        "knowledge",
+        &id,
+        &n.label,
+        created,
+        json!({ "slot": slot }),
+    ))
 }
 
 fn upsert_public_knowledge_card(ctx: &McpCtx, args: Value) -> Result<String, String> {
@@ -3139,13 +3383,23 @@ fn fill_knowledge_card(ctx: &McpCtx, args: Value) -> Result<String, String> {
         max_chars,
     )?;
     emit_tree_changed(ctx, &tree.novel_id);
-    let out = tree
+    let n = tree
         .nodes
         .iter()
         .find(|n| n.id == node_id)
-        .cloned()
         .ok_or_else(|| "节点不存在".to_string())?;
-    Ok(serde_json::to_string_pretty(&out).unwrap_or_default())
+    let extracted_chars = n
+        .knowledge
+        .as_ref()
+        .map(|k| k.extracted.chars().count())
+        .unwrap_or(0);
+    Ok(upsert_card_ack(
+        "knowledge",
+        &node_id,
+        &n.label,
+        false,
+        json!({ "extracted_chars": extracted_chars }),
+    ))
 }
 
 fn link_nodes(ctx: &McpCtx, args: Value) -> Result<String, String> {
@@ -3186,6 +3440,7 @@ fn is_fixed_root_knowledge_slot(slot: &str) -> bool {
             | "sr_story_engine"
             | "sr_fulfillment_system"
             | "sr_constraint_redlines"
+            | "write_prompts"
     )
 }
 
@@ -3195,13 +3450,19 @@ fn node_fixed_worldview(tree: &NovelTree, id: &str) -> bool {
             && matches!(n.kind, NodeKind::Knowledge)
             && n.knowledge
                 .as_ref()
-                .map(|k| is_fixed_root_knowledge_slot(k.slot.trim()))
+                .map(|k| {
+                    let slot = k.slot.trim();
+                    is_fixed_root_knowledge_slot(slot)
+                        && !crate::write_prompts::is_write_prompts_slot(slot)
+                })
                 .unwrap_or(false)
     })
 }
 
-fn edge_touches_fixed_worldview(tree: &NovelTree, e: &TreeEdge) -> bool {
-    node_fixed_worldview(tree, &e.source) || node_fixed_worldview(tree, &e.target)
+fn unlink_locked_edge(tree: &NovelTree, source: &str, target: &str) -> bool {
+    crate::write_prompts::is_write_prompts_root_edge(tree, source, target)
+        || node_fixed_worldview(tree, source)
+        || node_fixed_worldview(tree, target)
 }
 
 fn unlink_nodes(ctx: &McpCtx, args: Value) -> Result<String, String> {
@@ -3209,16 +3470,16 @@ fn unlink_nodes(ctx: &McpCtx, args: Value) -> Result<String, String> {
     let mut tree = get_tree(novel_id)?;
     if let Some(eid) = args.get("edge_id").and_then(|v| v.as_str()) {
         if let Some(e) = tree.edges.iter().find(|e| e.id == eid) {
-            if edge_touches_fixed_worldview(&tree, e) {
-                return Err("世界观 / 故事规则固定连线不可断开".into());
+            if unlink_locked_edge(&tree, &e.source, &e.target) {
+                return Err("固定连线不可断开".into());
             }
         }
         tree.edges.retain(|e| e.id != eid);
     } else {
         let a = arg_str(&args, "source_id")?;
         let b = arg_str(&args, "target_id")?;
-        if node_fixed_worldview(&tree, &a) || node_fixed_worldview(&tree, &b) {
-            return Err("世界观 / 故事规则固定连线不可断开".into());
+        if unlink_locked_edge(&tree, &a, &b) {
+            return Err("固定连线不可断开".into());
         }
         tree.edges.retain(|e| {
             !((e.source == a && e.target == b) || (e.source == b && e.target == a))
@@ -3292,12 +3553,52 @@ fn pick_host_card(
             return Ok((b.to_string(), a.to_string()));
         }
     };
+    if na.kind == card_kind && crate::write_prompts::is_write_prompts_slot(crate::write_prompts::knowledge_slot(na)) {
+        return Ok((a.to_string(), b.to_string()));
+    }
+    if nb.kind == card_kind && crate::write_prompts::is_write_prompts_slot(crate::write_prompts::knowledge_slot(nb)) {
+        return Ok((b.to_string(), a.to_string()));
+    }
     if na.kind == card_kind {
         Ok((b.to_string(), a.to_string()))
     } else if nb.kind == card_kind {
         Ok((a.to_string(), b.to_string()))
     } else {
         Ok((a.to_string(), b.to_string()))
+    }
+}
+
+fn link_handles<'a>(
+    tree: &'a crate::models::NovelTree,
+    host_id: &str,
+    card_id: &str,
+    kind: &str,
+) -> (&'static str, &'static str) {
+    match kind {
+        "knowledge" => {
+            let host_is_novel = tree
+                .nodes
+                .iter()
+                .any(|n| n.id == host_id && matches!(n.kind, NodeKind::Novel));
+            if host_is_novel {
+                if let Some(card) = tree.nodes.iter().find(|n| n.id == card_id) {
+                    let slot = crate::write_prompts::knowledge_slot(card);
+                    if crate::write_prompts::is_write_prompts_slot(slot) {
+                        return ("wp", "right");
+                    }
+                    if slot == "story_rules" {
+                        return ("sr", "left");
+                    }
+                    if crate::worldview_ops::worldview_json_key_for_slot(slot).is_some() {
+                        return ("wv", "bottom");
+                    }
+                }
+            }
+            ("left", "right")
+        }
+        "character" => ("left", "right"),
+        "chapter" | "volume" => ("bottom", "top"),
+        _ => ("right", "left"),
     }
 }
 
@@ -3321,11 +3622,7 @@ fn link_pair(
         .edges
         .iter()
         .any(|e| e.source == host_id && e.target == card_id || e.source == card_id && e.target == host_id);
-    let (sh, th) = match kind {
-        "knowledge" | "character" => ("left", "right"), // 章左 ← 卡右
-        "chapter" | "volume" => ("bottom", "top"),      // 上卡底 → 下卡顶
-        _ => ("right", "left"),                         // 章右 → 剧情左
-    };
+    let (sh, th) = link_handles(tree, &host_id, card_id, kind);
     if !exists {
         tree.edges.push(TreeEdge {
             id: format!("e-{host_id}-{card_id}"),
@@ -3461,6 +3758,17 @@ mod tests {
             arg_or(&with, "novel_id", Some("sel-n".into())).unwrap(),
             "arg-n"
         );
+    }
+
+    #[test]
+    fn json_node_spec_accepts_string_or_number() {
+        assert_eq!(
+            json_node_spec(Some(&json!("第3章"))),
+            Some("第3章".into())
+        );
+        assert_eq!(json_node_spec(Some(&json!(3))), Some("3".into()));
+        assert_eq!(json_node_spec(Some(&json!(""))), None);
+        assert_eq!(json_node_spec(None), None);
     }
 
     #[test]
@@ -3825,5 +4133,76 @@ mod tests {
                 .and_then(|v| v.as_str()),
             Some("转笔")
         );
+    }
+
+    #[test]
+    fn write_context_dedupes_and_skips_seen_root_ids() {
+        let mut root = node("root", NodeKind::Novel);
+        root.linked_character_ids = vec!["c-root".into(), "c-both".into()];
+        root.linked_knowledge_ids = vec!["k-root".into()];
+        root.linked_side_plot_ids = vec!["p-root".into()];
+        let mut vol = node("vol", NodeKind::Volume);
+        vol.linked_character_ids = vec!["c-vol".into(), "c-both".into()];
+        vol.linked_knowledge_ids = vec!["k-vol".into()];
+        let mut ch = node("ch", NodeKind::Chapter);
+        ch.linked_character_ids = vec!["c-ch".into(), "c-both".into()];
+        ch.linked_knowledge_ids = vec!["k-ch".into(), "k-root".into()];
+        ch.outline = "简纲".into();
+        ch.detailed_outline = vec!["细1".into()];
+        let tree = NovelTree {
+            novel_id: "n".into(),
+            nodes: vec![
+                root,
+                vol,
+                ch,
+                node("c-root", NodeKind::Character),
+                node("c-both", NodeKind::Character),
+                node("c-vol", NodeKind::Character),
+                node("c-ch", NodeKind::Character),
+                node("k-root", NodeKind::Knowledge),
+                node("k-vol", NodeKind::Knowledge),
+                node("k-ch", NodeKind::Knowledge),
+                node("p-root", NodeKind::SidePlot),
+            ],
+            edges: vec![TreeEdge {
+                id: "e-vc".into(),
+                source: "vol".into(),
+                target: "ch".into(),
+                kind: "chapter".into(),
+                source_handle: None,
+                target_handle: None,
+                label: String::new(),
+            }],
+        };
+        let mut seen_c = HashSet::new();
+        let mut seen_k = HashSet::new();
+        let root_c = take_unseen(&root_character_ids(&tree), &mut seen_c);
+        let vol_c = take_unseen(&volume_character_ids(&tree, "vol"), &mut seen_c);
+        let ch_c = take_unseen(
+            &tree_links::union_linked_ids(
+                &tree,
+                "ch",
+                &tree.nodes.iter().find(|n| n.id == "ch").unwrap().linked_character_ids,
+                NodeKind::Character,
+            ),
+            &mut seen_c,
+        );
+        assert_eq!(root_c, vec!["c-root", "c-both"]);
+        assert_eq!(vol_c, vec!["c-vol"]);
+        assert_eq!(ch_c, vec!["c-ch"]);
+
+        let root_k = take_unseen(&root_knowledge_ids(&tree), &mut seen_k);
+        let vol_k = take_unseen(&volume_local_knowledge_ids(&tree, "vol"), &mut seen_k);
+        let ch_k = take_unseen(&chapter_local_knowledge_ids(&tree, "ch"), &mut seen_k);
+        assert_eq!(root_k, vec!["k-root"]);
+        assert_eq!(vol_k, vec!["k-vol"]);
+        assert_eq!(ch_k, vec!["k-ch"]);
+
+        let mut skip_root = HashSet::new();
+        for id in root_knowledge_ids(&tree) {
+            skip_root.insert(id);
+        }
+        let ch_only = take_unseen(&chapter_local_knowledge_ids(&tree, "ch"), &mut skip_root);
+        assert_eq!(ch_only, vec!["k-ch"]);
     }
 }

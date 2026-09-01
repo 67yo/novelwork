@@ -13,6 +13,11 @@ pub fn db_path() -> PathBuf {
     app_root().join("nove.db")
 }
 
+/// sqlite-vec store for public-library chunk embeddings (`rig-sqlite`).
+pub fn knowledge_vec_path() -> PathBuf {
+    app_root().join("knowledge_vec.db")
+}
+
 pub fn lancedb_dir() -> PathBuf {
     let p = app_root().join("lancedb");
     fs::create_dir_all(&p).ok();

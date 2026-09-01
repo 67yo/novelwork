@@ -61,18 +61,31 @@ export function isStoryRulesSlot(slot: string | undefined | null): boolean {
 }
 
 export function isFixedRootKnowledgeSlot(slot: string | undefined | null): boolean {
-  return isWorldviewFanSlot(slot) || isStoryRulesSlot(slot) || isStoryRulesFanSlot(slot);
+  return (
+    isWorldviewFanSlot(slot) ||
+    isStoryRulesSlot(slot) ||
+    isStoryRulesFanSlot(slot) ||
+    (slot ?? "").trim() === "write_prompts"
+  );
 }
 
-/** 边是否连着世界观六卡 / 故事规则（不可切断） */
+/** 边是否不可切断：世界观/故事规则凡触边即锁；生成/精修只锁根↔本卡。 */
 export function isFixedRootKnowledgeEdge(
   nodes: { id: string; kind: string; knowledge?: { slot?: string } | null }[],
   edge: { source: string; target: string },
 ): boolean {
   const byId = new Map(nodes.map((n) => [n.id, n]));
-  for (const id of [edge.source, edge.target]) {
-    const n = byId.get(id);
-    if (n?.kind === "knowledge" && isFixedRootKnowledgeSlot(knowledgeSlot(n))) return true;
+  const src = byId.get(edge.source);
+  const tgt = byId.get(edge.target);
+  if (!src || !tgt) return false;
+  const srcSlot = src.kind === "knowledge" ? knowledgeSlot(src) : "";
+  const tgtSlot = tgt.kind === "knowledge" ? knowledgeSlot(tgt) : "";
+  if (srcSlot === "write_prompts" || tgtSlot === "write_prompts") {
+    const other = srcSlot === "write_prompts" ? tgt : src;
+    return other.kind === "novel";
+  }
+  for (const n of [src, tgt]) {
+    if (n.kind === "knowledge" && isFixedRootKnowledgeSlot(knowledgeSlot(n))) return true;
   }
   return false;
 }
@@ -235,7 +248,7 @@ export function ensureWorldviewCards(tree: NovelTree, t: TitleFn): boolean {
         source: root.id,
         target: id,
         kind: "knowledge",
-        source_handle: isFan ? "top" : "right",
+        source_handle: isFan ? "wv" : "sr",
         target_handle: isFan ? "bottom" : "left",
       });
     } else {
@@ -256,12 +269,12 @@ export function ensureWorldviewCards(tree: NovelTree, t: TitleFn): boolean {
           source: root.id,
           target: node.id,
           kind: "knowledge",
-          source_handle: isFan ? "top" : "right",
+          source_handle: isFan ? "wv" : "sr",
           target_handle: isFan ? "bottom" : "left",
         });
         changed = true;
       } else {
-        const sh = isFan ? "top" : "right";
+        const sh = isFan ? "wv" : "sr";
         const th = isFan ? "bottom" : "left";
         if (
           edge.source !== root.id ||

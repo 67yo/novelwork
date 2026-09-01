@@ -3,6 +3,7 @@ import {
   insertBodySuggestion,
   nonEmptyLineIndexes,
   replaceBodyLine,
+  replaceBodyLineSpan,
   splitBodyLines,
 } from "./chapterParagraphs";
 
@@ -13,6 +14,11 @@ if (lines.length !== 4 || lines[0] !== "甲" || lines[2] !== "乙丙") {
 
 const replaced = replaceBodyLine("甲\n乙\n丙", 1, "乙改\n乙续");
 if (replaced !== "甲\n乙改\n乙续\n丙") throw new Error(`replace multi: ${replaced}`);
+
+const span = replaceBodyLineSpan("甲\n乙\n丙", 1, "乙改\n乙续");
+if (span.from !== 2 || span.oldTo !== 3 || span.to !== 7) {
+  throw new Error(`span ${JSON.stringify(span)}`);
+}
 
 const trimmed = replaceBodyLine("甲\n  \n丙", 1, "  ");
 if (splitBodyLines(trimmed)[1] !== "") throw new Error("replace empty");

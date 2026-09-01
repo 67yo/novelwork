@@ -9,9 +9,12 @@ mod chunk;
 mod commands;
 mod core_laws_fmt;
 mod db;
+mod ai_log;
+mod compat_messages;
 mod global_chat;
 mod kb_context;
 mod knowledge;
+mod knowledge_vec;
 mod llm;
 mod mcp;
 mod models;
@@ -31,6 +34,7 @@ mod secret;
 mod skills;
 mod tree_layout;
 mod tree_links;
+mod write_prompts;
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -113,6 +117,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::get_settings,
             commands::save_settings,
+            commands::open_ai_log_dir,
             commands::get_mcp_status,
             commands::restart_mcp_server,
             commands::refresh_model_catalog,

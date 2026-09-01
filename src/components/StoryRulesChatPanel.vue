@@ -6,7 +6,6 @@ import { useI18n } from "@/i18n";
 import { usePersistedChatModel } from "@/lib/chatModel";
 import { applyStoryRulesPayload } from "@/lib/storyRulesGen";
 import { plainTree } from "@/lib/plainTree";
-import { applyAutoLayout } from "@/lib/treeLayout";
 import { Button } from "@/components/ui/button";
 
 const props = defineProps<{
@@ -78,7 +77,6 @@ async function sendText(text: string) {
       t(key as Parameters<typeof t>[0]),
     );
     if (changed) {
-      applyAutoLayout(tr.nodes, tr.edges);
       const saved = await api.saveTreeJson(props.novelId, JSON.stringify(plainTree(tr)));
       if (!saved?.nodes?.length) throw new Error(t("workspace.sr.chatSaveFailed"));
       emit("applied");

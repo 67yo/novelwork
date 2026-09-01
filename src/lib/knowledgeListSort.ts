@@ -14,6 +14,7 @@ import {
   knowledgeSlot,
   worldviewFanTitleKey,
 } from "@/lib/worldview";
+import { isWritePromptsSlot, WRITE_PROMPTS_SLOT, WRITE_PROMPTS_TITLE_KEY } from "@/lib/writePrompts";
 import { worldviewFanVisual } from "@/lib/worldviewStyle";
 
 /** 控制台 / 关联知识：前 6 扇形 + 第 7 故事规则 */
@@ -73,6 +74,12 @@ function linkedChildCards(tree: NovelTree, parent: TreeNode): TreeNode[] {
   if (slot === "story_rules") {
     return sortByLinkedOrder(parent, linkedStoryRulesBlocks(tree, parent.id));
   }
+  if (isWritePromptsSlot(slot)) {
+    const kids = (parent.linked_knowledge_ids ?? [])
+      .map((id) => tree.nodes.find((n) => n.id === id && n.kind === "knowledge"))
+      .filter((n): n is TreeNode => !!n && !isWritePromptsSlot(knowledgeSlot(n)));
+    return sortByLinkedOrder(parent, kids);
+  }
   return [];
 }
 
@@ -83,6 +90,7 @@ export function knowledgeNodeLabel(n: TreeNode, t: (key: MessageKey) => string):
   const srKey = storyRulesFanTitleKey(slot);
   if (srKey) return t(srKey);
   if (isStoryRulesSlot(slot)) return t(STORY_RULES_SLOT.titleKey);
+  if (isWritePromptsSlot(slot)) return t(WRITE_PROMPTS_TITLE_KEY);
   return n.label?.trim() || t("workspace.knowledgeCard");
 }
 
@@ -101,9 +109,10 @@ function priorityRank(slot: string): number | null {
   return idx >= 0 ? idx : null;
 }
 
-/** 章 / 卷左栏关联知识：世界观六卡 + 故事规则仅隐藏展示，关联仍生效 */
+/** 章 / 卷左栏关联知识：世界观六卡 + 故事规则 + 生成/精修仅隐藏展示 */
 export function isHostPanelHiddenKnowledgeSlot(slot: string | undefined | null): boolean {
-  return priorityRank((slot ?? "").trim()) != null;
+  const s = (slot ?? "").trim();
+  return priorityRank(s) != null || isWritePromptsSlot(s);
 }
 
 export function filterHostPanelLinkedKnowledge(nodes: TreeNode[]): TreeNode[] {
@@ -198,6 +207,12 @@ export function buildKnowledgeNavItems(tree: NovelTree, t: (key: MessageKey) => 
   if (rules) {
     push(rules, 0);
     for (const child of linkedChildCards(tree, rules)) push(child, 1);
+  }
+
+  const writePrompts = bySlot.get(WRITE_PROMPTS_SLOT);
+  if (writePrompts) {
+    push(writePrompts, 0);
+    for (const child of linkedChildCards(tree, writePrompts)) push(child, 1);
   }
 
   const rest = knowledgeNodes.filter((n) => !listed.has(n.id));

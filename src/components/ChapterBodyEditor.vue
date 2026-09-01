@@ -19,6 +19,7 @@ import {
   type BlockInfo,
   type ViewUpdate,
 } from "@codemirror/view";
+import { replaceBodyLineSpan } from "../lib/chapterParagraphs";
 
 const LINE = 32;
 const SPARKLE_SVG =
@@ -138,7 +139,7 @@ function nounExt() {
 }
 
 const paperTheme = EditorView.theme({
-  "&": { height: "100%", backgroundColor: "transparent" },
+  "&": { height: "100%", backgroundColor: "transparent", border: "none" },
   "&.cm-focused": { outline: "none" },
   ".cm-scroller": {
     fontFamily: 'ui-serif, "Songti SC", "Noto Serif SC", "Source Han Serif SC", Georgia, serif',
@@ -165,28 +166,29 @@ const paperTheme = EditorView.theme({
     border: "none",
     borderRadius: "4px",
     background: "transparent",
-    color: "#9b2c3c",
+    color: "#111111",
     opacity: "0",
     cursor: "pointer",
   },
   ".cm-para-rewrite-btn.is-hot, .cm-para-rewrite-btn:hover": {
     opacity: "1",
-    background: "rgba(180, 70, 60, 0.12)",
+    background: "rgba(0, 0, 0, 0.08)",
   },
   ".cm-content": {
-    caretColor: "#9b2c3c",
+    color: "#111111",
+    caretColor: "#111111",
     fontSize: "16px",
     lineHeight: `${LINE}px`,
     padding: "8px 28px 72px 16px",
     minHeight: "100%",
-    borderLeft: "1px solid rgba(196, 64, 54, 0.55)",
-    backgroundImage: `repeating-linear-gradient(to bottom, transparent 0, transparent ${LINE - 1}px, rgba(70, 100, 160, 0.22) ${LINE - 1}px, rgba(70, 100, 160, 0.22) ${LINE}px)`,
+    borderLeft: "1px solid #d4d4d4",
+    backgroundImage: `repeating-linear-gradient(to bottom, transparent 0, transparent ${LINE - 1}px, #d4d4d4 ${LINE - 1}px, #d4d4d4 ${LINE}px)`,
     backgroundPosition: "0 8px",
   },
   ".cm-line": { padding: "0" },
-  ".cm-cursor, .cm-dropCursor": { borderLeftColor: "#9b2c3c" },
-  ".cm-selectionBackground": { background: "rgba(180, 70, 60, 0.16)" },
-  "&.cm-focused .cm-selectionBackground": { background: "rgba(180, 70, 60, 0.22)" },
+  ".cm-cursor, .cm-dropCursor": { borderLeftColor: "#111111" },
+  ".cm-selectionBackground": { background: "rgba(0, 0, 0, 0.12)" },
+  "&.cm-focused .cm-selectionBackground": { background: "rgba(0, 0, 0, 0.18)" },
   ".cm-tooltip-autocomplete": {
     fontFamily: "ui-sans-serif, system-ui, sans-serif",
     fontSize: "13px",
@@ -332,16 +334,50 @@ function setSelection(from: number, to = from) {
   view.focus();
 }
 
-function focus() {
-  view?.focus();
+/** 只替换一行（可变成多行），选中新段且光标在段末；滚动条位置不变。 */
+function replaceLineAndSelect(index: number, next: string): boolean {
+  if (!view) return false;
+  if (index < 0 || index >= view.state.doc.lines) return false;
+  const span = replaceBodyLineSpan(view.state.doc.toString(), index, next);
+  const insert = span.text.slice(span.from, span.to);
+  const top = view.scrollDOM.scrollTop;
+  const left = view.scrollDOM.scrollLeft;
+  view.dispatch({
+    changes: { from: span.from, to: span.oldTo, insert },
+    selection:
+      span.from === span.to
+        ? EditorSelection.cursor(span.to)
+        : EditorSelection.range(span.from, span.to),
+    scrollIntoView: false,
+  });
+  const pin = () => {
+    if (!view) return;
+    view.contentDOM.focus({ preventScroll: true });
+    view.scrollDOM.scrollTop = top;
+    view.scrollDOM.scrollLeft = left;
+  };
+  pin();
+  requestAnimationFrame(pin);
+  return true;
 }
 
-defineExpose({ getCursor, setSelection, focus });
+function focus() {
+  view?.contentDOM.focus({ preventScroll: true });
+}
+
+function scrollToTop() {
+  if (!view) return;
+  view.dispatch({ selection: EditorSelection.cursor(0) });
+  view.scrollDOM.scrollTop = 0;
+  view.scrollDOM.scrollLeft = 0;
+}
+
+defineExpose({ getCursor, setSelection, replaceLineAndSelect, focus, scrollToTop });
 </script>
 
 <template>
   <div class="chapter-paper relative min-h-0 w-full flex-1">
-    <div class="chapter-paper-sheet relative h-full min-h-0 overflow-hidden rounded-md">
+    <div class="chapter-paper-sheet relative h-full min-h-0 overflow-hidden">
       <div ref="hostEl" class="absolute inset-0 min-h-0" />
     </div>
   </div>
@@ -349,34 +385,38 @@ defineExpose({ getCursor, setSelection, focus });
 
 <style scoped>
 .chapter-paper-sheet {
-  background-color: #f3ead6;
-  box-shadow:
-    inset 0 0 0 1px rgba(120, 90, 40, 0.14),
-    0 1px 2px rgba(80, 50, 20, 0.06);
+  background-color: #ffffff;
 }
 :global(.dark) .chapter-paper-sheet {
-  background-color: #2c261c;
-  box-shadow: inset 0 0 0 1px rgba(220, 190, 140, 0.12);
+  background-color: #111111;
 }
 :deep(.cm-editor) {
   height: 100%;
 }
 :global(.dark) .chapter-paper :deep(.cm-content) {
-  caret-color: #e8c9a8;
-  border-left-color: rgba(220, 110, 90, 0.45);
+  color: #f5f5f5;
+  caret-color: #f5f5f5;
+  border-left-color: #404040;
   background-image: repeating-linear-gradient(
     to bottom,
     transparent 0,
     transparent 31px,
-    rgba(210, 190, 150, 0.16) 31px,
-    rgba(210, 190, 150, 0.16) 32px
+    #404040 31px,
+    #404040 32px
   );
   background-position: 0 8px;
 }
 :global(.dark) .chapter-paper :deep(.cm-cursor) {
-  border-left-color: #e8c9a8;
+  border-left-color: #f5f5f5;
 }
 :global(.dark) .chapter-paper :deep(.cm-para-rewrite-btn) {
-  color: #e8c9a8;
+  color: #f5f5f5;
+}
+:global(.dark) .chapter-paper :deep(.cm-para-rewrite-btn.is-hot),
+:global(.dark) .chapter-paper :deep(.cm-para-rewrite-btn:hover) {
+  background: rgba(255, 255, 255, 0.12);
+}
+:global(.dark) .chapter-paper :deep(.cm-selectionBackground) {
+  background: rgba(255, 255, 255, 0.18);
 }
 </style>

@@ -1,10 +1,145 @@
 use serde::{Deserialize, Serialize};
 
+pub const PROTOCOL_OPENAI: &str = "openai";
+pub const PROTOCOL_OPENAI_RESPONSES: &str = "openai_responses";
+pub const PROTOCOL_DEEPSEEK: &str = "deepseek";
+pub const PROTOCOL_ZAI: &str = "zai";
+pub const PROTOCOL_ALIYUN: &str = "aliyun";
+pub const PROTOCOL_ANTHROPIC: &str = "anthropic";
+pub const PROTOCOL_GEMINI: &str = "gemini";
+pub const PROTOCOL_GROQ: &str = "groq";
+pub const PROTOCOL_MOONSHOT: &str = "moonshot";
+pub const PROTOCOL_MISTRAL: &str = "mistral";
+pub const PROTOCOL_OPENROUTER: &str = "openrouter";
+pub const PROTOCOL_TOGETHER: &str = "together";
+pub const PROTOCOL_XAI: &str = "xai";
+pub const PROTOCOL_OLLAMA: &str = "ollama";
+pub const PROTOCOL_HYPERBOLIC: &str = "hyperbolic";
+pub const PROTOCOL_HUGGINGFACE: &str = "huggingface";
+pub const PROTOCOL_MINIMAX: &str = "minimax";
+pub const PROTOCOL_MIRA: &str = "mira";
+pub const PROTOCOL_PERPLEXITY: &str = "perplexity";
+pub const PROTOCOL_VENICE: &str = "venice";
+pub const PROTOCOL_COHERE: &str = "cohere";
+pub const PROTOCOL_AZURE: &str = "azure";
+pub const PROTOCOL_LLAMAFILE: &str = "llamafile";
+pub const PROTOCOL_XIAOMIMIMO: &str = "xiaomimimo";
+pub const PROTOCOL_DOUBLEWORD: &str = "doubleword";
+
+pub fn protocol_allows_empty_key(protocol: &str) -> bool {
+    matches!(protocol, PROTOCOL_OLLAMA | PROTOCOL_LLAMAFILE)
+}
+
+fn canonical_protocol(protocol: &str) -> &'static str {
+    let p = protocol.trim().to_ascii_lowercase().replace('-', "_");
+    match p.as_str() {
+        "openai_responses" | "responses" => PROTOCOL_OPENAI_RESPONSES,
+        "deepseek" => PROTOCOL_DEEPSEEK,
+        "zai" | "bigmodel" | "zhipu" | "glm" => PROTOCOL_ZAI,
+        "aliyun" | "dashscope" | "qwen" | "tongyi" => PROTOCOL_ALIYUN,
+        "anthropic" | "claude" => PROTOCOL_ANTHROPIC,
+        "gemini" | "google" | "google_gemini" => PROTOCOL_GEMINI,
+        "groq" => PROTOCOL_GROQ,
+        "moonshot" | "kimi" => PROTOCOL_MOONSHOT,
+        "mistral" => PROTOCOL_MISTRAL,
+        "openrouter" => PROTOCOL_OPENROUTER,
+        "together" | "together_ai" => PROTOCOL_TOGETHER,
+        "xai" | "grok" => PROTOCOL_XAI,
+        "ollama" => PROTOCOL_OLLAMA,
+        "hyperbolic" => PROTOCOL_HYPERBOLIC,
+        "huggingface" | "hf" => PROTOCOL_HUGGINGFACE,
+        "minimax" => PROTOCOL_MINIMAX,
+        "mira" => PROTOCOL_MIRA,
+        "perplexity" => PROTOCOL_PERPLEXITY,
+        "venice" => PROTOCOL_VENICE,
+        "cohere" => PROTOCOL_COHERE,
+        "azure" | "azure_openai" => PROTOCOL_AZURE,
+        "llamafile" => PROTOCOL_LLAMAFILE,
+        "xiaomimimo" | "mimo" | "xiaomi" => PROTOCOL_XIAOMIMIMO,
+        "doubleword" => PROTOCOL_DOUBLEWORD,
+        _ => PROTOCOL_OPENAI,
+    }
+}
+
+/// Empty / `openai` / unknown → infer from Base URL so old DeepSeek rows still hit the DeepSeek client.
+/// Any other stored protocol wins, even if the URL looks like a different host.
+pub fn infer_compat_protocol(protocol: &str, base_url: &str) -> &'static str {
+    let p = canonical_protocol(protocol);
+    if protocol.trim().is_empty() || p == PROTOCOL_OPENAI {
+        infer_compat_protocol_from_url(base_url).unwrap_or(p)
+    } else {
+        p
+    }
+}
+
+fn infer_compat_protocol_from_url(base_url: &str) -> Option<&'static str> {
+    let u = base_url.to_ascii_lowercase();
+    if u.contains("deepseek.com") {
+        Some(PROTOCOL_DEEPSEEK)
+    } else if u.contains("bigmodel.cn") || u.contains("api.z.ai") {
+        Some(PROTOCOL_ZAI)
+    } else if u.contains("dashscope.aliyuncs.com") {
+        Some(PROTOCOL_ALIYUN)
+    } else if u.contains("anthropic.com") {
+        Some(PROTOCOL_ANTHROPIC)
+    } else if u.contains("generativelanguage.googleapis.com") {
+        Some(PROTOCOL_GEMINI)
+    } else if u.contains("groq.com") {
+        Some(PROTOCOL_GROQ)
+    } else if u.contains("moonshot.cn") || u.contains("moonshot.ai") {
+        Some(PROTOCOL_MOONSHOT)
+    } else if u.contains("mistral.ai") {
+        Some(PROTOCOL_MISTRAL)
+    } else if u.contains("openrouter.ai") {
+        Some(PROTOCOL_OPENROUTER)
+    } else if u.contains("together.xyz") {
+        Some(PROTOCOL_TOGETHER)
+    } else if u.contains("api.x.ai") {
+        Some(PROTOCOL_XAI)
+    } else if u.contains("hyperbolic.xyz") {
+        Some(PROTOCOL_HYPERBOLIC)
+    } else if u.contains("huggingface.co") {
+        Some(PROTOCOL_HUGGINGFACE)
+    } else if u.contains("minimax.io") || u.contains("minimaxi.com") {
+        Some(PROTOCOL_MINIMAX)
+    } else if u.contains("mira.network") {
+        Some(PROTOCOL_MIRA)
+    } else if u.contains("perplexity.ai") {
+        Some(PROTOCOL_PERPLEXITY)
+    } else if u.contains("venice.ai") {
+        Some(PROTOCOL_VENICE)
+    } else if u.contains("cohere.ai") || u.contains("cohere.com") {
+        Some(PROTOCOL_COHERE)
+    } else if u.contains("openai.azure.com") || u.contains("cognitiveservices.azure.com") {
+        Some(PROTOCOL_AZURE)
+    } else if u.contains("xiaomimimo.com") {
+        Some(PROTOCOL_XIAOMIMIMO)
+    } else if u.contains("doubleword.ai") {
+        Some(PROTOCOL_DOUBLEWORD)
+    } else if u.contains(":11434") {
+        Some(PROTOCOL_OLLAMA)
+    } else {
+        None
+    }
+}
+
+impl CompatProvider {
+    pub fn chat_protocol(&self) -> &'static str {
+        infer_compat_protocol(&self.protocol, &self.base_url)
+    }
+
+    pub fn is_ready(&self) -> bool {
+        !self.base_url.trim().is_empty()
+            && (!self.api_key.trim().is_empty()
+                || protocol_allows_empty_key(self.chat_protocol()))
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompatProvider {
     pub id: String,
     pub label: String,
-    /// currently only "openai"
+    /// rig completion protocol id; unknown treated as OpenAI Completions
     pub protocol: String,
     pub base_url: String,
     pub api_key: String,
@@ -39,7 +174,7 @@ pub struct SaveCompatProviderInput {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppSettings {
-    /// OpenAI-compatible endpoints (DeepSeek / Kimi / custom). Primary LLM path.
+    /// AI API providers (rig completion protocols). Primary LLM path.
     #[serde(default)]
     pub compat_providers: Vec<CompatProvider>,
     /// Legacy keys — migration only; LLM routes via compat_providers.
@@ -75,6 +210,9 @@ pub struct AppSettings {
     /// 是否允许局域网访问 MCP（监听 0.0.0.0）
     #[serde(default)]
     pub mcp_lan: bool,
+    /// 本机记录 Chat / AI 请求与错误（JSONL）
+    #[serde(default)]
+    pub ai_interaction_log: bool,
     /// ComfyUI Desktop HTTP（默认 8188；部分 Desktop 为 8000）
     #[serde(default = "default_comfyui_url")]
     pub comfyui_url: String,
@@ -132,9 +270,7 @@ pub fn api_model_id(model: &str) -> &str {
 
 impl AppSettings {
     pub fn any_compat_key(&self) -> bool {
-        self.compat_providers
-            .iter()
-            .any(|p| !p.api_key.trim().is_empty())
+        self.compat_providers.iter().any(|p| p.is_ready())
     }
 
     pub fn all_compat_model_ids(&self) -> Vec<String> {
@@ -152,23 +288,21 @@ impl AppSettings {
         // 固定提供商：compat:{providerId}:{modelId}
         if let Some((pid, mid)) = parse_compat_model_ref(m) {
             return self.compat_providers.iter().find(|p| {
-                p.id == pid && !p.api_key.trim().is_empty() && p.models.iter().any(|x| x == mid)
+                p.id == pid && p.is_ready() && p.models.iter().any(|x| x == mid)
             }).or_else(|| {
                 // 提供商仍在但模型列表已变：仍钉住该 Key
                 self.compat_providers
                     .iter()
-                    .find(|p| p.id == pid && !p.api_key.trim().is_empty())
+                    .find(|p| p.id == pid && p.is_ready())
             });
         }
         let bare = api_model_id(m);
         if let Some(p) = self.compat_providers.iter().find(|p| {
-            !p.api_key.trim().is_empty() && p.models.iter().any(|x| x == bare)
+            p.is_ready() && p.models.iter().any(|x| x == bare)
         }) {
             return Some(p);
         }
-        self.compat_providers
-            .iter()
-            .find(|p| !p.api_key.trim().is_empty())
+        self.compat_providers.iter().find(|p| p.is_ready())
     }
 }
 
@@ -217,6 +351,70 @@ mod model_ref_tests {
         };
         assert_eq!(s.resolve_compat("compat:b:gpt-4").unwrap().id, "b");
         assert_eq!(s.resolve_compat("gpt-4").unwrap().id, "a");
+    }
+
+    #[test]
+    fn infer_compat_protocol_prefers_field_then_url() {
+        assert_eq!(
+            infer_compat_protocol("openai", "https://api.deepseek.com/v1"),
+            PROTOCOL_DEEPSEEK
+        );
+        assert_eq!(
+            infer_compat_protocol("deepseek", "https://example.com/v1"),
+            PROTOCOL_DEEPSEEK
+        );
+        assert_eq!(
+            infer_compat_protocol("", "https://open.bigmodel.cn/api/paas/v4"),
+            PROTOCOL_ZAI
+        );
+        assert_eq!(
+            infer_compat_protocol("zai", "https://api.z.ai/api/paas/v4"),
+            PROTOCOL_ZAI
+        );
+        assert_eq!(
+            infer_compat_protocol("bigmodel", "https://anything"),
+            PROTOCOL_ZAI
+        );
+        assert_eq!(
+            infer_compat_protocol("openai", "https://dashscope.aliyuncs.com/compatible-mode/v1"),
+            PROTOCOL_ALIYUN
+        );
+        assert_eq!(
+            infer_compat_protocol("aliyun", "https://example.com"),
+            PROTOCOL_ALIYUN
+        );
+        assert_eq!(
+            infer_compat_protocol("openai", "https://api.moonshot.cn/v1"),
+            PROTOCOL_MOONSHOT
+        );
+        assert_eq!(
+            infer_compat_protocol("", "https://api.openai.com/v1"),
+            PROTOCOL_OPENAI
+        );
+        assert_eq!(
+            infer_compat_protocol("kimi", "https://example.com"),
+            PROTOCOL_MOONSHOT
+        );
+        assert_eq!(
+            infer_compat_protocol("claude", ""),
+            PROTOCOL_ANTHROPIC
+        );
+        assert_eq!(
+            infer_compat_protocol("openai_responses", "https://api.deepseek.com/v1"),
+            PROTOCOL_OPENAI_RESPONSES
+        );
+        assert_eq!(
+            infer_compat_protocol("groq", "https://api.deepseek.com/v1"),
+            PROTOCOL_GROQ
+        );
+        assert_eq!(
+            infer_compat_protocol("openai", "https://api.groq.com/openai/v1"),
+            PROTOCOL_GROQ
+        );
+        assert_eq!(
+            infer_compat_protocol("", "http://127.0.0.1:11434"),
+            PROTOCOL_OLLAMA
+        );
     }
 }
 
@@ -291,6 +489,7 @@ impl Default for AppSettings {
             mcp_port: default_mcp_port(),
             mcp_enabled: true,
             mcp_lan: false,
+            ai_interaction_log: false,
             comfyui_url: default_comfyui_url(),
             comfyui_workflow: String::new(),
             comfyui_prompt_node: String::new(),
@@ -302,10 +501,6 @@ impl Default for AppSettings {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SettingsView {
     pub compat_providers: Vec<CompatProviderView>,
-    pub gemini_api_key_masked: String,
-    pub gemini_api_key_configured: bool,
-    pub claude_api_key_masked: String,
-    pub claude_api_key_configured: bool,
     pub default_model: String,
     pub create_model: String,
     pub generate_model: String,
@@ -317,6 +512,8 @@ pub struct SettingsView {
     pub mcp_port: u16,
     pub mcp_enabled: bool,
     pub mcp_lan: bool,
+    pub ai_interaction_log: bool,
+    pub ai_log_dir: String,
     pub comfyui_url: String,
     pub comfyui_workflow: String,
     pub comfyui_prompt_node: String,
@@ -328,10 +525,6 @@ pub struct SettingsView {
 pub struct SaveSettingsInput {
     #[serde(default, alias = "compat_providers")]
     pub compat_providers: Option<Vec<SaveCompatProviderInput>>,
-    #[serde(default, alias = "gemini_api_key")]
-    pub gemini_api_key: Option<String>,
-    #[serde(default, alias = "claude_api_key")]
-    pub claude_api_key: Option<String>,
     #[serde(default, alias = "default_model")]
     pub default_model: Option<String>,
     #[serde(default, alias = "create_model")]
@@ -352,6 +545,8 @@ pub struct SaveSettingsInput {
     pub mcp_enabled: Option<bool>,
     #[serde(default, alias = "mcp_lan")]
     pub mcp_lan: Option<bool>,
+    #[serde(default, alias = "ai_interaction_log")]
+    pub ai_interaction_log: Option<bool>,
     #[serde(default, alias = "comfyui_url")]
     pub comfyui_url: Option<String>,
     #[serde(default, alias = "comfyui_workflow")]

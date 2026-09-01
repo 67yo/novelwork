@@ -1,25 +1,25 @@
 <script setup lang="ts">
-import { computed, inject, type Component } from "vue";
-import { Handle, Position, type NodeProps } from "@vue-flow/core";
+import { computed, type Component } from "vue";
+import { Ref as ReteRef } from "rete-vue-plugin";
 import { BookOpen, ChevronDown, ChevronRight, GitBranch, Layers, Library, User } from "@lucide/vue";
-import type { TreeNode } from "@/lib/api";
 import { useI18n } from "@/i18n";
 import { isStoryRulesSlot, STORY_RULES_SLOT, worldviewFanTitleKey } from "@/lib/worldview";
+import { isWritePromptsSlot, WRITE_PROMPTS_TITLE_KEY } from "@/lib/writePrompts";
 import { storyRulesFanTitleKey } from "@/lib/storyRules";
 import { worldviewFanVisual } from "@/lib/worldviewStyle";
 import { volumeDisplaySummary } from "@/lib/volume";
+import { socketsForKind } from "@/lib/flowSockets";
+import type { StoryReteNode } from "@/lib/flowCanvas";
 
-/** 根节点可附带封面 URL；分卷卡可带折叠状态 */
-type StoryNodeData = TreeNode & {
-  cover_url?: string;
-  volumeCollapsed?: boolean;
-  collapsedChapterCount?: number;
-};
-
-const props = defineProps<NodeProps<StoryNodeData>>();
+const props = defineProps<{
+  data: StoryReteNode;
+  emit: (event: unknown) => void;
+  seed?: number;
+}>();
 const { t } = useI18n();
 
-const n = computed(() => props.data);
+const n = computed(() => props.data.payload);
+const selected = computed(() => !!props.data.selected);
 const coverUrl = computed(() => n.value?.cover_url?.trim() || "");
 const kind = computed(() => n.value?.kind ?? "chapter");
 const knowledgeSlot = computed(() => (n.value?.knowledge?.slot ?? "").trim());
@@ -45,6 +45,7 @@ const knowledgeDisplayLabel = computed(() => {
   const srKey = storyRulesFanTitleKey(slot);
   if (srKey) return t(srKey);
   if (isStoryRulesSlot(slot)) return t(STORY_RULES_SLOT.titleKey);
+  if (isWritePromptsSlot(slot)) return t(WRITE_PROMPTS_TITLE_KEY);
   return n.value?.label ?? "";
 });
 const wordTarget = computed(() =>
@@ -62,13 +63,11 @@ const volumeSummary = computed(() =>
 );
 const volumeCollapsed = computed(() => !!n.value?.volumeCollapsed);
 const collapsedChapterCount = computed(() => n.value?.collapsedChapterCount ?? 0);
-const toggleVolumeCollapse = inject<(id: string) => void>("novework.toggleVolumeCollapse");
-
 function onToggleVolumeCollapse(ev: MouseEvent) {
   ev.preventDefault();
   ev.stopPropagation();
   const id = n.value?.id;
-  if (id) toggleVolumeCollapse?.(id);
+  if (id) n.value?.toggleVolumeCollapse?.(id);
 }
 
 const plotBadge = computed(() => {
@@ -125,7 +124,7 @@ const shellClass = computed(() => {
 });
 
 const glowTone = computed(() => {
-  if (!props.selected) return "";
+  if (!selected.value) return "";
   if (kind.value === "character") return "story-node-glow story-node-glow--amber";
   if (kind.value === "side_plot") return "story-node-glow story-node-glow--sky";
   if (kind.value === "knowledge") {
@@ -140,26 +139,64 @@ const glowTone = computed(() => {
   return "story-node-glow story-node-glow--primary";
 });
 
-/** 人物/剧情/知识卡左右同色；章节仍左琥珀右天蓝作挂载提示。线类型由两端卡片 kind 决定。 */
-const sideHandleClass = computed(() => {
-  if (kind.value === "character") return "!h-2.5 !w-2.5 !border-2 !border-amber-600 !bg-amber-500";
-  if (kind.value === "side_plot") return "!h-2.5 !w-2.5 !border-2 !border-sky-600 !bg-sky-500";
-  if (kind.value === "knowledge") {
-    if (isRaceCard.value) return "!h-2.5 !w-2.5 !border-2 !border-rose-600 !bg-rose-500";
-    if (isFactionCard.value) return "!h-2.5 !w-2.5 !border-2 !border-indigo-600 !bg-indigo-500";
-    if (isReligionCard.value) return "!h-2.5 !w-2.5 !border-2 !border-orange-600 !bg-orange-500";
-    if (isMajorEventCard.value) return "!h-2.5 !w-2.5 !border-2 !border-amber-700 !bg-amber-600";
-    if (worldviewVisual.value) return worldviewVisual.value.handle;
-    return "!h-2.5 !w-2.5 !border-2 !border-teal-700 !bg-teal-600";
+function socketTitle(key: string): string {
+  if (key === "wv") return t("workspace.handleWorldview");
+  if (key === "sr") return t("workspace.handleStoryRules");
+  if (key === "wp") return t("workspace.handleWritePrompts");
+  if (key === "top") return t("workspace.handlePlotTop");
+  if (key === "bottom") return t("workspace.handlePlotBottom");
+  if (key === "left") {
+    if (kind.value === "knowledge" && isWritePromptsSlot(knowledgeSlot.value)) {
+      return t("workspace.writePrompts.handleGenerate");
+    }
+    if (kind.value === "side_plot") return t("workspace.plotCard");
+    if (kind.value === "knowledge") return t("workspace.knowledgeCard");
+    return t("workspace.role");
   }
-  return null;
+  if (kind.value === "knowledge" && isWritePromptsSlot(knowledgeSlot.value)) {
+    return t("workspace.writePrompts.handleRefine");
+  }
+  if (kind.value === "character") return t("workspace.role");
+  if (kind.value === "knowledge") return t("workspace.knowledgeCard");
+  return t("workspace.plotCard");
+}
+
+function socketTone(key: string): string {
+  if (key === "wv") return "story-port-tone-primary";
+  if (key === "sr") return "story-port-tone-sky";
+  if (key === "wp") return "story-port-tone-teal";
+  if (key === "top" || key === "bottom") return "story-port-tone-primary";
+  if (kind.value === "character") return "story-port-tone-amber";
+  if (kind.value === "side_plot") return "story-port-tone-sky";
+  if (kind.value === "knowledge") {
+    if (isRaceCard.value) return "story-port-tone-rose";
+    if (isFactionCard.value) return "story-port-tone-indigo";
+    if (isReligionCard.value) return "story-port-tone-orange";
+    if (isMajorEventCard.value) return "story-port-tone-amber";
+    return "story-port-tone-teal";
+  }
+  if (key === "left") return "story-port-tone-rose";
+  return "story-port-tone-sky";
+}
+
+const socketPorts = computed(() => {
+  const id = props.data.id;
+  return socketsForKind(kind.value).flatMap((key) => {
+    const input = props.data.inputs[key];
+    const output = props.data.outputs[key];
+    if (!input || !output) return [];
+    return [
+      {
+        key,
+        title: socketTitle(key),
+        tone: socketTone(key),
+        nodeId: id,
+        inSocket: input.socket,
+        outSocket: output.socket,
+      },
+    ];
+  });
 });
-const leftHandleClass = computed(
-  () => sideHandleClass.value ?? "!h-2.5 !w-2.5 !border-2 !border-rose-600 !bg-rose-500",
-);
-const rightHandleClass = computed(
-  () => sideHandleClass.value ?? "!h-2.5 !w-2.5 !border-2 !border-sky-600 !bg-sky-500",
-);
 
 const characterDisplayName = computed(
   () => n.value?.label?.trim() || t("workspace.newCharacter"),
@@ -168,39 +205,29 @@ const characterDisplayName = computed(
 
 <template>
   <div
-    class="relative rounded-lg border px-3 py-2 text-xs shadow-sm"
+    class="story-node relative rounded-lg border px-3 py-2 text-xs shadow-sm"
     :class="[shellClass, glowTone]"
     :aria-selected="selected"
     :style="kind === 'chapter' || kind === 'volume' ? 'max-width: 220px' : 'max-width: 200px'"
   >
-    <Handle
-      id="top"
-      type="source"
-      :position="Position.Top"
-      class="!h-2.5 !w-2.5 !border-2 !border-primary !bg-primary/80"
-      :title="t('workspace.handlePlotTop')"
-    />
-    <Handle
-      id="bottom"
-      type="source"
-      :position="Position.Bottom"
-      class="!h-2.5 !w-2.5 !border-2 !border-primary !bg-primary/80"
-      :title="t('workspace.handlePlotBottom')"
-    />
-    <Handle
-      id="left"
-      type="source"
-      :position="Position.Left"
-      :class="leftHandleClass"
-      :title="kind === 'side_plot' ? t('workspace.plotCard') : kind === 'knowledge' ? t('workspace.knowledgeCard') : t('workspace.role')"
-    />
-    <Handle
-      id="right"
-      type="source"
-      :position="Position.Right"
-      :class="rightHandleClass"
-      :title="kind === 'character' ? t('workspace.role') : kind === 'knowledge' ? t('workspace.knowledgeCard') : t('workspace.plotCard')"
-    />
+    <div
+      v-for="p in socketPorts"
+      :key="p.key"
+      class="story-port"
+      :class="['story-port--' + p.key, p.tone]"
+      :title="p.title"
+    >
+      <ReteRef
+        class="story-port-hit story-port-hit--out"
+        :data="{ type: 'socket', side: 'output', key: p.key, nodeId: p.nodeId, payload: p.outSocket }"
+        :emit="emit"
+      />
+      <ReteRef
+        class="story-port-hit story-port-hit--in"
+        :data="{ type: 'socket', side: 'input', key: p.key, nodeId: p.nodeId, payload: p.inSocket }"
+        :emit="emit"
+      />
+    </div>
 
     <template v-if="kind === 'character'">
       <div class="mb-1 flex min-w-0 items-center gap-1.5 text-sm font-semibold leading-tight">
@@ -381,6 +408,13 @@ const characterDisplayName = computed(
 </template>
 
 <style scoped>
+.story-node {
+  user-select: none;
+  cursor: grab;
+}
+.story-node:active {
+  cursor: grabbing;
+}
 /* Static selection chrome — no pulse (avoids idle GPU + blink). */
 .story-node-glow {
   --glow: 61 107 79;
@@ -423,4 +457,75 @@ const characterDisplayName = computed(
   --glow: 5 150 105;
   border-color: rgb(5 150 105 / 0.7);
 }
+.story-port {
+  position: absolute;
+  z-index: 3;
+  width: 14px;
+  height: 14px;
+  color: rgb(61 107 79);
+}
+.story-port-hit {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.story-port-hit--out {
+  z-index: 2;
+}
+.story-port-hit--in {
+  z-index: 1;
+}
+.story-port--top {
+  top: -7px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.story-port--bottom {
+  bottom: -7px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.story-port--left {
+  left: -7px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.story-port--right {
+  right: -7px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.story-port--wv {
+  top: -7px;
+  left: 22%;
+  transform: none;
+}
+.story-port--sr {
+  right: -7px;
+  top: 22%;
+  transform: none;
+}
+.story-port--wp {
+  left: -7px;
+  top: 22%;
+  transform: none;
+}
+.story-node:has(.story-port--wv) .story-port--top {
+  left: 62%;
+}
+.story-node:has(.story-port--wp) .story-port--left {
+  top: 72%;
+}
+.story-node:has(.story-port--sr) .story-port--right {
+  top: 72%;
+}
+.story-port-tone-primary { color: rgb(61 107 79); }
+.story-port-tone-amber { color: rgb(217 119 6); }
+.story-port-tone-sky { color: rgb(2 132 199); }
+.story-port-tone-teal { color: rgb(15 118 110); }
+.story-port-tone-rose { color: rgb(225 29 72); }
+.story-port-tone-indigo { color: rgb(79 70 229); }
+.story-port-tone-orange { color: rgb(234 88 12); }
 </style>

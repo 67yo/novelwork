@@ -17,6 +17,7 @@ const SIDE_CARD_W: f64 = 200.0;
 const SIDE_GAP: f64 = 12.0;
 const MAX_SIDE_COL: usize = 4;
 const KNOW_GAP_FROM_CHAR: f64 = SIDE_CARD_W + SIDE_CARD_W / 2.0;
+const WRITE_PROMPTS_HUB_X: f64 = CHAR_X - KNOW_GAP_FROM_CHAR - SIDE_DX;
 const TOP: f64 = 40.0;
 const MIN_CHAPTER_GAP_TIGHT: f64 = 72.0;
 const MIN_CHAPTER_GAP: f64 = 200.0;
@@ -1339,6 +1340,22 @@ pub fn apply_auto_layout(tree: &mut NovelTree) {
     lift_side_plot_hosts(&mut char_host, &plot_primary, &tree.nodes, &by_id);
     lift_side_plot_hosts(&mut know_host, &plot_primary, &tree.nodes, &by_id);
 
+    let write_hub_id = crate::write_prompts::write_prompts_hub(tree).map(|n| n.id.clone());
+    let write_gen_ids = crate::write_prompts::write_prompt_child_ids(
+        tree,
+        crate::write_prompts::WritePromptKind::Generate,
+    );
+    let write_refine_ids = crate::write_prompts::write_prompt_child_ids(
+        tree,
+        crate::write_prompts::WritePromptKind::Refine,
+    );
+    let mut write_skip: HashSet<String> = HashSet::new();
+    if let Some(ref hid) = write_hub_id {
+        write_skip.insert(hid.clone());
+        write_skip.extend(write_gen_ids.iter().cloned());
+        write_skip.extend(write_refine_ids.iter().cloned());
+    }
+
     let spine_set: HashSet<String> = spine_ids.iter().cloned().collect();
     let mut plots_by_host: HashMap<String, Vec<String>> = HashMap::new();
     let mut multi_plots: Vec<String> = Vec::new();
@@ -1383,6 +1400,9 @@ pub fn apply_auto_layout(tree: &mut NovelTree) {
             }
             NodeKind::Knowledge => {
                 let slot = knowledge_slot(n).to_string();
+                if write_skip.contains(&n.id) || slot == crate::write_prompts::WRITE_PROMPTS_SLOT {
+                    continue;
+                }
                 if slot == "story_rules" {
                     story_rules_id = Some(n.id.clone());
                     continue;
@@ -1501,6 +1521,40 @@ pub fn apply_auto_layout(tree: &mut NovelTree) {
                 let p = &tree.nodes[si].position;
                 occupied.push((p.x, p.y));
             }
+            if let Some(ref hid) = write_hub_id {
+                let wi = *by_id.get(hid).unwrap();
+                tree.nodes[wi].position = NodePosition {
+                    x: WRITE_PROMPTS_HUB_X,
+                    y,
+                };
+                let p = &tree.nodes[wi].position;
+                occupied.push((p.x, p.y));
+                let gen_span = place_side_ids(
+                    &mut tree.nodes,
+                    &by_id,
+                    &write_gen_ids,
+                    WRITE_PROMPTS_HUB_X - SIDE_DX,
+                    y,
+                    SIDE_DX,
+                    MAX_SIDE_COL,
+                    -1.0,
+                );
+                let rf_span = place_side_ids(
+                    &mut tree.nodes,
+                    &by_id,
+                    &write_refine_ids,
+                    WRITE_PROMPTS_HUB_X + SIDE_DX,
+                    y,
+                    SIDE_DX,
+                    MAX_SIDE_COL,
+                    1.0,
+                );
+                let _ = (gen_span, rf_span);
+                for id in write_gen_ids.iter().chain(write_refine_ids.iter()) {
+                    let p = &tree.nodes[*by_id.get(id).unwrap()].position;
+                    occupied.push((p.x, p.y));
+                }
+            }
         }
 
         let plot_origin_x = if is_root && story_rules_id.is_some() {
@@ -1534,7 +1588,41 @@ pub fn apply_auto_layout(tree: &mut NovelTree) {
             MAX_SIDE_COL,
             -1.0,
         );
-        let know_span = place_know_ids(&mut tree.nodes, &by_id, &know_ids, &char_ids, y);
+        let know_span = if is_root && write_hub_id.is_some() {
+            let leftmost = if write_gen_ids.is_empty() {
+                WRITE_PROMPTS_HUB_X
+            } else {
+                WRITE_PROMPTS_HUB_X - SIDE_DX
+            };
+            place_side_ids(
+                &mut tree.nodes,
+                &by_id,
+                &know_ids,
+                leftmost - SIDE_DX,
+                y,
+                SIDE_DX,
+                MAX_SIDE_COL,
+                -1.0,
+            )
+        } else {
+            place_know_ids(&mut tree.nodes, &by_id, &know_ids, &char_ids, y)
+        };
+        let write_span = if is_root && write_hub_id.is_some() {
+            let h = default_node_h(&NodeKind::Knowledge);
+            let g = if write_gen_ids.is_empty() {
+                0.0
+            } else {
+                write_gen_ids.len() as f64 * (h + SIDE_GAP)
+            };
+            let r = if write_refine_ids.is_empty() {
+                0.0
+            } else {
+                write_refine_ids.len() as f64 * (h + SIDE_GAP)
+            };
+            h.max(g).max(r)
+        } else {
+            0.0
+        };
         let story_span = if is_root && story_rules_id.is_some() {
             PLOT_DY
         } else {
@@ -1543,7 +1631,8 @@ pub fn apply_auto_layout(tree: &mut NovelTree) {
         let span = grid_span(plot_ids.len(), PLOT_DY, MAX_PLOT_COL)
             .max(char_span)
             .max(know_span)
-            .max(story_span);
+            .max(story_span)
+            .max(write_span);
         let linked = host_has_linked(
             &tree.nodes[hi],
             &plot_hosts,

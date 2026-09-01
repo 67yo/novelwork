@@ -7,14 +7,6 @@ export function compatModelRef(providerId: string, modelId: string): string {
   return `compat:${providerId}:${modelId}`;
 }
 
-export function geminiModelRef(modelId: string): string {
-  return `gemini:${modelId}`;
-}
-
-export function claudeModelRef(modelId: string): string {
-  return `claude:${modelId}`;
-}
-
 /** 当前有 Key 的「提供商 × 模型」选型 id（可含同名）。 */
 export function catalogModelIds(s: SettingsView): string[] {
   return modelSelectOptions(s, "", "").map((r) => r.id);
@@ -40,26 +32,6 @@ export function modelSelectOptions(
     }
   }
 
-  const c = s.model_catalog;
-  if (c && s.gemini_api_key_configured) {
-    for (const m of c.gemini || []) {
-      if (!m) continue;
-      const id = geminiModelRef(m);
-      if (seen.has(id)) continue;
-      seen.add(id);
-      rows.push({ id, label: `Gemini · ${m}` });
-    }
-  }
-  if (c && s.claude_api_key_configured) {
-    for (const m of c.claude || []) {
-      if (!m) continue;
-      const id = claudeModelRef(m);
-      if (seen.has(id)) continue;
-      seen.add(id);
-      rows.push({ id, label: `Claude · ${m}` });
-    }
-  }
-
   rows.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
 
   // 仅在仍有可用模型时保留「已下架」选中项
@@ -76,15 +48,14 @@ export function resolvePreferredModelId(s: SettingsView, preferred: string): str
   const pref = preferred.trim();
   if (pref && live.includes(pref)) return pref;
   if (pref) {
+    const bare = pref.replace(/^(gemini|claude):/, "");
     const byBare = live.find((id) => {
       if (id.startsWith("compat:")) {
         const rest = id.slice("compat:".length);
         const i = rest.indexOf(":");
-        return i >= 0 && rest.slice(i + 1) === pref;
+        return i >= 0 && rest.slice(i + 1) === bare;
       }
-      if (id.startsWith("gemini:")) return id.slice("gemini:".length) === pref;
-      if (id.startsWith("claude:")) return id.slice("claude:".length) === pref;
-      return id === pref;
+      return id === pref || id === bare;
     });
     if (byBare) return byBare;
   }

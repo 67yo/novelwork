@@ -1,27 +1,47 @@
-//! Shell-level global chat: ADK LlmAgent + skills + MCP HTTP toolset.
+//! Shell-level global chat: rig-agent + MCP tools + skills.
 
+use crate::chapter_memory;
 use crate::db::Db;
+use crate::kb_context;
 use crate::mcp::{self, McpRuntime};
 use crate::skills;
-use adk_rust::agent::LlmAgentBuilder;
-use adk_rust::model::openai_compatible::{OpenAICompatible, OpenAICompatibleConfig};
-use adk_rust::FunctionResponseData;
-use adk_rust::prelude::{Content, Event, InMemorySessionService, Part, Runner};
-use adk_rust::session::{CreateRequest, GetRequest, SessionService};
-use adk_rust::tool::McpHttpClientBuilder;
 use chrono::{Local, Timelike, Utc};
+
 use futures::StreamExt;
 use parking_lot::Mutex as ParkingMutex;
+use rig_agent::agent::{AgentBuilder, MultiTurnStreamItem, NoToolConfig};
+use rig_agent::Agent;
+use rig_core::client::CompletionClient;
+use rig_core::completion::{CompletionModel, Message};
+use rig_core::completion::message::{
+    AssistantContent, ToolResult, ToolResultContent, UserContent,
+};
+use rig_core::memory::{ConversationMemory, MemoryError};
+use rig_core::providers::deepseek;
+use rig_core::providers::openai::CompletionsClient;
+use rig_core::providers::zai;
+use rig_core::providers::{
+    anthropic, azure, cohere, doubleword, gemini, groq, huggingface, hyperbolic, llamafile, minimax,
+    mira, mistral, moonshot, ollama, openai, openrouter, perplexity, together, venice, xai,
+    xiaomimimo,
+};
+use rig_core::streaming::{StreamedAssistantContent, StreamedUserContent};
+use rig_core::tool::{PortableDynamicTool, ToolErrorKind, ToolExecutionError, ToolOutput};
+use rig_core::vector_store::request::Filter;
+use rig_core::vector_store::{TopNResults, VectorSearchRequest, VectorStoreError, VectorStoreIndexDyn};
+use rig_core::wasm_compat::WasmBoxedFuture;
+use rmcp::RoleClient;
+use rmcp::model::CallToolRequestParams;
+use rmcp::service::{Peer, RunningService, ServiceExt};
+use rmcp::transport::StreamableHttpClientTransport;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter};
 use uuid::Uuid;
 
-const APP_NAME: &str = "nove-work";
-const USER_ID: &str = "local-user";
 pub const CANCEL_KEY: &str = "__global_chat__";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -37,8 +57,10 @@ pub struct GlobalChatMessage {
 pub struct GlobalChatSendInput {
     pub content: String,
     #[serde(default)]
+    #[allow(dead_code)]
     pub route_name: Option<String>,
     #[serde(default)]
+    #[allow(dead_code)]
     pub path: Option<String>,
     #[serde(default)]
     pub novel_id: Option<String>,
@@ -47,14 +69,64 @@ pub struct GlobalChatSendInput {
 }
 
 pub struct GlobalChatRuntime {
-    slots: ParkingMutex<HashMap<String, ChatSlot>>,
-    sessions: Arc<InMemorySessionService>,
+    slots: Arc<ParkingMutex<HashMap<String, ChatSlot>>>,
     busy: AtomicBool,
 }
 
 struct ChatSlot {
     messages: Vec<GlobalChatMessage>,
-    session_id: String,
+    history: Vec<Message>,
+}
+
+#[derive(Clone)]
+struct SlotMemory {
+    slots: Arc<ParkingMutex<HashMap<String, ChatSlot>>>,
+}
+
+impl ConversationMemory for SlotMemory {
+    fn load<'a>(
+        &'a self,
+        conversation_id: &'a str,
+    ) -> WasmBoxedFuture<'a, Result<Vec<Message>, MemoryError>> {
+        Box::pin(async move {
+            let raw = self
+                .slots
+                .lock()
+                .get(conversation_id)
+                .map(|s| s.history.clone())
+                .unwrap_or_default();
+            Ok(shape_chat_history(raw))
+        })
+    }
+
+    fn append<'a>(
+        &'a self,
+        conversation_id: &'a str,
+        mut messages: Vec<Message>,
+    ) -> WasmBoxedFuture<'a, Result<(), MemoryError>> {
+        Box::pin(async move {
+            let _ = stub_history_tools(&mut messages);
+            self.slots
+                .lock()
+                .entry(conversation_id.to_string())
+                .or_insert_with(new_slot)
+                .history
+                .extend(messages);
+            Ok(())
+        })
+    }
+
+    fn clear<'a>(
+        &'a self,
+        conversation_id: &'a str,
+    ) -> WasmBoxedFuture<'a, Result<(), MemoryError>> {
+        Box::pin(async move {
+            if let Some(slot) = self.slots.lock().get_mut(conversation_id) {
+                slot.history.clear();
+            }
+            Ok(())
+        })
+    }
 }
 
 fn scope_key(novel_id: Option<&str>) -> String {
@@ -68,16 +140,21 @@ fn scope_key(novel_id: Option<&str>) -> String {
 fn new_slot() -> ChatSlot {
     ChatSlot {
         messages: Vec::new(),
-        session_id: Uuid::new_v4().to_string(),
+        history: Vec::new(),
     }
 }
 
 impl GlobalChatRuntime {
     pub fn new() -> Self {
         Self {
-            slots: ParkingMutex::new(HashMap::new()),
-            sessions: Arc::new(InMemorySessionService::new()),
+            slots: Arc::new(ParkingMutex::new(HashMap::new())),
             busy: AtomicBool::new(false),
+        }
+    }
+
+    fn memory(&self) -> SlotMemory {
+        SlotMemory {
+            slots: self.slots.clone(),
         }
     }
 
@@ -99,6 +176,14 @@ fn openai_compat_base(base: &str) -> String {
     base.trim().trim_end_matches('/').to_string()
 }
 
+fn extra_chat_params(protocol: &str, intent: &str, novel_id: &str) -> Value {
+    if protocol == crate::models::PROTOCOL_OPENAI {
+        prompt_cache_params(intent, novel_id)
+    } else {
+        json!({})
+    }
+}
+
 fn task_model(preferred: &str, fallback: &str) -> String {
     let p = preferred.trim();
     if p.is_empty() {
@@ -108,7 +193,256 @@ fn task_model(preferred: &str, fallback: &str) -> String {
     }
 }
 
-fn system_instruction(route_name: &str, path: &str, novel_id: &str, novel_title: &str) -> String {
+/// 写章：只暴露这 4 个。顺序固定，便于 prompt cache。
+const TOOLS_WRITE: &[&str] = &[
+    "get_chapter_write_context",
+    "generate_detailed_outline",
+    "get_chapter_content",
+    "set_chapter_content",
+];
+
+/// 人物 / 剧情 / 知识卡：不要 get_tree / get_novel_info。
+const TOOLS_CARDS: &[&str] = &[
+    "get_selected_card",
+    "get_character_card",
+    "upsert_character_card",
+    "upsert_plot_card",
+    "upsert_knowledge_card",
+    "fill_knowledge_card",
+    "link_nodes",
+    "unlink_nodes",
+];
+
+/// 细纲：材料由 generate_detailed_outline 服务端组装。
+const TOOLS_OUTLINE: &[&str] = &[
+    "get_selected_card",
+    "generate_detailed_outline",
+    "regenerate_detailed_outline_item",
+    "update_chapter_outline",
+];
+
+const TOOLS_SHOTS: &[&str] = &[
+    "get_chapter_shots",
+    "set_chapter_shots",
+    "split_chapter_shots",
+    "generate_shot_comfy_prompts",
+    "submit_chapter_shots_comfyui",
+];
+
+const TOOLS_LIBRARY: &[&str] = &[
+    "list_knowledge",
+    "import_knowledge",
+    "search_knowledge",
+    "archive_knowledge",
+    "delete_knowledge",
+    "list_public_knowledge_cards",
+    "upsert_public_knowledge_card",
+    "archive_public_knowledge_card",
+    "add_public_knowledge_card",
+];
+
+const TOOLS_WORLDVIEW_GEN: &[&str] = &["generate_worldview", "generate_story_rules"];
+
+/// 日常 Chat：不含分镜 / 公共库 / 世界观生成。
+const TOOLS_CORE: &[&str] = &[
+    "list_novels",
+    "create_novel",
+    "update_novel",
+    "get_novel_info",
+    "get_worldview",
+    "ensure_worldview",
+    "apply_worldview",
+    "get_story_rules",
+    "apply_story_rules",
+    "get_selected_card",
+    "get_tree",
+    "layout_tree",
+    "add_volume",
+    "get_volume",
+    "upsert_volume",
+    "add_chapter",
+    "update_chapter_outline",
+    "generate_detailed_outline",
+    "regenerate_detailed_outline_item",
+    "delete_node",
+    "get_chapter_content",
+    "get_chapter_info",
+    "get_chapter_write_context",
+    "set_chapter_content",
+    "get_chapter_memory",
+    "list_chapter_memory",
+    "set_chapter_memory",
+    "regenerate_chapter_memory",
+    "get_character_card",
+    "upsert_character_card",
+    "upsert_plot_card",
+    "upsert_knowledge_card",
+    "fill_knowledge_card",
+    "link_nodes",
+    "unlink_nodes",
+];
+
+fn is_write_chapter(text: &str) -> bool {
+    [
+        "生成第",
+        "写第",
+        "精修第",
+        "重写第",
+        "改写第",
+        "生成本章",
+        "写本章",
+        "精修本章",
+        "本章正文",
+        "写这一章",
+        "生成这一章",
+    ]
+    .iter()
+    .any(|p| text.contains(p))
+}
+
+fn is_write_body(text: &str) -> bool {
+    if text.contains("正文") {
+        return true;
+    }
+    [
+        "写第",
+        "精修第",
+        "重写第",
+        "改写第",
+        "写本章",
+        "精修本章",
+        "写这一章",
+    ]
+    .iter()
+    .any(|p| text.contains(p))
+        || (is_write_chapter(text) && !text.contains("细纲"))
+}
+
+fn is_card_edit(text: &str) -> bool {
+    [
+        "人物卡",
+        "角色卡",
+        "剧情卡",
+        "支线卡",
+        "知识卡",
+        "改人设",
+        "补人设",
+        "character card",
+        "plot card",
+        "knowledge card",
+    ]
+    .iter()
+    .any(|p| text.contains(p))
+}
+
+fn is_outline_gen(text: &str) -> bool {
+    [
+        "生成细纲",
+        "写细纲",
+        "重写细纲",
+        "进化细纲",
+        "本章细纲",
+        "细纲",
+        "detailed outline",
+        "detailed_outline",
+    ]
+    .iter()
+    .any(|p| text.contains(p))
+}
+
+fn merge_tool_names(a: &[&'static str], b: &[&'static str]) -> Vec<&'static str> {
+    let mut out = a.to_vec();
+    for n in b {
+        if !out.contains(n) {
+            out.push(*n);
+        }
+    }
+    out
+}
+
+fn wants_shots(text: &str) -> bool {
+    ["分镜", "分镜头", "comfy", "Comfy", "minimax", "MiniMax", "镜头提示"]
+        .iter()
+        .any(|p| text.contains(p))
+}
+
+fn wants_library(text: &str) -> bool {
+    ["公共库", "公共知识", "知识库", "导入知识"]
+        .iter()
+        .any(|p| text.contains(p))
+}
+
+fn wants_worldview_gen(text: &str) -> bool {
+    ["生成世界观", "生成故事规则", "补全世界观", "写世界观"]
+        .iter()
+        .any(|p| text.contains(p))
+}
+
+/// `None` = 不裁剪（全部 MCP 工具）。intent 写入 prompt_cache_key。
+fn chat_tool_allowlist(
+    explicit_skill: bool,
+    text: &str,
+) -> (Option<Vec<&'static str>>, &'static str) {
+    if explicit_skill {
+        return (None, "all");
+    }
+    let cards = is_card_edit(text);
+    let outline = is_outline_gen(text) && !is_write_body(text);
+    if outline || (cards && !is_write_body(text)) {
+        return match (cards, outline) {
+            (true, true) => (
+                Some(merge_tool_names(TOOLS_CARDS, TOOLS_OUTLINE)),
+                "cards-outline",
+            ),
+            (true, false) => (Some(TOOLS_CARDS.to_vec()), "cards"),
+            _ => (Some(TOOLS_OUTLINE.to_vec()), "outline"),
+        };
+    }
+    if is_write_chapter(text) || is_write_body(text) {
+        return (Some(TOOLS_WRITE.to_vec()), "write");
+    }
+    let shots = wants_shots(text);
+    let lib = wants_library(text);
+    let wv = wants_worldview_gen(text);
+    if !shots && !lib && !wv {
+        return (Some(TOOLS_CORE.to_vec()), "core");
+    }
+    let mut names = TOOLS_CORE.to_vec();
+    if shots {
+        names.extend_from_slice(TOOLS_SHOTS);
+    }
+    if lib {
+        names.extend_from_slice(TOOLS_LIBRARY);
+    }
+    if wv {
+        names.extend_from_slice(TOOLS_WORLDVIEW_GEN);
+    }
+    let intent = match (shots, lib, wv) {
+        (true, false, false) => "core-shots",
+        (false, true, false) => "core-lib",
+        (false, false, true) => "core-wv",
+        _ => "core-mix",
+    };
+    (Some(names), intent)
+}
+
+/// 裁剪后的工具集必须写进 system，否则模型会按通用「写章用 get_chapter_write_context」去调未下发的工具，上游直接 PromptError。
+fn intent_tool_rule(intent: &str) -> &'static str {
+    match intent {
+        "write" => {
+            "\n本轮只开放写章工具。读一次 get_chapter_write_context，细纲空则 generate_detailed_outline，再 set_chapter_content 一次后立刻用一句话结束。禁止反复 get/set 同一章。"
+        }
+        "outline" | "cards-outline" => {
+            "\n本轮只开放细纲工具：generate_detailed_outline / regenerate_detailed_outline_item / update_chapter_outline / get_selected_card。禁止调用 get_chapter_write_context、set_chapter_content、get_chapter_content。细纲完成后用一句话结束，不要写正文。"
+        }
+        "cards" => {
+            "\n本轮只开放改卡工具。禁止调用 get_chapter_write_context、set_chapter_content、get_tree、get_novel_info。"
+        }
+        _ => "",
+    }
+}
+
+fn system_instruction(novel_id: &str, novel_title: &str) -> String {
     let plan_and_ask = "\
 回答简洁，操作完成后用中文简要说明结果。默认直接做完，不要每次结尾问「要不要继续 / 是否继续 / 下一步吗」。\
 仅当缺关键信息或有互斥路径、不选就无法下一步时才提问一次：是否题只问一句；单选列出 1. 2. 3.；多选写明「可多选」并用 1. 2. 3. 列出。\
@@ -119,26 +453,8 @@ fn system_instruction(route_name: &str, path: &str, novel_id: &str, novel_title:
 本轮能自主完成的尽量连续做完，每完成一项更新该条状态并一句说明。\
 仅当某步真正缺关键参数或存在互斥路径时停下提问；人选完后继续未完成项，不要每步都问。小而单一的需求不要强行拆任务。";
 
-    let chapter_body_write = "\
-【生成 / 精修第 N 章正文】用户说「生成第 N 章」「写第 N 章内容」「精修第 N 章」「重写第 N 章」「改写第 N 章正文」等时，必须按下列流程（Chat 自写 + set_chapter_content；工作台正文栏已无生成/精修按钮，写章一律走本流程）：\n\
-① 必须先调 `get_novel_info`（记 `word_count_min`/`word_count_max`）与 `get_chapter_info`（完整读 `ai_guidance`、`node.outline` 简纲、`node.detailed_outline` 细纲与全部 `linked_*`）。\
-若 N 不明或尚无该章节点：用 `get_tree` 按 label/顺序定位章节 `node_id`，缺章则 `add_chapter` 后再 `get_chapter_info`。\n\
-② **生成新正文**（用户说生成/写/预写，且未强调在旧稿上改）：若 `detailed_outline` 为空或不存在，**必须先** `generate_detailed_outline`（由简纲进化细纲并写回）；再遵守 `content_usage`——**禁止** `get_chapter_content`，禁止参考磁盘旧稿，**按细纲扩充**写全新正文。\n\
-③ **精修 / 改稿已有正文**（用户说精修/重写/润色且章内已有正文，可带自定义提示词）：`get_chapter_info` 后**必须**再 `get_chapter_content` 读旧稿，在旧稿骨架上改，禁止无视旧稿另起炉灶；用户提示词须遵守但仍不大改主线。\n\
-④ 正文须：`detailed_outline`（若有）每条落地，否则 `outline` 简纲节拍全覆盖；`linked_plots` 每条（根/卷/本章按各自 order 与 inherited_from）要点落地；`linked_characters` 每人须出场且言行合人设；`linked_knowledge`（含世界观/故事规则若挂在根上）的 extracted 硬约束全遵守。\n\
-⑤ **落盘前自检**（内部完成，不要把清单当正文输出）：细纲/简纲节拍是否都写了？根/卷/本章剧情是否按 order 落地？链接人物是否都出场且人设一致？知识卡 extracted 是否遵守？正文非空白字数是否在 `word_count_min`–`word_count_max` 的 ±60 字有效区间内？\
-任一项明显不达标须先改正文再 `set_chapter_content`。\n\
-⑥ 仅 `set_chapter_content` 写入 Markdown 正文；完成后用一两句说明章号、约多少字、是否精修/新生成。不要输出写作过程或自我评分清单。";
-
-    if novel_id.is_empty() {
-        format!(
-            "你是 Novel Work 的全局助手。必须通过 MCP 工具读写小说、章节、知识库与卡片；不要臆造库里没有的数据。\n\
-             当前未绑定具体小说（route={route_name} path={path}）。需要改某本书时先 list_novels 或请用户打开工作台。\n\
-             公共知识库不是小说设定源；只有挂到树上的知识卡才约束写作。不要声称小说「绑定了」某本公共库。\n\
-             公共知识卡目录（跨小说）：list_public_knowledge_cards / upsert_public_knowledge_card；挂到某本小说用 add_public_knowledge_card（需 novel_id 或打开工作台）。\n\
-             {chapter_body_write}\n\
-             {plan_and_ask}"
-        )
+    let bound = if novel_id.is_empty() {
+        "当前未绑定具体小说。需要改某本书时先 list_novels 或请用户打开工作台。".to_string()
     } else {
         let title = if novel_title.trim().is_empty() {
             novel_id
@@ -146,18 +462,18 @@ fn system_instruction(route_name: &str, path: &str, novel_id: &str, novel_title:
             novel_title.trim()
         };
         format!(
-            "你是 Novel Work 的全局助手。必须通过 MCP 工具读写小说、章节、知识库与卡片；不要臆造库里没有的数据。\n\
-             当前绑定小说「{title}」(novel_id={novel_id})。默认只操作这本书；用户明确要求时才换书。\n\
-             工作台已选中卡片时，get_novel_info / get_chapter_info / set_chapter_content / fill_knowledge_card 等可省略 novel_id 与 node_id，服务端用当前选中。\n\
-             知识卡：完整导入 fill_knowledge_card；AI 提炼 search_knowledge 最多一轮再 upsert_knowledge_card。用户同意写成知识卡后立刻 upsert（新建默认挂根），禁止再检索。\n\
-             跨小说共用：list_public_knowledge_cards / upsert_public_knowledge_card（目录）/ add_public_knowledge_card（复制到当前树并挂选中节点）。不是每张树上知识卡都要进目录。\n\
-             公共知识库不是小说设定源；只有挂到树上的知识卡才约束写作。不要声称小说「绑定了」某本公共库。\n\
-             了解全书先 get_novel_info；写章先 get_chapter_info（无正文，保持生成条件干净）；精修/改稿时再 get_chapter_content 读旧稿。须完整遵守 ai_guidance（含 content_usage）。用户说「这张卡 / 当前选中」时用 get_selected_card。\n\
-             {chapter_body_write}\n\
-             当前 UI：route={route_name} path={path}\n\
-             {plan_and_ask}"
+            "当前绑定小说「{title}」(novel_id={novel_id})。默认只操作这本书；用户明确要求时才换书。工作台已选中卡片时可省略 novel_id 与 node_id。"
         )
-    }
+    };
+
+    format!(
+        "你是 Novel Work 的全局助手。必须通过 MCP 工具读写小说、章节、知识库与卡片；不要臆造库里没有的数据。\n\
+         {bound}\n\
+         写章用 get_chapter_write_context，遵守工具返回的 ai_guidance。node_id 可写树上 id、「第N章」、章号或唯一标题，不必先 get_tree。不要叠 get_novel_info+get_chapter_info。\
+         改人物/剧情/知识卡：get_selected_card 或 get_character_card（指定 node_id）再 upsert_*，不要 get_tree/get_novel_info。\
+         细纲只调 generate_detailed_outline（材料由工具组装）。公共知识库不是小说设定源。\n\
+         {plan_and_ask}"
+    )
 }
 
 fn restart_mcp(db: &Arc<Db>, mcp: &Arc<McpRuntime>, app: &Arc<Mutex<Option<AppHandle>>>) {
@@ -195,73 +511,62 @@ async fn ensure_mcp_running(
     Ok(mcp.port.load(Ordering::SeqCst))
 }
 
-async fn ensure_session(
-    sessions: &Arc<InMemorySessionService>,
-    session_id: &str,
-) -> Result<(), String> {
-    let exists = sessions
-        .get(GetRequest {
-            app_name: APP_NAME.into(),
-            user_id: USER_ID.into(),
-            session_id: session_id.into(),
-            num_recent_events: None,
-            after: None,
-        })
-        .await
-        .is_ok();
-    if exists {
-        return Ok(());
-    }
-    sessions
-        .create(CreateRequest {
-            app_name: APP_NAME.into(),
-            user_id: USER_ID.into(),
-            session_id: Some(session_id.into()),
-            state: HashMap::<String, Value>::new(),
-        })
-        .await
-        .map_err(|e| e.to_string())?;
-    Ok(())
+fn prompt_cache_params(intent: &str, novel_id: &str) -> Value {
+    let scope = if novel_id.is_empty() { "global" } else { novel_id };
+    json!({ "prompt_cache_key": format!("nove-work:chat:{intent}:{scope}") })
 }
 
-fn tool_call_key(call_id: Option<&str>, name: &str) -> String {
-    call_id.filter(|s| !s.is_empty()).unwrap_or(name).to_string()
+fn tool_call_key(id: &str, name: &str) -> String {
+    if id.is_empty() { name.to_string() } else { id.to_string() }
 }
 
-fn dangling_tool_calls(events: &[Event]) -> Vec<(String, String)> {
+fn dangling_tool_calls(msgs: &[Message]) -> Vec<(String, String)> {
     let mut pending: Vec<(String, String)> = Vec::new();
-    for ev in events {
-        for c in ev.tool_calls() {
-            pending.push((tool_call_key(c.call_id, c.name), c.name.to_string()));
-        }
-        for r in ev.tool_results() {
-            let key = tool_call_key(r.call_id, r.name);
-            if let Some(i) = pending.iter().rposition(|(id, _)| id == &key) {
-                pending.remove(i);
+    for m in msgs {
+        match m {
+            Message::Assistant { content, .. } => {
+                for p in content.iter() {
+                    if let AssistantContent::ToolCall(c) = p {
+                        pending.push((
+                            tool_call_key(c.id.as_str(), &c.function.name),
+                            c.function.name.clone(),
+                        ));
+                    }
+                }
             }
+            Message::User { content } => {
+                for p in content.iter() {
+                    if let UserContent::ToolResult(r) = p {
+                        let key = r.call.as_str();
+                        if let Some(i) = pending.iter().rposition(|(id, _)| id == key) {
+                            pending.remove(i);
+                        }
+                    }
+                }
+            }
+            _ => {}
         }
     }
     pending
 }
 
-fn cancelled_tool_event(call_id: &str, name: &str) -> Event {
-    let mut event = Event::new("cancelled-tools");
-    event.author = "global_chat".into();
-    event.set_content(Content {
-        role: "function".into(),
-        parts: vec![Part::FunctionResponse {
-            function_response: FunctionResponseData::new(
-                name,
-                serde_json::json!({
-                    "error": "cancelled",
-                    "message": "user stopped"
-                }),
-            ),
-            id: Some(call_id.to_string()),
-            annotations: None,
-        }],
-    });
-    event
+fn cancelled_tool_msg(call_id: &str) -> Message {
+    Message::User {
+        content: vec![UserContent::tool_result(
+            call_id,
+            "cancelled",
+            vec![ToolResultContent::json(json!({
+                "error": "cancelled",
+                "message": "user stopped"
+            }))],
+        )],
+    }
+}
+
+fn close_dangling_tools(msgs: &mut Vec<Message>) {
+    for (id, _) in dangling_tool_calls(msgs) {
+        msgs.push(cancelled_tool_msg(&id));
+    }
 }
 
 fn is_unmatched_tool_calls(msg: &str) -> bool {
@@ -271,30 +576,474 @@ fn is_unmatched_tool_calls(msg: &str) -> bool {
         || (m.contains("tool_calls") && m.contains("must be followed"))
 }
 
-async fn close_dangling_tools(
-    sessions: &Arc<InMemorySessionService>,
-    session_id: &str,
-) -> Result<(), String> {
-    let session = match sessions
-        .get(GetRequest {
-            app_name: APP_NAME.into(),
-            user_id: USER_ID.into(),
-            session_id: session_id.into(),
-            num_recent_events: None,
-            after: None,
-        })
-        .await
-    {
-        Ok(s) => s,
-        Err(_) => return Ok(()),
-    };
-    for (id, name) in dangling_tool_calls(&session.events().all()) {
-        sessions
-            .append_event(session_id, cancelled_tool_event(&id, &name))
-            .await
-            .map_err(|e| e.to_string())?;
+fn friendly_chat_err(msg: String) -> String {
+    if msg.contains("Max iterations") || msg.contains("MaxTurnsError") || msg.contains("max turns") {
+        "模型连续调用工具次数过多，已停止。请再发一次，或把指令写得更具体。".into()
+    } else if msg.contains("error decoding response body") {
+        "模型返回无法解析。若用的是 DeepSeek 官方 API，请确认地址含 api.deepseek.com 后重试。".into()
+    } else {
+        msg
     }
-    Ok(())
+}
+
+const COMPACTION_USER_TEXT_CAP: usize = 80;
+
+fn unwrap_tool_json(v: &Value) -> Value {
+    if let Some(s) = v.as_str() {
+        if let Ok(parsed) = serde_json::from_str::<Value>(s) {
+            return unwrap_tool_json(&parsed);
+        }
+        return v.clone();
+    }
+    if let Some(out) = v.get("output") {
+        return unwrap_tool_json(out);
+    }
+    v.clone()
+}
+
+fn tool_result_value(r: &ToolResult) -> Value {
+    match r.content.first() {
+        Some(ToolResultContent::Json { value }) => unwrap_tool_json(value),
+        Some(ToolResultContent::Text(t)) => serde_json::from_str(&t.text)
+            .map(|v| unwrap_tool_json(&v))
+            .unwrap_or_else(|_| json!(t.text)),
+        _ => Value::Null,
+    }
+}
+
+fn looks_like_chapter_num(s: &str) -> bool {
+    let n = s.chars().count();
+    n > 0 && n <= 8 && s.chars().all(|c| c.is_ascii_digit() || "一二三四五六七八九十百千零〇两廿卅".contains(c))
+}
+
+fn chapter_num_label(text: &str) -> Option<String> {
+    let mut rest = text;
+    while let Some(i) = rest.find('第') {
+        rest = &rest[i + '第'.len_utf8()..];
+        let trimmed = rest.trim_start();
+        let Some(end) = trimmed.find('章') else { continue };
+        let inner = trimmed[..end].trim();
+        if looks_like_chapter_num(inner) {
+            return Some(inner.to_string());
+        }
+        rest = trimmed;
+    }
+    None
+}
+
+fn count_body_words(text: &str) -> u32 {
+    text.chars().filter(|c| !c.is_whitespace()).count() as u32
+}
+
+fn is_write_stub(text: &str) -> bool {
+    text.starts_with("已写入")
+}
+
+fn chapter_written_stub(content: &str, words: u32) -> String {
+    match chapter_num_label(content) {
+        Some(n) => format!("已写入第{n}章，约 {words} 字"),
+        None => format!("已写入本章，约 {words} 字"),
+    }
+}
+
+fn is_card_upsert(name: &str) -> bool {
+    matches!(
+        name,
+        "upsert_character_card"
+            | "upsert_plot_card"
+            | "upsert_knowledge_card"
+            | "fill_knowledge_card"
+            | "generate_detailed_outline"
+            | "regenerate_detailed_outline_item"
+            | "update_chapter_outline"
+    )
+}
+
+fn upsert_args_already_stubbed(args: &Value) -> bool {
+    args.get("character").and_then(|v| v.get("_stub")).and_then(|v| v.as_bool()) == Some(true)
+        || args.get("outline").and_then(|v| v.as_str()) == Some("（已写入）")
+        || args.get("extracted").and_then(|v| v.as_str()) == Some("（已写入）")
+}
+
+fn stub_upsert_args(name: &str, args: &mut Value) -> bool {
+    if upsert_args_already_stubbed(args) {
+        return false;
+    }
+    let mut changed = false;
+    match name {
+        "upsert_character_card" => {
+            if args.get("character").is_some() {
+                args["character"] = json!({ "_stub": true });
+                changed = true;
+            }
+        }
+        "upsert_plot_card" => {
+            if let Some(o) = args.get("outline").and_then(|v| v.as_str()) {
+                if o.chars().count() > 40 {
+                    args["outline"] = json!("（已写入）");
+                    changed = true;
+                }
+            }
+        }
+        "upsert_knowledge_card" => {
+            if let Some(o) = args.get("extracted").and_then(|v| v.as_str()) {
+                if o.chars().count() > 40 {
+                    args["extracted"] = json!("（已写入）");
+                    changed = true;
+                }
+            }
+            for key in [
+                "core_laws", "spatiotemporal", "social_power", "existence", "info_flow",
+                "history_culture", "surface_setting", "story_engine", "fulfillment_system",
+                "constraint_redlines",
+            ] {
+                if args.get(key).map(|v| v.is_object()).unwrap_or(false) {
+                    args[key] = json!({ "_stub": true });
+                    changed = true;
+                }
+            }
+        }
+        _ => {}
+    }
+    changed
+}
+
+fn successful_upsert_keys(msgs: &[Message]) -> HashMap<String, String> {
+    let mut out = HashMap::new();
+    for m in msgs {
+        let Message::User { content } = m else { continue };
+        for p in content.iter() {
+            let UserContent::ToolResult(r) = p else { continue };
+            let payload = tool_result_value(r);
+            let name = payload.get("tool").and_then(|v| v.as_str()).unwrap_or("");
+            // name may not be in result; match by call id against later stub using id only
+            if payload.get("error").is_some() {
+                continue;
+            }
+            if payload.get("ok").and_then(|v| v.as_bool()) == Some(false) {
+                continue;
+            }
+            let label = payload.get("label").and_then(|v| v.as_str()).unwrap_or("").trim();
+            let stub = if !label.is_empty() {
+                format!("已写入{label}")
+            } else {
+                "已写入".into()
+            };
+            out.insert(r.call.as_str().to_string(), stub);
+            let _ = name;
+        }
+    }
+    out
+}
+
+fn successful_write_word_counts(msgs: &[Message]) -> HashMap<String, u32> {
+    let mut out = HashMap::new();
+    for m in msgs {
+        let Message::User { content } = m else { continue };
+        for p in content.iter() {
+            let UserContent::ToolResult(r) = p else { continue };
+            let payload = tool_result_value(r);
+            let words = payload.get("word_count").and_then(|v| v.as_u64()).map(|n| n as u32);
+            let ok = payload.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
+            if !ok && words.is_none() {
+                continue;
+            }
+            out.insert(r.call.as_str().to_string(), words.unwrap_or(0));
+        }
+    }
+    out
+}
+
+fn extract_root_payload(v: &Value) -> Option<Value> {
+    let v = unwrap_tool_json(v);
+    let included_root = v.get("included").and_then(|i| i.get("root")).and_then(|r| r.as_bool()) == Some(true);
+    if !included_root {
+        return None;
+    }
+    let root = v.get("root")?;
+    if root.is_null() {
+        return None;
+    }
+    Some(root.clone())
+}
+
+fn extract_root_from_compaction_text(text: &str) -> Option<Value> {
+    let rest = text.split("【根材料】").nth(1)?;
+    let json_str = rest.split("\n【").next()?.trim();
+    serde_json::from_str(json_str).ok()
+}
+
+fn truncate_user_text(text: &str) -> String {
+    let t = text.trim();
+    if t.chars().count() <= COMPACTION_USER_TEXT_CAP {
+        return t.to_string();
+    }
+    let mut s: String = t.chars().take(COMPACTION_USER_TEXT_CAP).collect();
+    s.push('…');
+    s
+}
+
+fn message_text(m: &Message) -> String {
+    match m {
+        Message::User { content } => content
+            .iter()
+            .filter_map(|c| match c {
+                UserContent::Text(t) => Some(t.text.as_str()),
+                _ => None,
+            })
+            .collect(),
+        Message::Assistant { content, .. } => content
+            .iter()
+            .filter_map(|c| match c {
+                AssistantContent::Text(t) => Some(t.text.as_str()),
+                _ => None,
+            })
+            .collect(),
+        Message::System { content } => content.clone(),
+    }
+}
+
+fn summarize_chat_history(msgs: &[Message]) -> String {
+    let word_by_call = successful_write_word_counts(msgs);
+    let mut latest_root: Option<Value> = None;
+    let mut writes: Vec<String> = Vec::new();
+    let mut users: Vec<String> = Vec::new();
+    for m in msgs {
+        let text = message_text(m);
+        if let Some(root) = extract_root_from_compaction_text(&text) {
+            latest_root = Some(root);
+        }
+        for line in text.lines() {
+            let line = line.trim();
+            if is_write_stub(line) && !writes.iter().any(|w| w == line) {
+                writes.push(line.to_string());
+            }
+        }
+        if let Message::User { content } = m {
+            let t = message_text(m);
+            if !t.is_empty() && content.iter().any(|c| matches!(c, UserContent::Text(_))) {
+                users.push(truncate_user_text(&t));
+            }
+            for p in content.iter() {
+                let UserContent::ToolResult(r) = p else { continue };
+                let payload = tool_result_value(r);
+                if let Some(root) = extract_root_payload(&payload) {
+                    latest_root = Some(root);
+                }
+                if payload.get("ok").and_then(|v| v.as_bool()) == Some(false) {
+                    continue;
+                }
+                let label = payload.get("label").and_then(|v| v.as_str()).unwrap_or("").trim();
+                let stub = if !label.is_empty() {
+                    format!("已写入{label}")
+                } else {
+                    continue;
+                };
+                if is_write_stub(&stub) && !writes.iter().any(|w| w == &stub) {
+                    writes.push(stub);
+                }
+            }
+        }
+        if let Message::Assistant { content, .. } = m {
+            for p in content.iter() {
+                let AssistantContent::ToolCall(c) = p else { continue };
+                if c.function.name != "set_chapter_content" {
+                    continue;
+                }
+                let key = tool_call_key(c.id.as_str(), &c.function.name);
+                let Some(&words) = word_by_call
+                    .get(c.id.as_str())
+                    .or_else(|| word_by_call.get(&key))
+                else {
+                    continue;
+                };
+                let Some(body) = c.function.arguments.get("content").and_then(|v| v.as_str()) else {
+                    continue;
+                };
+                let stub = if is_write_stub(body) {
+                    body.to_string()
+                } else {
+                    chapter_written_stub(body, words)
+                };
+                if !writes.iter().any(|w| w == &stub) {
+                    writes.push(stub);
+                }
+            }
+        }
+    }
+    let mut parts: Vec<String> = Vec::new();
+    if let Some(root) = latest_root {
+        if let Ok(s) = serde_json::to_string(&root) {
+            parts.push(format!("【根材料】\n{s}"));
+        }
+    }
+    if !writes.is_empty() {
+        parts.push(format!("【已写入】\n{}", writes.join("\n")));
+    }
+    if !users.is_empty() {
+        parts.push(format!("【近期用户】\n{}", users.join("\n")));
+    }
+    if parts.is_empty() {
+        "（较早轮次已压缩）".into()
+    } else {
+        parts.join("\n")
+    }
+}
+
+fn stub_history_tools(msgs: &mut [Message]) -> bool {
+    let word_by_call = successful_write_word_counts(msgs);
+    let upsert_by_call = successful_upsert_keys(msgs);
+    if word_by_call.is_empty() && upsert_by_call.is_empty() {
+        return false;
+    }
+    let mut changed = false;
+    for m in msgs.iter_mut() {
+        let Message::Assistant { content, .. } = m else { continue };
+        for part in content.iter_mut() {
+            let AssistantContent::ToolCall(c) = part else { continue };
+            if c.function.name == "set_chapter_content" {
+                let Some(&words) = word_by_call.get(c.id.as_str()) else { continue };
+                let Some(body) = c.function.arguments.get("content").and_then(|v| v.as_str()) else {
+                    continue;
+                };
+                if is_write_stub(body) {
+                    continue;
+                }
+                let stub = chapter_written_stub(body, words);
+                c.function.arguments["content"] = json!(stub);
+                changed = true;
+                continue;
+            }
+            if !is_card_upsert(&c.function.name) {
+                continue;
+            }
+            if !upsert_by_call.contains_key(c.id.as_str()) {
+                continue;
+            }
+            if stub_upsert_args(&c.function.name, &mut c.function.arguments) {
+                changed = true;
+            }
+        }
+    }
+    changed
+}
+
+const KEEP_USER_TURNS: usize = 2;
+const HISTORY_SUMMARY_PREFIX: &str = "【更早轮次】";
+
+fn is_window_user(m: &Message) -> bool {
+    let t = message_text(m);
+    if t.starts_with(HISTORY_SUMMARY_PREFIX) {
+        return false;
+    }
+    matches!(
+        m,
+        Message::User { content } if content.iter().any(|c| matches!(c, UserContent::Text(_)))
+    )
+}
+
+/// rig `InMemoryConversationMemory::with_filter`：stub 大写入 + 只留最近 2 轮 user。
+fn shape_chat_history(mut msgs: Vec<Message>) -> Vec<Message> {
+    let _ = stub_history_tools(&mut msgs);
+    let user_idx: Vec<usize> = msgs
+        .iter()
+        .enumerate()
+        .filter_map(|(i, m)| is_window_user(m).then_some(i))
+        .collect();
+    if user_idx.len() <= KEEP_USER_TURNS {
+        return msgs;
+    }
+    let keep_from = user_idx[user_idx.len() - KEEP_USER_TURNS];
+    let summary = summarize_chat_history(&msgs[..keep_from]);
+    let kept = msgs[keep_from..].to_vec();
+    let mut out = Vec::with_capacity(kept.len() + 1);
+    out.push(Message::user(format!("{HISTORY_SUMMARY_PREFIX}\n{summary}")));
+    out.extend(kept);
+    out
+}
+
+fn prune_history(msgs: &mut Vec<Message>) {
+    *msgs = shape_chat_history(std::mem::take(msgs));
+}
+
+struct ChapterMemoryIndex {
+    db: Arc<Db>,
+    novel_id: String,
+}
+
+fn chat_rag_docs(db: &Db, novel_id: &str, query: &str, k: usize) -> Vec<(f64, String, Value)> {
+    if novel_id.is_empty() || k == 0 || query.trim().is_empty() {
+        return Vec::new();
+    }
+    let Ok(rows) = db.list_chapter_memory(novel_id) else {
+        return Vec::new();
+    };
+    chapter_memory::rank_memory(&rows, query, k)
+        .into_iter()
+        .map(|(node_id, content)| {
+            let text = kb_context::truncate_chars(&content, kb_context::MEMORY_FACT_CAP);
+            (
+                1.0,
+                format!("chapter-memory:{node_id}"),
+                json!({ "text": text }),
+            )
+        })
+        .collect()
+}
+
+async fn chat_rag_docs_vec(novel_id: &str, query: &str, k: usize) -> Vec<(f64, String, Value)> {
+    match chapter_memory::search_vectors(novel_id, query, k).await {
+        Ok(hits) if !hits.is_empty() => hits
+            .into_iter()
+            .map(|(score, node_id, content)| {
+                let text = kb_context::truncate_chars(&content, kb_context::MEMORY_FACT_CAP);
+                (
+                    score,
+                    format!("chapter-memory:{node_id}"),
+                    json!({ "text": text }),
+                )
+            })
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+impl VectorStoreIndexDyn for ChapterMemoryIndex {
+    fn top_n<'a>(
+        &'a self,
+        req: VectorSearchRequest<Filter<Value>>,
+    ) -> WasmBoxedFuture<'a, TopNResults> {
+        let query = req.query().to_string();
+        let k = req.samples() as usize;
+        let db = self.db.clone();
+        let novel_id = self.novel_id.clone();
+        Box::pin(async move {
+            let hits = chat_rag_docs_vec(&novel_id, &query, k).await;
+            if !hits.is_empty() {
+                return Ok(hits);
+            }
+            Ok(chat_rag_docs(&db, &novel_id, &query, k))
+        })
+    }
+
+    fn top_n_ids<'a>(
+        &'a self,
+        req: VectorSearchRequest<Filter<Value>>,
+    ) -> WasmBoxedFuture<'a, Result<Vec<(f64, String)>, VectorStoreError>> {
+        let query = req.query().to_string();
+        let k = req.samples() as usize;
+        let db = self.db.clone();
+        let novel_id = self.novel_id.clone();
+        Box::pin(async move {
+            let hits = chat_rag_docs_vec(&novel_id, &query, k).await;
+            let docs = if hits.is_empty() {
+                chat_rag_docs(&db, &novel_id, &query, k)
+            } else {
+                hits
+            };
+            Ok(docs.into_iter().map(|(score, id, _)| (score, id)).collect())
+        })
+    }
 }
 
 fn emit_progress(app: &Arc<Mutex<Option<AppHandle>>>, step: &str) {
@@ -323,11 +1072,7 @@ fn emit_tokens(
     }
 }
 
-fn next_progress_step(
-    tool_name: Option<&str>,
-    has_tool_result: bool,
-    has_text: bool,
-) -> Option<String> {
+fn next_progress_step(tool_name: Option<&str>, has_tool_result: bool, has_text: bool) -> Option<String> {
     if let Some(name) = tool_name.filter(|n| !n.is_empty()) {
         Some(format!("tool:{name}"))
     } else if has_tool_result {
@@ -339,12 +1084,7 @@ fn next_progress_step(
     }
 }
 
-fn usage_to_record(
-    prompt_sum: u32,
-    completion_sum: u32,
-    est_prompt: u32,
-    reply_len: usize,
-) -> (u32, u32) {
+fn usage_to_record(prompt_sum: u32, completion_sum: u32, est_prompt: u32, reply_len: usize) -> (u32, u32) {
     let prompt = if prompt_sum > 0 { prompt_sum } else { est_prompt };
     let completion = if completion_sum > 0 {
         completion_sum
@@ -370,12 +1110,7 @@ fn record_chat_usage(db: &Db, model: &str, novel_id: &str, prompt: u32, completi
     );
 }
 
-fn push_msg(
-    runtime: &GlobalChatRuntime,
-    scope: &str,
-    role: &str,
-    content: String,
-) -> GlobalChatMessage {
+fn push_msg(runtime: &GlobalChatRuntime, scope: &str, role: &str, content: String) -> GlobalChatMessage {
     let msg = GlobalChatMessage {
         id: Uuid::new_v4().to_string(),
         role: role.into(),
@@ -398,11 +1133,265 @@ fn pop_last_user(runtime: &GlobalChatRuntime, scope: &str) {
 }
 
 fn list_scope(runtime: &GlobalChatRuntime, novel_id: &str) -> Vec<GlobalChatMessage> {
-    runtime.list(if novel_id.is_empty() {
-        None
-    } else {
-        Some(novel_id)
+    runtime.list(if novel_id.is_empty() { None } else { Some(novel_id) })
+}
+
+fn mcp_portable_tool(peer: Peer<RoleClient>, t: rmcp::model::Tool) -> PortableDynamicTool {
+    let name = t.name.to_string();
+    let desc = t.description.unwrap_or_default().to_string();
+    let params = Value::Object((*t.input_schema).clone());
+    let n2 = name.clone();
+    PortableDynamicTool::new(name, desc, params, move |args| {
+        let peer = peer.clone();
+        let n2 = n2.clone();
+        Box::pin(async move {
+            let obj = match args {
+                Value::Object(m) => m,
+                _ => Default::default(),
+            };
+            match peer
+                .call_tool(CallToolRequestParams::new(n2.clone()).with_arguments(obj))
+                .await
+            {
+                Ok(r) => Ok(ToolOutput::json(
+                    serde_json::to_value(&r).unwrap_or_else(|_| json!({"ok": true})),
+                )),
+                Err(e) => Err(ToolExecutionError::new(ToolErrorKind::Other, e.to_string())),
+            }
+        })
     })
+}
+
+fn assemble_chat_agent(
+    model: impl CompletionModel + 'static,
+    instruction: &str,
+    extra: Value,
+    max_turns: usize,
+    runtime: &GlobalChatRuntime,
+    scope: String,
+    novel_id: &str,
+    cache_intent: &str,
+    db: Arc<Db>,
+    tools: Vec<PortableDynamicTool>,
+) -> Agent {
+    let mut builder = AgentBuilder::new(model)
+        .preamble(instruction)
+        .additional_params(extra)
+        .default_max_turns(max_turns)
+        .memory(runtime.memory())
+        .conversation(scope);
+    if !novel_id.is_empty() && cache_intent != "write" {
+        builder = builder.dynamic_context(
+            kb_context::MEMORY_RETRIEVE_K,
+            ChapterMemoryIndex {
+                db,
+                novel_id: novel_id.to_string(),
+            },
+        );
+    }
+    finish_agent(builder, tools)
+}
+
+async fn chat_with<C>(
+    client: C,
+    api_model: &str,
+    instruction: &str,
+    extra: Value,
+    max_turns: usize,
+    runtime: &GlobalChatRuntime,
+    scope: String,
+    novel_id: &str,
+    cache_intent: &str,
+    db: Arc<Db>,
+    tools: Vec<PortableDynamicTool>,
+    prompt: String,
+    app: &Arc<Mutex<Option<AppHandle>>>,
+    cancel: &AtomicBool,
+) -> Result<DriveOut, String>
+where
+    C: CompletionClient,
+    C::CompletionModel: CompletionModel + 'static,
+{
+    chat_once(
+        client.completion_model(api_model),
+        instruction,
+        extra,
+        max_turns,
+        runtime,
+        scope,
+        novel_id,
+        cache_intent,
+        db,
+        tools,
+        prompt,
+        app,
+        cancel,
+    )
+    .await
+}
+
+async fn chat_once(
+    model: impl CompletionModel + 'static,
+    instruction: &str,
+    extra: Value,
+    max_turns: usize,
+    runtime: &GlobalChatRuntime,
+    scope: String,
+    novel_id: &str,
+    cache_intent: &str,
+    db: Arc<Db>,
+    tools: Vec<PortableDynamicTool>,
+    prompt: String,
+    app: &Arc<Mutex<Option<AppHandle>>>,
+    cancel: &AtomicBool,
+) -> Result<DriveOut, String> {
+    let agent = assemble_chat_agent(
+        crate::compat_messages::EnsureMessageContent(model),
+        instruction,
+        extra,
+        max_turns,
+        runtime,
+        scope,
+        novel_id,
+        cache_intent,
+        db,
+        tools,
+    );
+    drive_with_retry(&agent, prompt, app, cancel).await
+}
+
+fn finish_agent(builder: AgentBuilder<NoToolConfig>, tools: Vec<PortableDynamicTool>) -> Agent {
+    let mut it = tools.into_iter();
+    let Some(first) = it.next() else {
+        return builder.build();
+    };
+    let mut b = builder.portable_dynamic_tool(first);
+    for t in it {
+        b = b.portable_dynamic_tool(t);
+    }
+    b.build()
+}
+
+struct DriveOut {
+    reply: String,
+    prompt_tokens: u32,
+    completion_tokens: u32,
+}
+
+async fn drive_chat(
+    agent: &Agent,
+    prompt: String,
+    app: &Arc<Mutex<Option<AppHandle>>>,
+    cancel: &AtomicBool,
+) -> Result<DriveOut, String> {
+    let mut stream = agent.runner(prompt.clone()).stream().await;
+    let mut reply = String::new();
+    let mut last_step = String::new();
+    let mut prompt_sum = 0u32;
+    let mut completion_sum = 0u32;
+    let mut final_output: Option<String> = None;
+    while let Some(item) = stream.next().await {
+        if cancel.load(Ordering::SeqCst) {
+            return Err("__cancelled__".into());
+        }
+        let item = item.map_err(|e| e.to_string())?;
+        match item {
+            MultiTurnStreamItem::StreamAssistantItem(StreamedAssistantContent::Text(t)) => {
+                reply.push_str(&t.text);
+                if let Some(step) = next_progress_step(None, false, true) {
+                    if last_step != step {
+                        last_step.clone_from(&step);
+                        emit_progress(app, &step);
+                    }
+                }
+            }
+            MultiTurnStreamItem::StreamAssistantItem(StreamedAssistantContent::ToolCall { tool_call, .. }) => {
+                crate::ai_log::write(
+                    "chat.tool_call",
+                    json!({
+                        "name": tool_call.function.name,
+                        "call_id": tool_call.id.as_str(),
+                        "args": tool_call.function.arguments,
+                    }),
+                );
+                if let Some(step) = next_progress_step(Some(&tool_call.function.name), false, false) {
+                    if last_step != step {
+                        last_step.clone_from(&step);
+                        emit_progress(app, &step);
+                    }
+                }
+            }
+            MultiTurnStreamItem::StreamUserItem(StreamedUserContent::ToolResult { tool_result, .. }) => {
+                crate::ai_log::write(
+                    "chat.tool_result",
+                    json!({
+                        "call_id": tool_result.call.as_str(),
+                        "response": tool_result_value(&tool_result),
+                    }),
+                );
+                if let Some(step) = next_progress_step(None, true, false) {
+                    if last_step != step {
+                        last_step.clone_from(&step);
+                        emit_progress(app, &step);
+                    }
+                }
+            }
+            MultiTurnStreamItem::CompletionCall(c) => {
+                if c.usage.input_tokens > 0 || c.usage.output_tokens > 0 {
+                    emit_tokens(
+                        app,
+                        c.usage.input_tokens as u32,
+                        c.usage.output_tokens as u32,
+                        true,
+                    );
+                    prompt_sum = prompt_sum.saturating_add(c.usage.input_tokens as u32);
+                    completion_sum = completion_sum.saturating_add(c.usage.output_tokens as u32);
+                }
+            }
+            MultiTurnStreamItem::FinalResponse(r) => {
+                if prompt_sum == 0 && r.usage.input_tokens > 0 {
+                    prompt_sum = r.usage.input_tokens as u32;
+                    completion_sum = r.usage.output_tokens as u32;
+                }
+                final_output = Some(r.output);
+            }
+            _ => {}
+        }
+    }
+    let mut reply = if reply.trim().is_empty() {
+        final_output.unwrap_or_else(|| "（无回复）".into())
+    } else {
+        reply
+    };
+    if reply.trim().is_empty() {
+        reply = "（无回复）".into();
+    }
+    Ok(DriveOut {
+        reply,
+        prompt_tokens: prompt_sum,
+        completion_tokens: completion_sum,
+    })
+}
+
+async fn drive_with_retry(
+    agent: &Agent,
+    prompt: String,
+    app: &Arc<Mutex<Option<AppHandle>>>,
+    cancel: &AtomicBool,
+) -> Result<DriveOut, String> {
+    let mut retried = false;
+    loop {
+        match drive_chat(agent, prompt.clone(), app, cancel).await {
+            Ok(o) => return Ok(o),
+            Err(e) if e == "__cancelled__" || cancel.load(Ordering::SeqCst) => {
+                return Err("__cancelled__".into());
+            }
+            Err(e) if !retried && is_unmatched_tool_calls(&e) => {
+                retried = true;
+            }
+            Err(e) => return Err(e),
+        }
+    }
 }
 
 pub async fn send(
@@ -417,6 +1406,7 @@ pub async fn send(
         return Err("全局 Chat 正在回复中".into());
     }
     let _busy = BusyGuard(&runtime.busy);
+    let _run = crate::ai_log::begin_run();
 
     let content = input.content.trim().to_string();
     if content.is_empty() {
@@ -432,9 +1422,9 @@ pub async fn send(
     let model_name = task_model(&settings.chat_model, &settings.default_model);
     let ep = settings
         .resolve_compat(&model_name)
-        .ok_or_else(|| "未配置可用的 OpenAI 兼容 API Key".to_string())?;
-    if ep.api_key.trim().is_empty() || ep.base_url.trim().is_empty() {
-        return Err("未配置可用的 OpenAI 兼容 API Key".into());
+        .ok_or_else(|| "未配置可用的 AI API".to_string())?;
+    if !ep.is_ready() {
+        return Err("未配置可用的 AI API".into());
     }
     let api_model = crate::models::api_model_id(&model_name).to_string();
 
@@ -445,19 +1435,11 @@ pub async fn send(
         .filter(|s| !s.is_empty())
         .unwrap_or("")
         .to_string();
-    let scope = scope_key(if novel_id.is_empty() {
-        None
-    } else {
-        Some(novel_id.as_str())
-    });
+    let scope = scope_key(if novel_id.is_empty() { None } else { Some(novel_id.as_str()) });
     let novel_title = if novel_id.is_empty() {
         String::new()
     } else {
-        db.get_novel(&novel_id)
-            .ok()
-            .flatten()
-            .map(|n| n.title)
-            .unwrap_or_default()
+        db.get_novel(&novel_id).ok().flatten().map(|n| n.title).unwrap_or_default()
     };
 
     push_msg(&runtime, &scope, "user", content.clone());
@@ -467,171 +1449,229 @@ pub async fn send(
         cancel: cancel.clone(),
     };
 
-    let llm_user = if let Some((_, injected)) = skills::maybe_inject_skill(&content) {
-        injected
-    } else {
-        content
-    };
+    let skill_hit = skills::maybe_inject_skill(&content);
+    let mut llm_user = skill_hit.as_ref().map(|(_, t)| t.clone()).unwrap_or_else(|| content.clone());
+    let (allow, cache_intent) = chat_tool_allowlist(skill_hit.is_some(), &content);
+    if cache_intent == "write" && !novel_id.is_empty() {
+        if let Ok(tree) = crate::commands::get_tree(novel_id.clone()) {
+            let extra = crate::write_prompts::write_prompt_append(
+                &tree,
+                crate::write_prompts::write_prompt_kind_from_user(&content),
+            );
+            llm_user = crate::write_prompts::merge_user_brief(&llm_user, &extra);
+        }
+    }
 
-    let route_name = input.route_name.unwrap_or_default();
-    let path = input.path.unwrap_or_default();
-    let instruction = system_instruction(&route_name, &path, &novel_id, &novel_title);
+    crate::ai_log::write(
+        "chat.start",
+        json!({
+            "user": content,
+            "llm_user": llm_user,
+            "model": model_name,
+            "api_model": api_model,
+            "provider": ep.label,
+            "novel_id": novel_id,
+            "novel_title": novel_title,
+            "allowlist": allow,
+            "intent": cache_intent,
+        }),
+    );
+
+    let mut instruction = system_instruction(&novel_id, &novel_title);
+    instruction.push_str(intent_tool_rule(cache_intent));
     let est_prompt = ((instruction.len() + llm_user.len()) / 4) as u32;
     emit_tokens(&app, est_prompt, 0, false);
 
-    let model = Arc::new(
-        OpenAICompatible::new(
-            OpenAICompatibleConfig::new(ep.api_key.clone(), api_model.clone())
-                .with_base_url(openai_compat_base(&ep.base_url))
-                .with_provider_name(if ep.label.trim().is_empty() {
-                    "openai-compatible"
-                } else {
-                    ep.label.as_str()
-                }),
-        )
-        .map_err(|e| e.to_string())?,
-    );
-
     let mcp_url = format!("http://127.0.0.1:{port}/mcp");
-    let toolset = McpHttpClientBuilder::new(mcp_url)
-        .connect()
-        .await
-        .map_err(|e| format!("连接本机 MCP 失败: {e}"))?;
-
-    let agent = Arc::new(
-        LlmAgentBuilder::new("global_chat")
-            .instruction(instruction)
-            .model(model)
-            .toolset(Arc::new(toolset))
-            .build()
-            .map_err(|e| e.to_string())?,
-    );
-
-    let mut session_id = {
-        let mut slots = runtime.slots.lock();
-        slots
-            .entry(scope.clone())
-            .or_insert_with(new_slot)
-            .session_id
-            .clone()
-    };
-    ensure_session(&runtime.sessions, &session_id).await?;
-    close_dangling_tools(&runtime.sessions, &session_id).await?;
-
-    let sessions: Arc<dyn SessionService> = runtime.sessions.clone();
-    let runner = Runner::builder()
-        .app_name(APP_NAME)
-        .agent(agent)
-        .session_service(sessions)
-        .build()
-        .map_err(|e| e.to_string())?;
-
-    emit_progress(&app, "thinking");
-    let mut stream = runner
-        .run_str(
-            USER_ID,
-            &session_id,
-            Content::new("user").with_text(llm_user.clone()),
-        )
-        .await
-        .map_err(|e| e.to_string())?;
-
-    let mut reply = String::new();
-    let mut last_step = String::new();
-    let mut prompt_sum = 0u32;
-    let mut completion_sum = 0u32;
-    let mut retried_tools = false;
-    while let Some(ev) = stream.next().await {
-        if cancel.load(Ordering::SeqCst) {
-            let _ = runner.interrupt(&session_id);
-            // ponytail: 3s drain so in-flight tool_calls land before we stub results
-            let _ = tokio::time::timeout(std::time::Duration::from_secs(3), async {
-                while stream.next().await.is_some() {}
-            })
-            .await;
-            let _ = close_dangling_tools(&runtime.sessions, &session_id).await;
-            let (p, c) = usage_to_record(prompt_sum, completion_sum, est_prompt, reply.len());
-            record_chat_usage(&db, &model_name, &novel_id, p, c);
-            pop_last_user(&runtime, &scope);
-            return Ok(list_scope(&runtime, &novel_id));
-        }
-        let ev = match ev {
-            Ok(ev) => ev,
-            Err(e) => {
-                let msg = e.to_string();
-                if retried_tools || !is_unmatched_tool_calls(&msg) {
-                    if cancel.load(Ordering::SeqCst) {
-                        pop_last_user(&runtime, &scope);
-                        return Ok(list_scope(&runtime, &novel_id));
-                    }
-                    return Err(msg);
-                }
-                retried_tools = true;
-                let _ = close_dangling_tools(&runtime.sessions, &session_id).await;
-                session_id = Uuid::new_v4().to_string();
-                if let Some(slot) = runtime.slots.lock().get_mut(&scope) {
-                    slot.session_id.clone_from(&session_id);
-                }
-                ensure_session(&runtime.sessions, &session_id).await?;
-                stream = runner
-                    .run_str(
-                        USER_ID,
-                        &session_id,
-                        Content::new("user").with_text(llm_user.clone()),
-                    )
-                    .await
-                    .map_err(|e| e.to_string())?;
+    let transport = StreamableHttpClientTransport::from_uri(mcp_url);
+    let mcp_client: RunningService<RoleClient, ()> = ().serve(transport).await.map_err(|e| {
+        crate::ai_log::write("chat.error", json!({ "phase": "mcp", "error": e.to_string() }));
+        format!("连接本机 MCP 失败: {e}")
+    })?;
+    let listed = mcp_client.list_tools(None).await.map_err(|e| {
+        crate::ai_log::write("chat.error", json!({ "phase": "mcp", "error": e.to_string() }));
+        format!("连接本机 MCP 失败: {e}")
+    })?;
+    let peer = mcp_client.peer().clone();
+    let mut tools = Vec::new();
+    for t in listed.tools {
+        if let Some(names) = allow.as_ref() {
+            if !names.iter().any(|n| *n == t.name.as_ref()) {
                 continue;
             }
-        };
-        let mut got_text = false;
-        if let Some(c) = ev.content() {
-            for p in &c.parts {
-                if let Some(t) = p.text() {
-                    if !t.is_empty() {
-                        reply.push_str(t);
-                        got_text = true;
-                    }
-                }
-            }
         }
-        if let Some(step) = next_progress_step(
-            ev.tool_calls().first().map(|c| c.name),
-            !ev.tool_results().is_empty(),
-            got_text,
-        ) {
-            if last_step != step {
-                last_step.clone_from(&step);
-                emit_progress(&app, &step);
-            }
-        }
-        if let Some(u) = &ev.llm_response.usage_metadata {
-            if !ev.llm_response.partial
-                && (u.prompt_token_count > 0 || u.candidates_token_count > 0)
-            {
-                emit_tokens(
-                    &app,
-                    u.prompt_token_count.max(0) as u32,
-                    u.candidates_token_count.max(0) as u32,
-                    true,
-                );
-                prompt_sum = prompt_sum.saturating_add(u.prompt_token_count.max(0) as u32);
-                completion_sum =
-                    completion_sum.saturating_add(u.candidates_token_count.max(0) as u32);
-            }
-        }
+        tools.push(mcp_portable_tool(peer.clone(), t));
     }
 
-    if cancel.load(Ordering::SeqCst) {
-        pop_last_user(&runtime, &scope);
-        return Ok(list_scope(&runtime, &novel_id));
+    let base = openai_compat_base(&ep.base_url);
+    let max_turns = if cache_intent == "write" { 8 } else { 20 };
+    let proto = ep.chat_protocol();
+    let extra = extra_chat_params(proto, cache_intent, &novel_id);
+    emit_progress(&app, "thinking");
+    let key = ep.api_key.as_str();
+    macro_rules! run_chat {
+        ($client:expr) => {
+            chat_with(
+                $client,
+                &api_model,
+                &instruction,
+                extra,
+                max_turns,
+                &runtime,
+                scope.clone(),
+                &novel_id,
+                cache_intent,
+                db.clone(),
+                tools,
+                llm_user,
+                &app,
+                &cancel,
+            )
+            .await
+        };
     }
-    let (p, c) = usage_to_record(prompt_sum, completion_sum, est_prompt, reply.len());
+    let driven = match proto {
+        crate::models::PROTOCOL_DEEPSEEK => run_chat!(deepseek::Client::builder()
+            .api_key(key)
+            .base_url(&base)
+            .build()
+            .map_err(|e| e.to_string())?),
+        crate::models::PROTOCOL_ZAI => run_chat!(zai::Client::builder()
+            .api_key(key)
+            .base_url(&base)
+            .build()
+            .map_err(|e| e.to_string())?),
+        crate::models::PROTOCOL_ANTHROPIC => run_chat!(anthropic::Client::builder()
+            .api_key(key)
+            .base_url(&base)
+            .build()
+            .map_err(|e| e.to_string())?),
+        crate::models::PROTOCOL_GEMINI => run_chat!(gemini::Client::builder()
+            .api_key(key)
+            .base_url(&base)
+            .build()
+            .map_err(|e| e.to_string())?),
+        crate::models::PROTOCOL_GROQ => run_chat!(groq::Client::builder()
+            .api_key(key)
+            .base_url(&base)
+            .build()
+            .map_err(|e| e.to_string())?),
+        crate::models::PROTOCOL_MOONSHOT => run_chat!(moonshot::Client::builder()
+            .api_key(key)
+            .base_url(&base)
+            .build()
+            .map_err(|e| e.to_string())?),
+        crate::models::PROTOCOL_MISTRAL => run_chat!(mistral::Client::builder()
+            .api_key(key)
+            .base_url(&base)
+            .build()
+            .map_err(|e| e.to_string())?),
+        crate::models::PROTOCOL_OPENROUTER => run_chat!(openrouter::Client::builder()
+            .api_key(key)
+            .base_url(&base)
+            .build()
+            .map_err(|e| e.to_string())?),
+        crate::models::PROTOCOL_TOGETHER => run_chat!(together::Client::builder()
+            .api_key(key)
+            .base_url(&base)
+            .build()
+            .map_err(|e| e.to_string())?),
+        crate::models::PROTOCOL_XAI => run_chat!(xai::Client::builder()
+            .api_key(key)
+            .base_url(&base)
+            .build()
+            .map_err(|e| e.to_string())?),
+        crate::models::PROTOCOL_OLLAMA => run_chat!(ollama::Client::builder()
+            .api_key(key)
+            .base_url(&base)
+            .build()
+            .map_err(|e| e.to_string())?),
+        crate::models::PROTOCOL_HYPERBOLIC => run_chat!(hyperbolic::Client::builder()
+            .api_key(key)
+            .base_url(&base)
+            .build()
+            .map_err(|e| e.to_string())?),
+        crate::models::PROTOCOL_HUGGINGFACE => run_chat!(huggingface::Client::builder()
+            .api_key(key)
+            .base_url(&base)
+            .build()
+            .map_err(|e| e.to_string())?),
+        crate::models::PROTOCOL_MINIMAX => run_chat!(minimax::Client::builder()
+            .api_key(key)
+            .base_url(&base)
+            .build()
+            .map_err(|e| e.to_string())?),
+        crate::models::PROTOCOL_MIRA => run_chat!(mira::Client::builder()
+            .api_key(key)
+            .base_url(&base)
+            .build()
+            .map_err(|e| e.to_string())?),
+        crate::models::PROTOCOL_PERPLEXITY => run_chat!(perplexity::Client::builder()
+            .api_key(key)
+            .base_url(&base)
+            .build()
+            .map_err(|e| e.to_string())?),
+        crate::models::PROTOCOL_VENICE => run_chat!(venice::Client::builder()
+            .api_key(key)
+            .base_url(&base)
+            .build()
+            .map_err(|e| e.to_string())?),
+        crate::models::PROTOCOL_COHERE => run_chat!(cohere::Client::builder()
+            .api_key(key)
+            .base_url(&base)
+            .build()
+            .map_err(|e| e.to_string())?),
+        crate::models::PROTOCOL_XIAOMIMIMO => run_chat!(xiaomimimo::Client::builder()
+            .api_key(key)
+            .base_url(&base)
+            .build()
+            .map_err(|e| e.to_string())?),
+        crate::models::PROTOCOL_DOUBLEWORD => run_chat!(doubleword::Client::builder()
+            .api_key(key)
+            .base_url(&base)
+            .build()
+            .map_err(|e| e.to_string())?),
+        crate::models::PROTOCOL_OPENAI_RESPONSES => run_chat!(openai::Client::builder()
+            .api_key(key)
+            .base_url(&base)
+            .build()
+            .map_err(|e| e.to_string())?),
+        crate::models::PROTOCOL_AZURE => run_chat!(azure::Client::builder()
+            .api_key(azure::AzureOpenAIAuth::ApiKey(ep.api_key.clone()))
+            .azure_endpoint(base.clone())
+            .build()
+            .map_err(|e| e.to_string())?),
+        crate::models::PROTOCOL_LLAMAFILE => {
+            run_chat!(llamafile::Client::from_url(&base).map_err(|e| e.to_string())?)
+        }
+        _ => run_chat!(CompletionsClient::builder()
+            .api_key(key)
+            .base_url(&base)
+            .build()
+            .map_err(|e| e.to_string())?),
+    };
+    let out = match driven {
+        Ok(o) => o,
+        Err(e) if e == "__cancelled__" || cancel.load(Ordering::SeqCst) => {
+            return Ok(list_scope(&runtime, &novel_id));
+        }
+        Err(e) => {
+            crate::ai_log::write("chat.error", json!({ "error": e }));
+            return Err(friendly_chat_err(e));
+        }
+    };
+
+    let (p, c) = usage_to_record(out.prompt_tokens, out.completion_tokens, est_prompt, out.reply.len());
     record_chat_usage(&db, &model_name, &novel_id, p, c);
-    if reply.trim().is_empty() {
-        reply = "（无回复）".into();
-    }
-    push_msg(&runtime, &scope, "assistant", reply);
+    crate::ai_log::write(
+        "chat.done",
+        json!({
+            "reply": out.reply,
+            "prompt_tokens": p,
+            "completion_tokens": c,
+        }),
+    );
+    push_msg(&runtime, &scope, "assistant", out.reply);
     Ok(list_scope(&runtime, &novel_id))
 }
 
@@ -658,23 +1698,110 @@ impl Drop for BusyGuard<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rig_core::completion::message::{ToolCall, ToolCallId, ToolFunction};
+
+    fn assistant_calls(calls: Vec<ToolCall>) -> Message {
+        let parts: Vec<_> = calls.into_iter().map(AssistantContent::ToolCall).collect();
+        Message::Assistant {
+            id: None,
+            content: parts,
+        }
+    }
+
+    fn tool_res(id: &str, payload: Value) -> Message {
+        Message::User {
+            content: vec![UserContent::tool_result(
+                id,
+                "tool",
+                vec![ToolResultContent::json(payload)],
+            )],
+        }
+    }
+
+    fn test_call(id: &str, function: ToolFunction) -> ToolCall {
+        ToolCall::new(ToolCallId::new_or_mint(id), function)
+    }
+
+    #[test]
+    fn system_instruction_is_short_and_defers_to_ai_guidance() {
+        let unbound = system_instruction("", "");
+        let bound = system_instruction("n1", "测试书");
+        for s in [&unbound, &bound] {
+            assert!(s.contains("get_chapter_write_context"), "{s}");
+            assert!(s.contains("ai_guidance"), "{s}");
+            assert!(!s.contains('①'), "{s}");
+            assert!(!s.contains("include_root"), "{s}");
+            assert!(!s.contains("route="), "{s}");
+        }
+        assert!(bound.contains("测试书"));
+        assert!(bound.contains("n1"));
+        assert!(unbound.contains("upsert"), "{unbound}");
+        assert!(unbound.len() < 2000, "unbound {}", unbound.len());
+        assert!(bound.len() < 2000, "bound {}", bound.len());
+    }
+
+    #[test]
+    fn chat_tool_allowlist_write_core_and_skill() {
+        let (write, w_intent) = chat_tool_allowlist(false, "生成第 19 章");
+        assert_eq!(w_intent, "write");
+        let write = write.expect("write allow");
+        assert_eq!(write, TOOLS_WRITE);
+        assert!(!write.contains(&"get_tree"));
+        let (cards, c_intent) = chat_tool_allowlist(false, "把这张人物卡改一下");
+        assert_eq!(c_intent, "cards");
+        let cards = cards.expect("cards allow");
+        assert_eq!(cards, TOOLS_CARDS);
+        let (ol, o_intent) = chat_tool_allowlist(false, "生成本章细纲");
+        assert_eq!(o_intent, "outline");
+        assert_eq!(ol.expect("outline").as_slice(), TOOLS_OUTLINE);
+        let (write_beats, _) = chat_tool_allowlist(false, "按细纲写第3章");
+        assert_eq!(write_beats.expect("write").as_slice(), TOOLS_WRITE);
+        let (shots, s_intent) = chat_tool_allowlist(false, "给本章拆分镜");
+        assert_eq!(s_intent, "core-shots");
+        assert!(shots.unwrap().contains(&"split_chapter_shots"));
+        let (lib, _) = chat_tool_allowlist(false, "从公共库搜一段");
+        assert!(lib.unwrap().contains(&"search_knowledge"));
+        let (wv, _) = chat_tool_allowlist(false, "生成世界观");
+        assert!(wv.unwrap().contains(&"generate_worldview"));
+        assert!(!is_write_chapter("生成世界观"));
+        let (all, a_intent) = chat_tool_allowlist(true, "生成第 1 章");
+        assert_eq!(a_intent, "all");
+        assert!(all.is_none());
+    }
+
+    #[test]
+    fn intent_tool_rule_forbids_write_tools_on_outline() {
+        let o = intent_tool_rule("outline");
+        assert!(o.contains("禁止调用 get_chapter_write_context"), "{o}");
+        let w = intent_tool_rule("write");
+        assert!(w.contains("get_chapter_write_context"), "{w}");
+        assert!(!w.contains("禁止调用 get_chapter_write_context"), "{w}");
+        assert!(intent_tool_rule("core").is_empty());
+    }
+
+    #[test]
+    fn prompt_cache_key_is_stable_per_intent_and_novel() {
+        let a = prompt_cache_params("write", "n1");
+        let b = prompt_cache_params("write", "n1");
+        assert_eq!(a, b);
+        let c = prompt_cache_params("core", "n1");
+        assert_ne!(a, c);
+    }
 
     #[test]
     fn next_progress_prefers_tool_then_thinking_then_writing() {
-        assert_eq!(
-            next_progress_step(Some("get_chapter_info"), true, true).as_deref(),
-            Some("tool:get_chapter_info")
-        );
-        assert_eq!(
-            next_progress_step(None, true, true).as_deref(),
-            Some("thinking")
-        );
-        assert_eq!(
-            next_progress_step(None, false, true).as_deref(),
-            Some("writing")
-        );
+        assert_eq!(next_progress_step(Some("get_chapter_info"), true, true).as_deref(), Some("tool:get_chapter_info"));
+        assert_eq!(next_progress_step(None, true, true).as_deref(), Some("thinking"));
+        assert_eq!(next_progress_step(None, false, true).as_deref(), Some("writing"));
         assert_eq!(next_progress_step(None, false, false), None);
         assert_eq!(next_progress_step(Some(""), false, true).as_deref(), Some("writing"));
+    }
+
+    #[test]
+    fn friendly_err_maps_max_iterations() {
+        assert!(friendly_chat_err("Max iterations (8) exceeded".into()).contains("次数过多"));
+        assert!(friendly_chat_err("MaxTurnsError: reached max turns limit: 8".into()).contains("次数过多"));
+        assert_eq!(friendly_chat_err("other".into()), "other");
     }
 
     #[test]
@@ -686,78 +1813,67 @@ mod tests {
 
     #[test]
     fn openai_compat_base_does_not_append_v1() {
+        assert_eq!(openai_compat_base("https://open.bigmodel.cn/api/paas/v4/"), "https://open.bigmodel.cn/api/paas/v4");
+        assert_eq!(openai_compat_base("https://api.deepseek.com/v1"), "https://api.deepseek.com/v1");
+    }
+
+    #[test]
+    fn uses_deepseek_api_only_official_host() {
         assert_eq!(
-            openai_compat_base("https://open.bigmodel.cn/api/paas/v4/"),
-            "https://open.bigmodel.cn/api/paas/v4"
+            crate::models::infer_compat_protocol("openai", "https://api.deepseek.com/v1"),
+            crate::models::PROTOCOL_DEEPSEEK
         );
         assert_eq!(
-            openai_compat_base("https://api.deepseek.com/v1"),
-            "https://api.deepseek.com/v1"
+            crate::models::infer_compat_protocol("openai", "https://API.DeepSeek.com"),
+            crate::models::PROTOCOL_DEEPSEEK
         );
+        assert_eq!(
+            crate::models::infer_compat_protocol("openai", "https://api.qiniu.com/v1"),
+            crate::models::PROTOCOL_OPENAI
+        );
+        assert_eq!(
+            crate::models::infer_compat_protocol(
+                "openai",
+                "https://dashscope.aliyuncs.com/compatible-mode/v1"
+            ),
+            crate::models::PROTOCOL_ALIYUN
+        );
+    }
+
+    #[test]
+    fn friendly_err_maps_decode_body() {
+        assert!(friendly_chat_err(
+            "CompletionError: ProviderError: Http client error: error decoding response body".into()
+        )
+        .contains("无法解析"));
     }
 
     #[test]
     fn scope_key_global_vs_novel() {
         assert_eq!(scope_key(None), "__global__");
         assert_eq!(scope_key(Some("")), "__global__");
-        assert_eq!(scope_key(Some("  ")), "__global__");
         assert_eq!(scope_key(Some("abc")), "abc");
     }
 
     #[test]
     fn dangling_tool_calls_unmatched_then_closed() {
-        let mut call = Event::new("i1");
-        call.set_content(Content {
-            role: "assistant".into(),
-            parts: vec![Part::FunctionCall {
-                name: "search_knowledge".into(),
-                args: serde_json::json!({}),
-                id: Some("call_1".into()),
-                thought_signature: None,
-            }],
-        });
-        assert_eq!(
-            dangling_tool_calls(&[call.clone()]),
-            vec![("call_1".into(), "search_knowledge".into())]
-        );
-
-        let done = cancelled_tool_event("call_1", "search_knowledge");
+        let call = assistant_calls(vec![test_call(
+            "call_1",
+            ToolFunction::new("search_knowledge".into(), json!({})),
+        )]);
+        assert_eq!(dangling_tool_calls(&[call.clone()]), vec![("call_1".into(), "search_knowledge".into())]);
+        let done = cancelled_tool_msg("call_1");
         assert!(dangling_tool_calls(&[call, done]).is_empty());
     }
 
     #[test]
     fn dangling_ignores_already_answered_calls() {
-        let mut call = Event::new("i1");
-        call.set_content(Content {
-            role: "assistant".into(),
-            parts: vec![
-                Part::FunctionCall {
-                    name: "a".into(),
-                    args: serde_json::json!({}),
-                    id: Some("c1".into()),
-                    thought_signature: None,
-                },
-                Part::FunctionCall {
-                    name: "b".into(),
-                    args: serde_json::json!({}),
-                    id: Some("c2".into()),
-                    thought_signature: None,
-                },
-            ],
-        });
-        let mut result = Event::new("i2");
-        result.set_content(Content {
-            role: "function".into(),
-            parts: vec![Part::FunctionResponse {
-                function_response: FunctionResponseData::new("a", serde_json::json!({"ok": true})),
-                id: Some("c1".into()),
-                annotations: None,
-            }],
-        });
-        assert_eq!(
-            dangling_tool_calls(&[call, result]),
-            vec![("c2".into(), "b".into())]
-        );
+        let call = assistant_calls(vec![
+            test_call("c1", ToolFunction::new("a".into(), json!({}))),
+            test_call("c2", ToolFunction::new("b".into(), json!({}))),
+        ]);
+        let result = tool_res("c1", json!({"ok": true}));
+        assert_eq!(dangling_tool_calls(&[call, result]), vec![("c2".into(), "b".into())]);
     }
 
     #[test]
@@ -795,75 +1911,150 @@ mod tests {
         pop_last_user(&r, &s);
         assert_eq!(r.list(Some("n1")).len(), 2);
     }
-}
 
-#[cfg(test)]
-mod session_tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn ensure_session_does_not_wipe_existing() {
-        let sessions = Arc::new(InMemorySessionService::new());
-        let sid = Uuid::new_v4().to_string();
-        sessions
-            .create(CreateRequest {
-                app_name: APP_NAME.into(),
-                user_id: USER_ID.into(),
-                session_id: Some(sid.clone()),
-                state: HashMap::from([("marker".into(), Value::String("keep".into()))]),
-            })
-            .await
-            .unwrap();
-        ensure_session(&sessions, &sid).await.unwrap();
-        let s = sessions
-            .get(GetRequest {
-                app_name: APP_NAME.into(),
-                user_id: USER_ID.into(),
-                session_id: sid,
-                num_recent_events: None,
-                after: None,
-            })
-            .await
-            .unwrap();
-        let marker = s.state().get("marker").and_then(|v| v.as_str().map(str::to_string));
-        assert_eq!(marker.as_deref(), Some("keep"));
+    #[test]
+    fn chapter_written_stub_uses_heading_and_word_count() {
+        assert_eq!(chapter_written_stub("# 第十九章 夜雨\n\n正文", 16), "已写入第十九章，约 16 字");
+        assert_eq!(chapter_written_stub("没有标题的正文abc", 3), "已写入本章，约 3 字");
+        assert_eq!(count_body_words("a b\nc"), 3);
     }
 
-    #[tokio::test]
-    async fn close_dangling_tools_stubs_unmatched_calls() {
-        let sessions = Arc::new(InMemorySessionService::new());
-        let sid = Uuid::new_v4().to_string();
-        sessions
-            .create(CreateRequest {
-                app_name: APP_NAME.into(),
-                user_id: USER_ID.into(),
-                session_id: Some(sid.clone()),
-                state: HashMap::new(),
-            })
-            .await
-            .unwrap();
-        let mut call = Event::new("i1");
-        call.set_content(Content {
-            role: "assistant".into(),
-            parts: vec![Part::FunctionCall {
-                name: "search_knowledge".into(),
-                args: serde_json::json!({}),
-                id: Some("call_9".into()),
-                thought_signature: None,
-            }],
-        });
-        sessions.append_event(&sid, call).await.unwrap();
-        close_dangling_tools(&sessions, &sid).await.unwrap();
-        let s = sessions
-            .get(GetRequest {
-                app_name: APP_NAME.into(),
-                user_id: USER_ID.into(),
-                session_id: sid,
-                num_recent_events: None,
-                after: None,
-            })
-            .await
-            .unwrap();
-        assert!(dangling_tool_calls(&s.events().all()).is_empty());
+    #[test]
+    fn stub_history_tools_replaces_successful_write_body() {
+        let call = assistant_calls(vec![test_call(
+            "call_w",
+            ToolFunction::new(
+                "set_chapter_content".into(),
+                json!({"node_id":"ch1","content":"# 第2章 标题\n\n很长的正文不会进历史"}),
+            ),
+        )]);
+        let result = tool_res("call_w", json!({"output": "{\"ok\":true,\"word_count\":42}"}));
+        let mut msgs = vec![call, result];
+        assert!(stub_history_tools(&mut msgs));
+        let body = match &msgs[0] {
+            Message::Assistant { content, .. } => content
+                .iter()
+                .find_map(|p| match p {
+                    AssistantContent::ToolCall(c) if c.function.name == "set_chapter_content" => {
+                        c.function.arguments.get("content")?.as_str().map(str::to_string)
+                    }
+                    _ => None,
+                }),
+            _ => None,
+        }
+        .unwrap();
+        assert_eq!(body, "已写入第2章，约 42 字");
+        assert!(!stub_history_tools(&mut msgs));
+    }
+
+    #[test]
+    fn stub_history_tools_replaces_successful_character_upsert() {
+        let call = assistant_calls(vec![test_call(
+            "call_c",
+            ToolFunction::new(
+                "upsert_character_card".into(),
+                json!({"node_id":"char-1","name":"李四","character":{"gender":"男","deep":{"desire":"很长一段不会进历史"}}}),
+            ),
+        )]);
+        let result = tool_res("call_c", json!({"output":"{\"ok\":true,\"label\":\"李四\"}"}));
+        let mut msgs = vec![call, result];
+        assert!(stub_history_tools(&mut msgs));
+        let ch = match &msgs[0] {
+            Message::Assistant { content, .. } => content.iter().find_map(|p| match p {
+                AssistantContent::ToolCall(c) if c.function.name == "upsert_character_card" => {
+                    c.function.arguments.get("character").cloned()
+                }
+                _ => None,
+            }),
+            _ => None,
+        }
+        .unwrap();
+        assert_eq!(ch, json!({ "_stub": true }));
+    }
+
+    #[test]
+    fn summarize_chat_history_keeps_latest_root_and_write_stubs() {
+        let user = Message::user("生成第1章");
+        let ctx = tool_res(
+            "call_ctx",
+            json!({
+                "output": {
+                    "included": { "root": true, "volume": false, "chapter": true },
+                    "root": { "title": "测试书", "synopsis": "纲" }
+                }
+            }),
+        );
+        let write = assistant_calls(vec![test_call(
+            "call_w",
+            ToolFunction::new("set_chapter_content".into(), json!({"content":"# 第1章\n正文正文正文"})),
+        )]);
+        let done = tool_res("call_w", json!({"output":"{\"ok\":true,\"word_count\":7}"}));
+        let text = summarize_chat_history(&[user, ctx, write, done]);
+        assert!(text.contains("【根材料】"), "{text}");
+        assert!(text.contains("测试书"), "{text}");
+        assert!(text.contains("已写入第1章，约 7 字"), "{text}");
+        assert!(!text.contains("正文正文正文"), "{text}");
+        assert!(text.contains("生成第1章"), "{text}");
+    }
+
+    #[test]
+    fn summarize_recovers_root_from_previous_compaction() {
+        let prev = Message::assistant("【根材料】\n{\"title\":\"旧根\"}\n【已写入】\n已写入第1章，约 10 字");
+        let text = summarize_chat_history(&[prev]);
+        assert!(text.contains("旧根"), "{text}");
+        assert!(text.contains("已写入第1章，约 10 字"), "{text}");
+    }
+
+    #[test]
+    fn close_dangling_appends_cancelled_results() {
+        let mut msgs = vec![assistant_calls(vec![test_call(
+            "call_9",
+            ToolFunction::new("search_knowledge".into(), json!({})),
+        )])];
+        close_dangling_tools(&mut msgs);
+        assert!(dangling_tool_calls(&msgs).is_empty());
+    }
+
+    #[test]
+    fn prune_history_stubs_set_chapter_content() {
+        let mut msgs = vec![
+            assistant_calls(vec![test_call(
+                "call_w",
+                ToolFunction::new("set_chapter_content".into(), json!({"content":"# 第3章\n长正文"})),
+            )]),
+            tool_res("call_w", json!({"output":"{\"ok\":true,\"word_count\":9}"})),
+        ];
+        prune_history(&mut msgs);
+        let body = match &msgs[0] {
+            Message::Assistant { content, .. } => content.iter().find_map(|p| match p {
+                AssistantContent::ToolCall(c) => c.function.arguments.get("content")?.as_str().map(str::to_string),
+                _ => None,
+            }),
+            _ => None,
+        }
+        .unwrap();
+        assert_eq!(body, "已写入第3章，约 9 字");
+    }
+
+    #[test]
+    fn shape_chat_history_keeps_last_two_user_turns() {
+        let msgs = vec![
+            Message::user("第一轮"),
+            Message::assistant("a1"),
+            Message::user("第二轮"),
+            Message::assistant("a2"),
+            Message::user("第三轮"),
+            Message::assistant("a3"),
+        ];
+        let out = shape_chat_history(msgs);
+        let users: Vec<String> = out
+            .iter()
+            .filter(|m| is_window_user(m))
+            .map(message_text)
+            .collect();
+        assert_eq!(users, vec!["第二轮".to_string(), "第三轮".to_string()]);
+        assert!(message_text(&out[0]).starts_with(HISTORY_SUMMARY_PREFIX));
+        assert!(message_text(&out[0]).contains("第一轮"));
+        assert!(!out.iter().any(|m| message_text(m) == "第一轮"));
     }
 }

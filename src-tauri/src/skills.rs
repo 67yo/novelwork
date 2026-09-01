@@ -1,14 +1,12 @@
-//! Chat skills via ADK-Rust (`adk-skill`).
-//! Bundled: `{app resources}/skills` (crate `src-tauri/skills` in dev).
-//! User extras: `~/.agents/skills` (same name wins over bundled).
+//! Chat skills：读 `SKILL.md`（bundled + `~/.agents/skills`）。
+//! Bundled: `{app resources}/skills`（crate `src-tauri/skills` in dev）。
+//! User extras: `~/.agents/skills`（同名覆盖内置）。
 
-use adk_rust::skill::{
-    load_skill_index_with_extras, select_skill_prompt_block, select_skills, SelectionPolicy,
-    SkillIndex,
-};
 use parking_lot::RwLock;
 use serde::Serialize;
-use std::path::PathBuf;
+use std::collections::HashSet;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -23,6 +21,52 @@ const MAX_INJECT_CHARS: usize = 8_000;
 /// Auto-match threshold: description/name hits, not stray body tokens.
 const AUTO_MIN_SCORE: f32 = 2.5;
 const CACHE_TTL: Duration = Duration::from_secs(30);
+
+#[derive(Debug, Clone)]
+pub struct SkillDocument {
+    pub name: String,
+    pub description: String,
+    pub path: PathBuf,
+    pub trigger: bool,
+    pub tags: Vec<String>,
+    pub hint: Option<String>,
+    pub body: String,
+}
+
+impl SkillDocument {
+    pub fn engineer_prompt_block(&self, max_chars: usize) -> String {
+        let mut body = self.body.clone();
+        if body.chars().count() > max_chars {
+            body = body.chars().take(max_chars).collect();
+        }
+        format!("[skill:{}]\n{}\n[/skill]", self.name, body)
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct SkillIndex {
+    skills: Vec<SkillDocument>,
+}
+
+impl SkillIndex {
+    pub fn skills(&self) -> &[SkillDocument] {
+        &self.skills
+    }
+
+    pub fn find_by_name(&self, name: &str) -> Option<&SkillDocument> {
+        self.skills.iter().find(|s| s.name == name)
+    }
+}
+
+pub struct SelectionPolicy {
+    pub top_k: usize,
+    pub min_score: f32,
+}
+
+pub struct SkillMatch<'a> {
+    pub score: f32,
+    pub skill: &'a SkillDocument,
+}
 
 struct Cache {
     index: Arc<SkillIndex>,
@@ -61,7 +105,7 @@ pub fn bundled_skills_dir() -> PathBuf {
     BUNDLED_DIR.get().cloned().unwrap_or_else(crate_skills_dir)
 }
 
-/// User dir first so same-name skills override bundled (ADK keeps first).
+/// User dir first so same-name skills override bundled.
 fn skill_extra_dirs() -> Vec<PathBuf> {
     [agents_skills_dir(), bundled_skills_dir()]
         .into_iter()
@@ -71,6 +115,197 @@ fn skill_extra_dirs() -> Vec<PathBuf> {
 
 fn invalidate_cache() {
     *CACHE.write() = None;
+}
+
+fn discover_skill_files(root: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let Ok(rd) = fs::read_dir(&dir) else {
+            continue;
+        };
+        for e in rd.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                stack.push(p);
+            } else if p.file_name().and_then(|n| n.to_str()) == Some("SKILL.md") {
+                out.push(p);
+            }
+        }
+    }
+    out
+}
+
+fn parse_frontmatter(content: &str) -> (std::collections::HashMap<String, String>, String) {
+    let t = content.trim_start();
+    if !t.starts_with("---") {
+        return (Default::default(), content.to_string());
+    }
+    let rest = t.trim_start_matches("---");
+    let Some(end) = rest.find("\n---") else {
+        return (Default::default(), content.to_string());
+    };
+    let yaml = &rest[..end];
+    let body = rest[end + 4..].trim_start_matches('-').trim_start().to_string();
+    let mut map = std::collections::HashMap::new();
+    let mut list_key: Option<String> = None;
+    let mut list_vals: Vec<String> = Vec::new();
+    let flush_list = |map: &mut std::collections::HashMap<String, String>,
+                      list_key: &mut Option<String>,
+                      list_vals: &mut Vec<String>| {
+        if let Some(k) = list_key.take() {
+            map.insert(k, list_vals.join(","));
+            list_vals.clear();
+        }
+    };
+    for line in yaml.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if let Some(item) = line.strip_prefix("- ") {
+            if list_key.is_some() {
+                list_vals.push(item.trim().trim_matches('"').to_string());
+            }
+            continue;
+        }
+        flush_list(&mut map, &mut list_key, &mut list_vals);
+        let Some((k, v)) = line.split_once(':') else {
+            continue;
+        };
+        let k = k.trim().to_string();
+        let v = v.trim().trim_matches('"').to_string();
+        if v.is_empty() {
+            list_key = Some(k);
+        } else {
+            map.insert(k, v);
+        }
+    }
+    flush_list(&mut map, &mut list_key, &mut list_vals);
+    (map, body)
+}
+
+fn parse_skill_md(path: &Path, content: &str) -> Option<SkillDocument> {
+    let (fm, body) = parse_frontmatter(content);
+    let fallback = path
+        .parent()
+        .and_then(|p| p.file_name())
+        .and_then(|n| n.to_str())
+        .unwrap_or("skill");
+    let name = fm
+        .get("name")
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .unwrap_or(fallback)
+        .to_string();
+    let description = fm.get("description").cloned().unwrap_or_default();
+    let trigger = matches!(
+        fm.get("trigger").map(|s| s.as_str()),
+        Some("true") | Some("True") | Some("yes") | Some("1")
+    );
+    let tags = fm
+        .get("tags")
+        .map(|s| {
+            s.split(',')
+                .map(|t| t.trim().to_string())
+                .filter(|t| !t.is_empty())
+                .collect()
+        })
+        .unwrap_or_default();
+    let hint = fm
+        .get("hint")
+        .cloned()
+        .filter(|s| !s.is_empty());
+    Some(SkillDocument {
+        name,
+        description,
+        path: path.to_path_buf(),
+        trigger,
+        tags,
+        hint,
+        body,
+    })
+}
+
+pub fn load_skill_index_with_extras(
+    _root: &Path,
+    extra_dirs: &[PathBuf],
+) -> Result<SkillIndex, String> {
+    let mut skills = Vec::new();
+    let mut seen = HashSet::new();
+    for dir in extra_dirs {
+        if !dir.is_dir() {
+            continue;
+        }
+        for path in discover_skill_files(dir) {
+            let Ok(content) = fs::read_to_string(&path) else {
+                continue;
+            };
+            let Some(doc) = parse_skill_md(&path, &content) else {
+                continue;
+            };
+            if !seen.insert(doc.name.clone()) {
+                continue;
+            }
+            skills.push(doc);
+        }
+    }
+    skills.sort_by(|a, b| a.name.cmp(&b.name).then_with(|| a.path.cmp(&b.path)));
+    Ok(SkillIndex { skills })
+}
+
+fn tokenize(s: &str) -> HashSet<String> {
+    s.split(|c: char| !c.is_alphanumeric() && c != '-' && c != '_')
+        .map(|t| t.to_ascii_lowercase())
+        .filter(|t| t.chars().count() >= 2)
+        .collect()
+}
+
+pub fn select_skills<'a>(
+    index: &'a SkillIndex,
+    query: &str,
+    policy: &SelectionPolicy,
+) -> Vec<SkillMatch<'a>> {
+    if policy.top_k == 0 {
+        return Vec::new();
+    }
+    let q = tokenize(query);
+    if q.is_empty() {
+        return Vec::new();
+    }
+    let mut scored: Vec<SkillMatch<'a>> = index
+        .skills()
+        .iter()
+        .filter_map(|skill| {
+            let name = tokenize(&skill.name);
+            let desc = tokenize(&skill.description);
+            let body = tokenize(&skill.body);
+            let tags: HashSet<String> = skill.tags.iter().flat_map(|t| tokenize(t)).collect();
+            let mut score = 0.0;
+            for token in &q {
+                if name.contains(token) {
+                    score += 4.0;
+                }
+                if desc.contains(token) {
+                    score += 2.5;
+                }
+                if tags.contains(token) {
+                    score += 2.0;
+                }
+                if body.contains(token) {
+                    score += 1.0;
+                }
+            }
+            (score >= policy.min_score).then_some(SkillMatch { score, skill })
+        })
+        .collect();
+    scored.sort_by(|a, b| {
+        b.score
+            .total_cmp(&a.score)
+            .then_with(|| a.skill.name.cmp(&b.skill.name))
+    });
+    scored.truncate(policy.top_k);
+    scored
 }
 
 fn load_index() -> Option<Arc<SkillIndex>> {
@@ -86,7 +321,6 @@ fn load_index() -> Option<Arc<SkillIndex>> {
     if extras.is_empty() {
         return None;
     }
-    // Pass dirs as extras so nested `*/SKILL.md` are walked (root `.skills/` may be absent).
     let index = load_skill_index_with_extras(&extras[0], &extras).ok()?;
     let arc = Arc::new(index);
     *CACHE.write() = Some(Cache {
@@ -235,7 +469,7 @@ pub fn list_previews() -> SkillsPreview {
     }
 }
 
-/// Settings 试匹配：与 Chat 注入同一套策略（含 `@name`）。
+/// Settings 试匹配：`/name` 或 `@name` 即命中；纯文本只提示需显式调用（Chat 不自动注入）。
 pub fn preview_match(query: &str) -> SkillMatchPreview {
     let q = query.trim();
     if q.is_empty() {
@@ -267,26 +501,15 @@ pub fn preview_match(query: &str) -> SkillMatchPreview {
     let policy = SelectionPolicy {
         top_k: 1,
         min_score: AUTO_MIN_SCORE,
-        include_tags: vec![],
-        exclude_tags: vec![],
     };
     let hits = select_skills(index.as_ref(), q, &policy);
     if let Some(m) = hits.into_iter().find(|h| skill_listed(&h.skill.name)) {
-        if let Some(doc) = index.find_by_id(&m.skill.id) {
-            if doc.trigger {
-                return SkillMatchPreview {
-                    matched: false,
-                    name: Some(m.skill.name),
-                    score: Some(m.score),
-                    via: "trigger_only".into(),
-                };
-            }
-        }
+        // Chat 只在 /name 或 @name 时注入；试匹配仍提示命中了哪个 skill。
         return SkillMatchPreview {
-            matched: true,
-            name: Some(m.skill.name),
+            matched: false,
+            name: Some(m.skill.name.clone()),
             score: Some(m.score),
-            via: "auto".into(),
+            via: "trigger_only".into(),
         };
     }
     SkillMatchPreview {
@@ -331,10 +554,8 @@ pub fn as_at_skill_invoke(text: &str) -> Option<String> {
 }
 
 
-/// If a skill matches, return `(skill_name, user_text_with_skill_block)`.
-///
-/// - `@name …` forces that skill (also works for `trigger: true` skills).
-/// - Otherwise lexical auto-select (`min_score` 2.5); skips `trigger`-only skills.
+/// If the user explicitly invoked a skill (`/name` or `@name`), return
+/// `(skill_name, user_text_with_skill_block)`. No lexical auto-inject.
 pub fn maybe_inject_skill(user_text: &str) -> Option<(String, String)> {
     let index = load_index()?;
     if index.skills().is_empty() {
@@ -342,32 +563,13 @@ pub fn maybe_inject_skill(user_text: &str) -> Option<(String, String)> {
     }
 
     let invoke_text = as_at_skill_invoke(user_text).unwrap_or_else(|| user_text.to_string());
-    if let Some(name) = parse_skill_name(&invoke_text) {
-        if skill_listed(&name) {
-            if let Some(doc) = index.find_by_name(&name) {
-                let block = doc.engineer_prompt_block(MAX_INJECT_CHARS);
-                return Some((doc.name.clone(), format!("{block}\n\n{invoke_text}")));
-            }
-        }
-    }
-
-    let policy = SelectionPolicy {
-        top_k: 1,
-        min_score: AUTO_MIN_SCORE,
-        include_tags: vec![],
-        exclude_tags: vec![],
-    };
-    let (m, block) = select_skill_prompt_block(index.as_ref(), user_text, &policy, MAX_INJECT_CHARS)?;
-    if !skill_listed(&m.skill.name) {
+    let name = parse_skill_name(&invoke_text)?;
+    if !skill_listed(&name) {
         return None;
     }
-    // trigger-only skills require @name
-    if let Some(doc) = index.find_by_id(&m.skill.id) {
-        if doc.trigger {
-            return None;
-        }
-    }
-    Some((m.skill.name.clone(), format!("{block}\n\n{user_text}")))
+    let doc = index.find_by_name(&name)?;
+    let block = doc.engineer_prompt_block(MAX_INJECT_CHARS);
+    Some((doc.name.clone(), format!("{block}\n\n{invoke_text}")))
 }
 
 #[cfg(test)]
@@ -389,6 +591,17 @@ mod tests {
     }
 
     #[test]
+    fn injects_only_on_explicit_slash_or_at() {
+        assert!(maybe_inject_skill("生成第 19 章正文").is_none());
+        assert!(maybe_inject_skill("写小说第一章").is_none());
+        let hit = maybe_inject_skill("/novel 生成第 1 章").expect("bundled /novel");
+        assert_eq!(hit.0, "novel");
+        assert!(hit.1.contains("get_chapter_write_context"));
+        let at = maybe_inject_skill("@novel get_selected_card").expect("@novel");
+        assert_eq!(at.0, "novel");
+    }
+
+    #[test]
     fn loads_skill_md_from_extra_dir() {
         let root = std::env::temp_dir().join(format!("novework-skill-test-{}", std::process::id()));
         let skill_dir = root.join("my-skill");
@@ -404,10 +617,8 @@ mod tests {
         let policy = SelectionPolicy {
             top_k: 1,
             min_score: 0.1,
-            include_tags: vec![],
-            exclude_tags: vec![],
         };
-        let hits = adk_rust::skill::select_skills(&index, "write demo chapter outline", &policy);
+        let hits = select_skills(&index, "write demo chapter outline", &policy);
         assert_eq!(hits[0].skill.name, "demo-skill");
         let _ = fs::remove_dir_all(&root);
     }
@@ -454,6 +665,7 @@ mod tests {
             "get_character_card",
             "get_chapter_content",
             "get_chapter_info",
+            "get_chapter_write_context",
             "set_chapter_content",
             "get_chapter_shots",
             "set_chapter_shots",

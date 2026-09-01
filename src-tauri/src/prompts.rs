@@ -364,7 +364,7 @@ pub fn generate_chapter_system(
             "你是强约束小说写作引擎 Novel Work。生成本章时必须同时遵守：\n\
              1）全书故事简介与根节点关联人物卡（总体设定参考，勿偏离）；\n\
              2）前序章节的大纲与章节记忆（若有）：已是既定事实与因果，本章必须衔接，严禁推翻、改写或无视记忆中的人物状态/承诺/事件结果；\n\
-             3）本章简纲（主线走向）与本章细纲（分条场景要点）：**正文从细纲扩充**，简纲保主线；细纲每条须在正文中实际发生或明确推进；\n\
+             3）本章简纲（主线走向）与本章细纲（分条场景要点）：**正文从细纲扩充**，简纲保主线；细纲每条须在正文中实际发生或明确推进。按条数均分篇幅，瞄准目标中位，宁可略少不可超上限；禁止把一条细纲扩成半章；\n\
              4）本章已链接人物卡（性格、身份、行事风格、关系，言行不得出戏）；\n\
              5）本章已链接剧情卡（含根节点贯穿剧情）：卡内要点/补充正文是本章情节来源之一，须结合大纲写入正文，使事件落地，禁止只点名不推进。\n\
              6）本章已链接知识卡（写作硬约束/知识储备：手法节奏、文风语气、用词与禁用词、关键词与专名替换、视角时态、对话与修辞等；须严格遵守 extracted，空则遵守 extract_prompt/outline；禁止另起风格）。\n\
@@ -375,14 +375,14 @@ pub fn generate_chapter_system(
              小说：《{title}》\n简介：{synopsis}\n\
              【硬性篇幅】以树根节点每章目标为准：正文非空白字符数目标 {wmin}–{wmax} 字，允许上下浮动 60 字\
              （有效区间 {wmin_lo}–{wmax_hi}）。上下限相同时按该单点目标 ±60。\
-             **禁止低于 {wmin_lo}，禁止超过 {wmax_hi}**。写完自行点数，偏短续写、偏长删冗，落在有效区间内再交卷。"
+             **禁止低于 {wmin_lo}，禁止超过 {wmax_hi}**。瞄准区间中位一次交卷。偏短只补场面、偏长只删冗，**禁止整章重写**。"
         )
     } else {
         format!(
             "You are Novel Work, a strongly constrained novel-writing engine. When generating this chapter you MUST obey:\n\
              1) Novel synopsis and root-linked character cards (global setting — do not contradict);\n\
              2) Prior chapter outlines + chapter memory (if any): established facts/causality—this chapter must continue them; never overturn, rewrite, or ignore remembered states/promises/outcomes;\n\
-             3) Brief outline (arc) + detailed outline (scene beats): **expand body from the detailed outline**; every detailed beat must land; brief keeps the arc;\n\
+             3) Brief outline (arc) + detailed outline (scene beats): **expand body from the detailed outline**; every detailed beat must land; brief keeps the arc. Split the word budget across beats, aim for the midpoint, slightly under max; do not expand one beat into half a chapter;\n\
              4) Chapter-linked character cards (traits, role, style — stay in character);\n\
              5) Linked plot cards (incl. root book-wide plots): their beats/extra text are chapter plot sources—combine with the outline and make events land in the body; do not name-drop without advancing them.\n\
              6) Chapter-linked knowledge cards (HARD craft constraints: technique/pacing, style/tone, diction/banned words, keyword & proper-noun substitution, POV/tense, dialogue/rhetoric, etc.—follow extracted; else extract_prompt/outline; do not invent another style).\n\
@@ -393,7 +393,7 @@ pub fn generate_chapter_system(
              Novel: “{title}”\nSynopsis: {synopsis}\n\
              [Hard length] Root per-chapter target: {wmin}–{wmax} non-whitespace chars, ±60 float allowed \
              (valid band {wmin_lo}–{wmax_hi}). If min=max, that single target ±60. \
-             **Must not go below {wmin_lo} or above {wmax_hi}.** Count before submit; expand if short, trim if long."
+             **Must not go below {wmin_lo} or above {wmax_hi}.** Aim for the midpoint in one pass. If short, add scenes; if long, trim — **do not rewrite the whole chapter.**"
         )
     };
     format!("{body}\n{}", loc.language_rule())
@@ -435,16 +435,16 @@ pub fn generate_chapter_user(
             "{root_ref}\n\n{brief}{hist}{chapter_info}\n\n{cards}\n\n{contract}\n\
              请在衔接前序记忆/大纲与预生成条件的前提下，严格按「必须落地」列表**重新生成本章正文**（Markdown）。\n\
              **禁止参考本章已有正文**；勿续写或改写旧稿。\n\
-             篇幅硬约束：目标 {wmin}–{wmax}，允许 ±60（有效 {wmin_lo}–{wmax_hi}）；**禁止低于 {wmin_lo} 或超过 {wmax_hi}**。\n\
-             只输出正文，不要输出清单或自我评分。缺项或字数越界禁止交卷。"
+             篇幅硬约束：目标 {wmin}–{wmax}，允许 ±60（有效 {wmin_lo}–{wmax_hi}）。瞄准中位一次写完；偏长只删冗、偏短只补场面，**禁止整章重写**。\n\
+             只输出正文，不要输出清单或自我评分。"
         )
     } else {
         format!(
             "{root_ref}\n\n{brief}{hist}{chapter_info}\n\n{cards}\n\n{contract}\n\
              Continue prior memory/outlines and generate conditions, then **write this chapter’s body from scratch** (Markdown) covering every Must-land item.\n\
              **Do not use any existing body of this chapter**; do not continue or revise an old draft.\n\
-             Hard length: target {wmin}–{wmax}, ±60 (band {wmin_lo}–{wmax_hi}); **must not go below {wmin_lo} or above {wmax_hi}**.\n\
-             Output body only — no checklist or self-score. Do not submit with gaps or out-of-band length."
+             Hard length: target {wmin}–{wmax}, ±60 (band {wmin_lo}–{wmax_hi}). Aim for the midpoint in one pass; trim or patch — **do not rewrite the whole chapter.**\n\
+             Output body only — no checklist or self-score."
         )
     }
 }
@@ -632,7 +632,7 @@ pub fn refine_chapter_user(
                  ——— ③ 当前章已生成正文（**底稿：必须在此基础上修改**；对照①梳理，不大改剧情）———\n{current}\n\n\
                  请先通读①中各章完整正文，再**以③原文为底稿**对照②中的剧情卡、精修条件做修订，输出精修后的完整当前章 Markdown（不要输出历史章）。\n\
                  **禁止丢弃③另起炉灶**；改动应克制；若剧情卡要点未落地可小幅补写。\n\
-                 【硬性篇幅】目标 {wmin}–{wmax}，允许 ±60（有效 {wmin_lo}–{wmax_hi}）；**禁止低于 {wmin_lo} 或超过 {wmax_hi}**；偏短续写、偏长删冗，落在有效区间再交卷。\n\
+                 【硬性篇幅】目标 {wmin}–{wmax}，允许 ±60（有效 {wmin_lo}–{wmax_hi}）。一轮内删冗或补场面即可，**禁止为字数整章重写**。\n\
                  文末用列表列出本次修正点，按类归并：历史衔接 / 剧情卡落地 / 情节错误 / 人物关系 / 结构 / 语句 / 字数。"
             )
         } else {
@@ -643,7 +643,7 @@ pub fn refine_chapter_user(
                  ——— ③ 当前章已生成正文（**底稿：必须在此基础上修改**；对照①梳理，不大改剧情）———\n{current}\n\n\
                  请先依据①中的大纲与记忆要点核对因果与人设，再**以③原文为底稿**对照②中的剧情卡、精修条件做修订，输出精修后的完整当前章 Markdown（不要输出历史章）。\n\
                  **禁止丢弃③另起炉灶**；改动应克制；若剧情卡要点未落地可小幅补写。\n\
-                 【硬性篇幅】目标 {wmin}–{wmax}，允许 ±60（有效 {wmin_lo}–{wmax_hi}）；**禁止低于 {wmin_lo} 或超过 {wmax_hi}**；偏短续写、偏长删冗，落在有效区间再交卷。\n\
+                 【硬性篇幅】目标 {wmin}–{wmax}，允许 ±60（有效 {wmin_lo}–{wmax_hi}）。一轮内删冗或补场面即可，**禁止为字数整章重写**。\n\
                  文末用列表列出本次修正点，按类归并：历史衔接 / 剧情卡落地 / 情节错误 / 人物关系 / 结构 / 语句 / 字数。"
             )
         }
@@ -655,7 +655,7 @@ pub fn refine_chapter_user(
              ——— ③ Current chapter body (**base draft — edit this in place**; refine against ①; no plot overhaul) ———\n{current}\n\n\
              Read every prior chapter body in ① first, then **revise ③ in place** against ①, ② (incl. plot cards), and refine conditions. Output only the refined current chapter in Markdown.\n\
              **Do not discard ③ and rewrite from scratch.** Lightly add missing plot-card beats if needed.\n\
-             [Hard length] target {wmin}–{wmax}, ±60 (band {wmin_lo}–{wmax_hi}); **must not go below {wmin_lo} or above {wmax_hi}**; expand if short, trim if long.\n\
+             [Hard length] target {wmin}–{wmax}, ±60 (band {wmin_lo}–{wmax_hi}). One-pass trim or patch; **do not rewrite the whole chapter for length.**\n\
              End with a bullet list of fixes by category: continuity / plot-card landing / plot errors / relationships / structure / prose / length."
         )
     } else {
@@ -666,7 +666,7 @@ pub fn refine_chapter_user(
              ——— ③ Current chapter body (**base draft — edit this in place**; refine against ①; no plot overhaul) ———\n{current}\n\n\
              Use outlines and memory in ①, then **revise ③ in place** against ①, ② (incl. plot cards), and refine conditions. Output only the refined current chapter in Markdown.\n\
              **Do not discard ③ and rewrite from scratch.** Lightly add missing plot-card beats if needed.\n\
-             [Hard length] target {wmin}–{wmax}, ±60 (band {wmin_lo}–{wmax_hi}); **must not go below {wmin_lo} or above {wmax_hi}**; expand if short, trim if long.\n\
+             [Hard length] target {wmin}–{wmax}, ±60 (band {wmin_lo}–{wmax_hi}). One-pass trim or patch; **do not rewrite the whole chapter for length.**\n\
              End with a bullet list of fixes by category: continuity / plot-card landing / plot errors / relationships / structure / prose / length."
         )
     }
@@ -1753,24 +1753,35 @@ pub fn generate_worldview_slot_chat_system(loc: PromptLocale, json_key: &str) ->
     }
 }
 
-/// 简纲 → 细纲（分条场景要点）
-pub fn generate_detailed_outline_system(loc: PromptLocale) -> String {
+/// 简纲 → 细纲（分条场景要点；条数随每章字数走）
+pub fn generate_detailed_outline_system(
+    loc: PromptLocale,
+    wmin: u32,
+    wmax: u32,
+    beats_lo: u32,
+    beats_hi: u32,
+    words_per: u32,
+) -> String {
     let body = if loc.is_zh() {
-        "你是 Novel Work 细纲引擎。任务：把本章**简纲**进化为可直接扩写正文的**细纲**列表。\n\
-         规则：\n\
-         1）细纲每条是一个可落地的场景/节拍（谁、做什么、结果或转折），按时间顺序；\n\
-         2）覆盖简纲全部关键点，可合理拆细，但禁止另起无关主线或推翻简纲；\n\
-         3）结合已链接人物/剧情/知识卡，使细纲可写、可验收；\n\
-         4）条数通常 5–12；过短则拆，过碎则合并；\n\
-         5）只输出 JSON：{\"detailed_outline\":[\"…\",\"…\"]}，不要 Markdown 围栏或其它字段。"
+        format!(
+            "你是 Novel Work 细纲引擎。任务：把本章**简纲**进化为可直接扩写正文的**细纲**列表。\n\
+             规则：\n\
+             1）细纲每条是一个可落地的场景/节拍（谁、做什么、结果或转折），按时间顺序；\n\
+             2）覆盖简纲全部关键点；宁可合并，禁止另起无关主线或推翻简纲；\n\
+             3）结合已链接人物/剧情/知识卡，使细纲可写、可验收；\n\
+             4）本章正文目标 {wmin}–{wmax} 字。细纲必须 {beats_lo}–{beats_hi} 条（不得更多）：每条对应约 {words_per} 字正文的一个场面。条数过多是超字主因；过碎则合并。\n\
+             5）只输出 JSON：{{\"detailed_outline\":[\"…\",\"…\"]}}，不要 Markdown 围栏或其它字段。"
+        )
     } else {
-        "You are Novel Work’s detailed-outline engine. Evolve the chapter **brief outline** into a **detailed outline** list ready for body expansion.\n\
-         Rules:\n\
-         1) Each item is a landable scene/beat (who, does what, result/turn), in order;\n\
-         2) Cover every key beat of the brief outline; split as needed; do not invent a conflicting arc;\n\
-         3) Honor linked characters/plots/knowledge so beats are writable and checkable;\n\
-         4) Typically 5–12 items;\n\
-         5) Output JSON only: {\"detailed_outline\":[\"…\",\"…\"]} — no markdown fences or extra fields."
+        format!(
+            "You are Novel Work’s detailed-outline engine. Evolve the chapter **brief outline** into a **detailed outline** list ready for body expansion.\n\
+             Rules:\n\
+             1) Each item is a landable scene/beat (who, does what, result/turn), in order;\n\
+             2) Cover every key beat of the brief; merge rather than over-split; do not invent a conflicting arc;\n\
+             3) Honor linked characters/plots/knowledge so beats are writable and checkable;\n\
+             4) Body target {wmin}–{wmax} chars. Use {beats_lo}–{beats_hi} beats (no more): each expands to about {words_per} characters. Too many beats is the main cause of overshoot.\n\
+             5) Output JSON only: {{\"detailed_outline\":[\"…\",\"…\"]}} — no markdown fences or extra fields."
+        )
     };
     format!("{body}\n{}", loc.language_rule())
 }
@@ -1781,6 +1792,11 @@ pub fn generate_detailed_outline_user(
     chapter_info: &str,
     cards: &str,
     user_notes: &str,
+    wmin: u32,
+    wmax: u32,
+    beats_lo: u32,
+    beats_hi: u32,
+    words_per: u32,
 ) -> String {
     let notes = if user_notes.trim().is_empty() {
         String::new()
@@ -1792,11 +1808,13 @@ pub fn generate_detailed_outline_user(
     if loc.is_zh() {
         format!(
             "{root_ref}\n\n{notes}{chapter_info}\n\n{cards}\n\n\
+             篇幅：目标 {wmin}–{wmax} 字 → 细纲 {beats_lo}–{beats_hi} 条，每条扩写约 {words_per} 字。\n\
              请根据本章简纲（及链接卡）输出细纲 JSON：{{\"detailed_outline\":[\"…\"]}}"
         )
     } else {
         format!(
             "{root_ref}\n\n{notes}{chapter_info}\n\n{cards}\n\n\
+             Length: target {wmin}–{wmax} → {beats_lo}–{beats_hi} beats, ~{words_per} chars each.\n\
              From the brief outline (and linked cards), output detailed outline JSON: {{\"detailed_outline\":[\"…\"]}}"
         )
     }

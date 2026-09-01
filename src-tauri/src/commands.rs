@@ -3,7 +3,7 @@ use crate::chapter_memory;
 use crate::db::Db;
 use crate::knowledge::{
     build_knowledge_chunks, fetch_urls_context, load_source, load_source_from_url,
-    with_fetched_url_context, upsert_chunks,
+    with_fetched_url_context,
 };
 use crate::llm;
 use crate::models::*;
@@ -219,12 +219,8 @@ pub fn get_settings(state: State<'_, AppState>) -> Result<SettingsView, String> 
     catalog.deepseek.clear();
     catalog.grok.clear();
     catalog.kimi.clear();
-    if s.gemini_api_key.trim().is_empty() {
-        catalog.gemini.clear();
-    }
-    if s.claude_api_key.trim().is_empty() {
-        catalog.claude.clear();
-    }
+    catalog.gemini.clear();
+    catalog.claude.clear();
     Ok(SettingsView {
         compat_providers: s
             .compat_providers
@@ -232,17 +228,13 @@ pub fn get_settings(state: State<'_, AppState>) -> Result<SettingsView, String> 
             .map(|p| CompatProviderView {
                 id: p.id.clone(),
                 label: p.label.clone(),
-                protocol: p.protocol.clone(),
+                protocol: p.chat_protocol().to_string(),
                 base_url: p.base_url.clone(),
                 api_key_masked: mask_key(&p.api_key),
-                api_key_configured: !p.api_key.trim().is_empty(),
+                api_key_configured: p.is_ready(),
                 models: p.models.clone(),
             })
             .collect(),
-        gemini_api_key_masked: mask_key(&s.gemini_api_key),
-        gemini_api_key_configured: !s.gemini_api_key.trim().is_empty(),
-        claude_api_key_masked: mask_key(&s.claude_api_key),
-        claude_api_key_configured: !s.claude_api_key.trim().is_empty(),
         default_model: s.default_model,
         create_model: s.create_model,
         generate_model: s.generate_model,
@@ -258,6 +250,8 @@ pub fn get_settings(state: State<'_, AppState>) -> Result<SettingsView, String> 
         },
         mcp_enabled: s.mcp_enabled,
         mcp_lan: s.mcp_lan,
+        ai_interaction_log: s.ai_interaction_log,
+        ai_log_dir: crate::ai_log::dir().to_string_lossy().into_owned(),
         comfyui_url: if s.comfyui_url.trim().is_empty() {
             "http://127.0.0.1:8188".into()
         } else {
@@ -299,12 +293,7 @@ pub fn save_settings(
                 id,
                 label,
                 protocol: {
-                    let t = p.protocol.trim();
-                    if t.is_empty() {
-                        "openai".into()
-                    } else {
-                        t.to_string()
-                    }
+                    crate::models::infer_compat_protocol(&p.protocol, &p.base_url).to_string()
                 },
                 base_url: p.base_url.trim().to_string(),
                 api_key,
@@ -317,9 +306,11 @@ pub fn save_settings(
         s.chatgpt_api_key.clear();
         s.grok_api_key.clear();
         s.kimi_api_key.clear();
+        s.gemini_api_key.clear();
+        s.claude_api_key.clear();
     }
-    apply_optional_key(&mut s.gemini_api_key, input.gemini_api_key);
-    apply_optional_key(&mut s.claude_api_key, input.claude_api_key);
+    s.gemini_api_key.clear();
+    s.claude_api_key.clear();
     let set_model = |slot: &mut String, v: Option<String>| {
         if let Some(m) = v {
             if !m.trim().is_empty() {
@@ -363,6 +354,9 @@ pub fn save_settings(
             mcp_changed = true;
         }
     }
+    if let Some(on) = input.ai_interaction_log {
+        s.ai_interaction_log = on;
+    }
     if let Some(u) = input.comfyui_url {
         let u = u.trim().to_string();
         s.comfyui_url = if u.is_empty() {
@@ -381,10 +375,16 @@ pub fn save_settings(
         s.comfyui_image_workflow = w;
     }
     state.db.save_settings(&s).map_err(|e| e.to_string())?;
+    crate::ai_log::set_enabled(s.ai_interaction_log);
     if mcp_changed {
         restart_mcp_from_state(&state);
     }
     get_settings(state)
+}
+
+#[tauri::command]
+pub fn open_ai_log_dir() -> Result<String, String> {
+    crate::ai_log::open_dir().map(|p| p.to_string_lossy().into_owned())
 }
 
 fn restart_mcp_from_state(state: &AppState) {
@@ -440,20 +440,28 @@ pub async fn refresh_model_catalog(state: State<'_, AppState>) -> Result<ModelCa
         .map_err(|e| e.to_string())
 }
 
-/// Probe OpenAI-compat `{base}/models` with a raw key (add-provider flow).
+/// Probe provider `{base}/models` (or protocol-specific list) with a raw key.
 #[tauri::command]
 pub async fn fetch_compat_models(
     base_url: String,
     api_key: String,
+    protocol: Option<String>,
 ) -> Result<Vec<String>, String> {
+    let proto = crate::models::infer_compat_protocol(
+        protocol.as_deref().unwrap_or(""),
+        base_url.trim(),
+    );
     let key = api_key.trim();
-    if key.is_empty() || key.contains('*') {
+    if key.contains('*') {
+        return Err("api key required".into());
+    }
+    if key.is_empty() && !crate::models::protocol_allows_empty_key(proto) {
         return Err("api key required".into());
     }
     if base_url.trim().is_empty() {
         return Err("base url required".into());
     }
-    crate::catalog::fetch_openai_models(base_url.trim(), key)
+    crate::catalog::fetch_provider_models(proto, base_url.trim(), key)
         .await
         .map_err(|e| e.to_string())
 }
@@ -569,7 +577,7 @@ pub async fn delete_knowledge(state: State<'_, AppState>, id: String) -> Result<
     if !book.archived {
         return Err("请先归档后再删除".into());
     }
-    let _ = crate::knowledge::delete_chunks(&id).await;
+    let _ = crate::knowledge_vec::delete_book(&id).await;
     state.db.delete_knowledge(&id).map_err(|e| e.to_string())?;
     let _ = state.db.unlink_knowledge_from_novels(&id);
     Ok(())
@@ -660,7 +668,6 @@ pub(crate) async fn ingest_knowledge_source(
     };
     db.insert_knowledge(&book, &chunks)
         .map_err(|e| e.to_string())?;
-    let _ = upsert_chunks(&book.id, &chunks).await;
     maybe_index_book_embeddings(app, db, &book.id).await?;
     Ok(book)
 }
@@ -670,7 +677,7 @@ async fn maybe_index_book_embeddings(
     db: &crate::db::Db,
     book_id: &str,
 ) -> Result<(), String> {
-    let _ = db.delete_knowledge_embeddings(book_id);
+    let _ = crate::knowledge_vec::delete_book(book_id).await;
     crate::kb_context::index_book_embeddings(db, book_id, app.cloned())
         .await
         .map_err(|e| format!("本地向量索引失败: {e}"))?;
@@ -717,7 +724,7 @@ pub async fn reextract_knowledge(
     if chunks.is_empty() {
         return Err("未能从源文件拆出内容分段".into());
     }
-    let _ = crate::knowledge::delete_chunks(&id).await;
+    let _ = crate::knowledge_vec::delete_book(&id).await;
     state
         .db
         .replace_knowledge_content(
@@ -730,7 +737,7 @@ pub async fn reextract_knowledge(
             &chunks,
         )
         .map_err(|e| e.to_string())?;
-    let _ = upsert_chunks(&id, &chunks).await;
+    maybe_index_book_embeddings(Some(&app), &state.db, &id).await?;
     maybe_index_book_embeddings(Some(&app), &state.db, &id).await?;
     state
         .db
@@ -748,7 +755,7 @@ pub struct KnowledgeIndexStatus {
 }
 
 #[tauri::command]
-pub fn knowledge_index_status(
+pub async fn knowledge_index_status(
     state: State<'_, AppState>,
     book_id: String,
 ) -> Result<KnowledgeIndexStatus, String> {
@@ -757,9 +764,8 @@ pub fn knowledge_index_status(
         .get_knowledge(&book_id)
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "知识库不存在".to_string())?;
-    let embedding_count = state
-        .db
-        .count_knowledge_embeddings(&book_id)
+    let embedding_count = crate::knowledge_vec::count_book(&book_id)
+        .await
         .map_err(|e| e.to_string())?;
     Ok(KnowledgeIndexStatus {
         book_id,
@@ -779,7 +785,7 @@ pub async fn rebuild_knowledge_index(
         .get_knowledge(&book_id)
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "知识库不存在".to_string())?;
-    let _ = state.db.delete_knowledge_embeddings(&book_id);
+    let _ = crate::knowledge_vec::delete_book(&book_id).await;
     let n = crate::kb_context::index_book_embeddings(&state.db, &book_id, Some(app))
         .await
         .map_err(|e| e.to_string())?;
@@ -908,6 +914,65 @@ fn word_tolerance_bounds(wmin: u32, wmax: u32) -> (u32, u32) {
 fn word_count_ok(words: u32, wmin: u32, wmax: u32) -> bool {
     let (lo, hi) = word_tolerance_bounds(wmin, wmax);
     words >= lo && words <= hi
+}
+
+/// 细纲条数 + 每条扩写约字数，使合计贴近目标中位。
+/// 旧规则一律 5–12 条：2000 字章被拆成十几场就会首轮严重超字。
+pub(crate) fn detailed_outline_pace(wmin: u32, wmax: u32) -> (u32, u32, u32) {
+    let (wmin, wmax) = normalize_word_range(wmin, wmax);
+    let mid = wmin.saturating_add(wmax) / 2;
+    // ponytail: ~320 字/场面；升级可按题材改 PER
+    const PER: u32 = 320;
+    let n = (mid / PER).clamp(4, 10);
+    let lo = n.saturating_sub(1).max(4);
+    let hi = (n + 1).min(10);
+    let per = (mid / n).max(180);
+    (lo, hi, per)
+}
+
+pub(crate) fn chapter_length_feedback(words: u32, wmin: u32, wmax: u32) -> serde_json::Value {
+    let (wmin, wmax) = normalize_word_range(wmin, wmax);
+    let in_band = word_count_ok(words, wmin, wmax);
+    let note = if in_band {
+        "字数已在允许区间，禁止再为篇幅改正文。"
+    } else if words > wmax.saturating_add(WORD_COUNT_TOLERANCE) {
+        "偏长：只删冗一次后交卷，禁止整章重写。"
+    } else {
+        "偏短：只补关键场面一次后交卷，禁止整章重写。"
+    };
+    serde_json::json!({
+        "ok": true,
+        "word_count": words,
+        "word_count_min": wmin,
+        "word_count_max": wmax,
+        "in_band": in_band,
+        "ai_guidance": note,
+    })
+}
+
+#[cfg(test)]
+mod outline_pace_tests {
+    use super::{chapter_length_feedback, detailed_outline_pace};
+
+    #[test]
+    fn pace_scales_with_chapter_target() {
+        let (lo, hi, per) = detailed_outline_pace(2000, 3000);
+        assert_eq!((lo, hi), (6, 8));
+        assert!(per >= 300 && per <= 420, "{per}");
+        let (lo4, hi4, _) = detailed_outline_pace(4000, 5000);
+        assert!(hi4 >= hi, "{lo4}-{hi4} vs {lo}-{hi}");
+        assert!(lo4 >= 8, "{lo4}");
+    }
+
+    #[test]
+    fn length_feedback_stops_in_band_rewrite() {
+        let v = chapter_length_feedback(2500, 2000, 3000);
+        assert_eq!(v["in_band"], true);
+        assert!(v["ai_guidance"].as_str().unwrap().contains("禁止再为篇幅"));
+        let over = chapter_length_feedback(5000, 2000, 3000);
+        assert_eq!(over["in_band"], false);
+        assert!(over["ai_guidance"].as_str().unwrap().contains("删冗一次"));
+    }
 }
 
 /// 从用户话里抠每章目标字数（不依赖模型是否吐 JSON）。
@@ -1342,6 +1407,7 @@ fn build_initial_tree(
         nodes,
         edges,
     };
+    crate::write_prompts::ensure_write_prompts_card(&mut tree);
     crate::tree_layout::apply_auto_layout(&mut tree);
     tree
 }
@@ -2134,6 +2200,7 @@ fn root_linked_plots_and_knowledge(tree: &NovelTree, loc: PromptLocale) -> Strin
             }
         }
     }
+    knowledge_ids.retain(|id| !crate::write_prompts::is_write_prompt_excluded_id(tree, id));
 
     let mut plots = String::new();
     for id in &plot_ids {
@@ -2994,8 +3061,9 @@ fn extract_create_json(reply: &str) -> Option<serde_json::Value> {
     None
 }
 
-/// `link_to`：已有节点 id 原样返回；`root` / `novel` / 空串解析为小说根（根 id 不是字面 `"root"`）。
-pub(crate) fn resolve_link_host(tree: &NovelTree, spec: &str) -> Result<String, String> {
+/// 把 Agent 传入的 node_id 收成树上真实 id。
+/// 接受：已有 id、`root`/`novel`、唯一标题、「第N章」/章号（`3` / `三`）。
+pub(crate) fn resolve_node_ref(tree: &NovelTree, spec: &str) -> Result<String, String> {
     let t = spec.trim();
     if tree.nodes.iter().any(|n| n.id == t) {
         return Ok(t.to_string());
@@ -3008,7 +3076,58 @@ pub(crate) fn resolve_link_host(tree: &NovelTree, spec: &str) -> Result<String, 
             .map(|n| n.id.clone())
             .ok_or_else(|| "找不到小说根节点".into());
     }
-    Err(format!("节点不存在: {t}"))
+    let exact: Vec<&TreeNode> = tree.nodes.iter().filter(|n| n.label.trim() == t).collect();
+    if exact.len() == 1 {
+        return Ok(exact[0].id.clone());
+    }
+    if exact.len() > 1 {
+        let ids: Vec<&str> = exact.iter().map(|n| n.id.as_str()).collect();
+        return Err(format!("标题「{t}」对应多个节点：{}", ids.join("、")));
+    }
+    let lower = t.to_lowercase();
+    let ci: Vec<&TreeNode> = tree
+        .nodes
+        .iter()
+        .filter(|n| n.label.trim().to_lowercase() == lower)
+        .collect();
+    if ci.len() == 1 {
+        return Ok(ci[0].id.clone());
+    }
+    // 不要用 extract_small_chapter_nums：失败的 UUID 里常带数字，会误命中章号
+    if let Some(num) = chapter_number_from_label(t).or_else(|| parse_chapter_num_token(t)) {
+        if let Some(id) = existing_chapter_nums(tree).get(&num) {
+            return Ok(id.clone());
+        }
+    }
+    Err(format!(
+        "无法找到节点「{t}」。node_id 须为树上 id，章节也可传「第N章」或唯一标题。{}",
+        chapter_id_hint(tree)
+    ))
+}
+
+fn chapter_id_hint(tree: &NovelTree) -> String {
+    let chs = sorted_chapter_nodes(tree);
+    if chs.is_empty() {
+        return "树上暂无章节。".into();
+    }
+    let n = chs.len();
+    let shown: Vec<String> = chs
+        .into_iter()
+        .take(12)
+        .map(|c| format!("{} ({})", c.label, c.id))
+        .collect();
+    let extra = if n > 12 {
+        format!(" 等共{n}章")
+    } else {
+        String::new()
+    };
+    format!("可用章节：{}{extra}", shown.join("；"))
+}
+
+/// `link_to`：已有节点 id 原样返回；`root` / `novel` / 空串解析为小说根（根 id 不是字面 `"root"`）。
+/// 也接受唯一标题与「第N章」。
+pub(crate) fn resolve_link_host(tree: &NovelTree, spec: &str) -> Result<String, String> {
+    resolve_node_ref(tree, spec)
 }
 
 /// 公共知识卡挂到哪：章/根用自身；人物/剧情/知识卡用其宿主；否则小说根。
@@ -3252,6 +3371,9 @@ pub fn get_tree(novel_id: String) -> Result<NovelTree, String> {
     if repair_volume_payload(&mut tree) {
         changed = true;
     }
+    if crate::write_prompts::ensure_write_prompts_card(&mut tree) {
+        changed = true;
+    }
     if changed {
         let _ = save_tree(tree.clone());
     }
@@ -3333,6 +3455,16 @@ pub(crate) fn delete_tree_card_inner(
         .ok_or_else(|| "节点不存在".to_string())?;
     if matches!(kind, NodeKind::Novel) {
         return Err("根节点不能删除".into());
+    }
+    if matches!(kind, NodeKind::Knowledge)
+        && tree.nodes.iter().any(|n| {
+            n.id == node_id
+                && crate::write_prompts::is_write_prompts_slot(crate::write_prompts::knowledge_slot(
+                    n,
+                ))
+        })
+    {
+        return Err("生成/精修卡不能删除".into());
     }
 
     // 删分卷：卷下首章改挂到根（或分卷上游），不删章节正文
@@ -3580,7 +3712,7 @@ pub fn list_all_chapter_memory(
     list_all_chapter_memory_inner(&state.db, &novel_id)
 }
 
-/// 手动覆盖/清空某章记忆（`items` 为空则清除）。同步 SQLite + Lance。
+/// 手动覆盖/清空某章记忆（`items` 为空则清除）。同步 SQLite 列表 + Lance 向量。
 pub async fn set_chapter_memory_inner(
     db: &Db,
     novel_id: &str,
@@ -3619,6 +3751,7 @@ fn chapter_context(
     novel_id: &str,
     node_id: &str,
     loc: PromptLocale,
+    slim: bool,
 ) -> (String, String) {
     let labels = prompts::chapter_context_labels(loc);
     let node = tree.nodes.iter().find(|n| n.id == node_id);
@@ -3639,7 +3772,7 @@ fn chapter_context(
             plot_ids.push(pid.clone());
         }
     }
-    let knowledge_ids = crate::tree_links::chapter_effective_knowledge_ids(tree, node_id);
+    let knowledge_ids = crate::tree_links::chapter_write_knowledge_ids(tree, node_id);
 
     for e in &tree.edges {
         if e.source != node_id && e.target != node_id {
@@ -3766,9 +3899,14 @@ fn chapter_context(
                 ""
             };
             if let Some(c) = &n.character {
+                let cap = if slim {
+                    400
+                } else {
+                    crate::character_fmt::CHARACTER_INJECT_CAP
+                };
                 let body = crate::kb_context::truncate_chars(
                     &crate::character_fmt::format_character_full(&n.label, c),
-                    crate::character_fmt::CHARACTER_INJECT_CAP,
+                    cap,
                 );
                 characters.push_str(&format!(
                     "- {}：{}{}\n{}\n",
@@ -3869,6 +4007,19 @@ fn chapter_context(
                 cast.join("、")
             };
             // ponytail: cap plot body so one long POV doesn't blow the prompt
+            if slim {
+                if loc.is_zh() {
+                    plots.push_str(&format!(
+                        "- 「{}」{bookwide}\n  剧情要点：{outline_text}\n  关联人物：{cast_text}\n",
+                        n.label
+                    ));
+                } else {
+                    plots.push_str(&format!(
+                        "- “{}”{bookwide}\n  Beats: {outline_text}\n  Cast: {cast_text}\n",
+                        n.label
+                    ));
+                }
+            } else {
             let body = get_chapter(novel_id.to_string(), id.clone()).unwrap_or_default();
             let body_snip: String = body.chars().take(2000).collect();
             if loc.is_zh() {
@@ -3887,6 +4038,7 @@ fn chapter_context(
                 if !body_snip.trim().is_empty() {
                     plots.push_str(&format!("  Plot body / notes:\n{body_snip}\n"));
                 }
+            }
             }
         }
     }
@@ -3956,6 +4108,12 @@ fn chapter_context(
                 6
             };
             kn_rows.push((pri, n.label.clone(), body, per));
+        }
+    }
+    if slim {
+        inject_bumps = 0;
+        for row in &mut kn_rows {
+            row.3 = crate::kb_context::KNOWLEDGE_CARD_EXTRACT_CAP;
         }
     }
     kn_rows.sort_by_key(|r| r.0);
@@ -4098,6 +4256,37 @@ fn root_generate_reference(tree: &NovelTree, synopsis: &str, loc: PromptLocale) 
         format!("【全书故事简介】\n{syn}\n{extra}\n【根节点关联人物卡（参考）】\n{characters}")
     } else {
         format!("[Novel synopsis]\n{syn}\n{extra}\n[Root-linked character cards (reference)]\n{characters}")
+    }
+}
+
+/// 细纲：只要简介/总纲，不重复灌根人物全文（人物已在 chapter_context slim 里）。
+fn root_brief_for_outline(tree: &NovelTree, synopsis: &str, loc: PromptLocale) -> String {
+    let root = tree
+        .nodes
+        .iter()
+        .find(|n| matches!(n.kind, NodeKind::Novel));
+    let root_outline = root.map(|n| n.outline.as_str()).unwrap_or("");
+    let syn = if synopsis.trim().is_empty() {
+        if loc.is_zh() {
+            "（暂无简介）"
+        } else {
+            "(no synopsis)"
+        }
+    } else {
+        synopsis
+    };
+    let extra = if root_outline.trim().is_empty() || root_outline.trim() == synopsis.trim()
+    {
+        String::new()
+    } else if loc.is_zh() {
+        format!("根节点补充说明：\n{root_outline}\n")
+    } else {
+        format!("Root notes:\n{root_outline}\n")
+    };
+    if loc.is_zh() {
+        format!("【全书故事简介】\n{syn}\n{extra}")
+    } else {
+        format!("[Novel synopsis]\n{syn}\n{extra}")
     }
 }
 
@@ -4815,15 +5004,24 @@ pub(crate) async fn generate_detailed_outline_inner(
             user_notes,
         ],
     );
-    let root_ref = root_generate_reference(&tree, &novel.synopsis, loc);
-    let (chapter_info, cards) = chapter_context(&tree, novel_id, node_id, loc);
-    let system = prompts::generate_detailed_outline_system(loc);
+    let root_ref = root_brief_for_outline(&tree, &novel.synopsis, loc);
+    let (chapter_info, cards) = chapter_context(&tree, novel_id, node_id, loc, true);
+    let (wmin, wmax) = root_chapter_word_target(&tree, &novel);
+    let (beats_lo, beats_hi, words_per) = detailed_outline_pace(wmin, wmax);
+    let system = prompts::generate_detailed_outline_system(
+        loc, wmin, wmax, beats_lo, beats_hi, words_per,
+    );
     let user = prompts::generate_detailed_outline_user(
         loc,
         &root_ref,
         &chapter_info,
         &cards,
         user_notes,
+        wmin,
+        wmax,
+        beats_lo,
+        beats_hi,
+        words_per,
     );
     let model_name = llm_model(&settings);
     let (reply, _mock) = llm_complete_ex(
@@ -4931,8 +5129,8 @@ pub(crate) async fn regenerate_detailed_outline_item_inner(
             items.get(index).map(|s| s.as_str()).unwrap_or(""),
         ],
     );
-    let root_ref = root_generate_reference(&tree, &novel.synopsis, loc);
-    let (chapter_info, cards) = chapter_context(&tree, novel_id, node_id, loc);
+    let root_ref = root_brief_for_outline(&tree, &novel.synopsis, loc);
+    let (chapter_info, cards) = chapter_context(&tree, novel_id, node_id, loc, true);
     let neighbors = items
         .iter()
         .enumerate()
@@ -5168,8 +5366,15 @@ pub async fn generate_chapter(
             user_brief.as_str(),
         ],
     );
+    let write_brief = crate::write_prompts::merge_user_brief(
+        &user_brief,
+        &crate::write_prompts::write_prompt_append(
+            &tree,
+            crate::write_prompts::WritePromptKind::Generate,
+        ),
+    );
     let root_ref = root_generate_reference(&tree, &novel.synopsis, loc);
-    let (chapter_info, cards) = chapter_context(&tree, &novel_id, &node_id, loc);
+    let (chapter_info, cards) = chapter_context(&tree, &novel_id, &node_id, loc, false);
     let land_beats = collect_land_beats(&tree, &novel_id, &node_id);
     let contract = chapter_constraints::format_contract(loc.is_zh(), &land_beats);
     let chapters = sorted_chapter_nodes(&tree);
@@ -5210,7 +5415,7 @@ pub async fn generate_chapter(
         &chapter_info,
         &cards,
         &contract,
-        &user_brief,
+        &write_brief,
         wmin,
         wmax,
     );
@@ -5342,7 +5547,7 @@ pub async fn refine_chapter(
             current.as_str(),
         ],
     );
-    let (chapter_info, cards) = chapter_context(&tree, &novel_id, &node_id, loc);
+    let (chapter_info, cards) = chapter_context(&tree, &novel_id, &node_id, loc, false);
 
     // previous chapters along chapter chain order by y
     let mut chapters: Vec<_> = tree
@@ -5387,7 +5592,13 @@ pub async fn refine_chapter(
         wmax,
         full_body,
     );
-    let brief = user_brief.unwrap_or_default();
+    let brief = crate::write_prompts::merge_user_brief(
+        &user_brief.unwrap_or_default(),
+        &crate::write_prompts::write_prompt_append(
+            &tree,
+            crate::write_prompts::WritePromptKind::Refine,
+        ),
+    );
     let user = prompts::refine_chapter_user(
         loc,
         linked_n,
@@ -5638,7 +5849,7 @@ pub async fn suggest_body_next(
 }
 
 /// 人物整卡 AI 改写：参考书（世界观/其他卡）总上限
-const CHARACTER_REWRITE_REF_CAP: usize = 14000;
+const CHARACTER_REWRITE_REF_CAP: usize = 5000;
 
 const WV_MAIN_SLOTS: [&str; 7] = [
     "wv_core_laws",
@@ -5653,6 +5864,7 @@ const WV_MAIN_SLOTS: [&str; 7] = [
 fn is_reserved_knowledge_inject_slot(slot: &str) -> bool {
     slot.starts_with("wv_")
         || slot == "story_rules"
+        || slot == crate::write_prompts::WRITE_PROMPTS_SLOT
         || crate::story_rules_fmt::is_story_rules_fan_slot(slot)
 }
 
@@ -5699,14 +5911,7 @@ fn assemble_novel_rewrite_reference(
         sections.push(feat);
     }
 
-    let chapters = story_rules_chapter_context(tree, loc_is_zh);
-    if !chapters.starts_with("（") && !chapters.starts_with("(") {
-        sections.push(if loc_is_zh {
-            format!("【已有章节】\n{}", chapters)
-        } else {
-            format!("[Chapters]\n{}", chapters)
-        });
-    }
+    // ponytail: skip all-chapter outlines (was duplicating write-chapter history). Cap: add chapter titles only if rewrite quality suffers.
 
     let mut wv = String::new();
     for slot in WV_MAIN_SLOTS {
@@ -5722,7 +5927,7 @@ fn assemble_novel_rewrite_reference(
             wv.push_str(&format!(
                 "### {}\n{}\n\n",
                 n.label.trim(),
-                cap(&body, 2800)
+                cap(&body, 800)
             ));
         }
     }
@@ -5742,7 +5947,7 @@ fn assemble_novel_rewrite_reference(
         let Some(c) = &n.character else { continue };
         let body = cap(
             &crate::character_fmt::format_character_full(&n.label, c),
-            1600,
+            400,
         );
         if body.trim().is_empty() {
             continue;
@@ -5769,7 +5974,7 @@ fn assemble_novel_rewrite_reference(
         plots.push_str(&format!(
             "- 「{}」\n  {}\n",
             n.label.trim(),
-            cap(outline, 800)
+            cap(outline, 240)
         ));
     }
     if !plots.trim().is_empty() {
@@ -5791,7 +5996,9 @@ fn assemble_novel_rewrite_reference(
             .map(|k| k.slot.as_str())
             .unwrap_or("")
             .trim();
-        if is_reserved_knowledge_inject_slot(slot) {
+        if is_reserved_knowledge_inject_slot(slot)
+            || crate::write_prompts::is_write_prompt_excluded_id(tree, &n.id)
+        {
             continue;
         }
         let body = crate::core_laws_fmt::knowledge_card_inject_body(tree, n);
@@ -5801,7 +6008,7 @@ fn assemble_novel_rewrite_reference(
         kn.push_str(&format!(
             "### {}\n{}\n\n",
             n.label.trim(),
-            cap(&body, 1200)
+            cap(&body, 400)
         ));
     }
     if !kn.trim().is_empty() {
@@ -8351,6 +8558,7 @@ pub fn init_state() -> Result<AppState, String> {
     let db = Db::open().map_err(|e| e.to_string())?;
     crate::sample::ensure_sample(&db).map_err(|e| e.to_string())?;
     let settings = db.get_settings().unwrap_or_default();
+    crate::ai_log::set_enabled(settings.ai_interaction_log);
     let port = if settings.mcp_port == 0 {
         crate::mcp::DEFAULT_MCP_PORT
     } else {
@@ -8710,6 +8918,35 @@ mod tests {
         assert_eq!(knowledge_attach_host(&tree, Some("ch")).unwrap(), "ch");
         assert_eq!(knowledge_attach_host(&tree, Some("kb")).unwrap(), "ch");
         assert_eq!(knowledge_attach_host(&tree, Some("root")).unwrap(), "root");
+    }
+
+    #[test]
+    fn resolve_node_ref_accepts_chapter_number_and_label() {
+        let mut c1 = tn("ch-aaa", NodeKind::Chapter);
+        c1.label = "第一章 · 夜色".into();
+        c1.position.y = 10.0;
+        let mut c2 = tn("ch-bbb", NodeKind::Chapter);
+        c2.label = "第二章".into();
+        c2.position.y = 20.0;
+        let mut hero = tn("char-1", NodeKind::Character);
+        hero.label = "林晚".into();
+        let tree = NovelTree {
+            novel_id: "n".into(),
+            nodes: vec![tn("root", NodeKind::Novel), c1, c2, hero],
+            edges: vec![],
+        };
+        assert_eq!(resolve_node_ref(&tree, "ch-aaa").unwrap(), "ch-aaa");
+        assert_eq!(resolve_node_ref(&tree, "第1章").unwrap(), "ch-aaa");
+        assert_eq!(resolve_node_ref(&tree, "1").unwrap(), "ch-aaa");
+        assert_eq!(resolve_node_ref(&tree, "第二章").unwrap(), "ch-bbb");
+        assert_eq!(resolve_node_ref(&tree, "林晚").unwrap(), "char-1");
+        assert_eq!(resolve_node_ref(&tree, "root").unwrap(), "root");
+        let err = resolve_node_ref(&tree, "不存在的卡").unwrap_err();
+        assert!(err.contains("无法找到"), "{err}");
+        assert!(err.contains("第一章"), "{err}");
+        // UUID 里的数字不能当成章号
+        let err = resolve_node_ref(&tree, "ch-deadbeef-0002").unwrap_err();
+        assert!(err.contains("无法找到"), "{err}");
     }
 }
 

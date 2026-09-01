@@ -1,50 +1,95 @@
-//! Per-novel chapter memory (Lance + helpers). Isolated by `novel_id`.
-//! Public knowledge books stay in `knowledge_chunks`; chapter facts never mix.
+//! Per-novel chapter memory. Isolated by `novel_id`.
+//! Listing lives in SQLite; vector search goes through `rig-lancedb`.
 
 use crate::chunk::chunk_text;
+use crate::kb_context::{embed_texts, MiniLmEmbedding, MINILM_DIMS};
 use crate::paths::lancedb_dir;
 use anyhow::Result;
-use arrow_array::{ArrayRef, Int32Array, RecordBatch, RecordBatchIterator, StringArray};
+use arrow_array::{
+    types::Float64Type, ArrayRef, FixedSizeListArray, Int32Array, RecordBatch,
+    RecordBatchIterator, StringArray,
+};
 use arrow_schema::{DataType, Field, Schema};
+use rig_core::vector_store::request::{SearchFilter, VectorSearchRequestBuilder};
+use rig_core::vector_store::VectorStoreIndex;
+use rig_lancedb::{LanceDBFilter, LanceDbVectorIndex, SearchParams, SearchType};
+use serde::Deserialize;
 use std::sync::Arc;
 
-const TABLE: &str = "chapter_memory";
+const TABLE: &str = "chapter_memory_vec";
 
-/// Persist chapter fact chunks into LanceDB (text columns; scoped by novel_id).
+#[derive(Debug, Deserialize)]
+struct MemoryRow {
+    node_id: String,
+    content: String,
+}
+
+fn memory_schema() -> Schema {
+    Schema::new(vec![
+        Field::new("id", DataType::Utf8, false),
+        Field::new("novel_id", DataType::Utf8, false),
+        Field::new("node_id", DataType::Utf8, false),
+        Field::new("idx", DataType::Int32, false),
+        Field::new("content", DataType::Utf8, false),
+        Field::new(
+            "embedding",
+            DataType::FixedSizeList(
+                Arc::new(Field::new("item", DataType::Float64, true)),
+                MINILM_DIMS as i32,
+            ),
+            false,
+        ),
+    ])
+}
+
+async fn open_db() -> Result<lancedb::Connection> {
+    Ok(lancedb::connect(lancedb_dir().to_str().unwrap_or("./lancedb"))
+        .execute()
+        .await?)
+}
+
+/// Persist chapter fact chunks into LanceDB with MiniLM vectors (`rig-lancedb` search).
 pub async fn upsert_lance(novel_id: &str, node_id: &str, chunks: &[String]) -> Result<()> {
     if chunks.is_empty() {
         return Ok(());
     }
     let _ = delete_lance(novel_id, node_id).await;
 
-    let db = lancedb::connect(lancedb_dir().to_str().unwrap_or("./lancedb"))
-        .execute()
-        .await?;
-
-    let schema = Arc::new(Schema::new(vec![
-        Field::new("novel_id", DataType::Utf8, false),
-        Field::new("node_id", DataType::Utf8, false),
-        Field::new("idx", DataType::Int32, false),
-        Field::new("content", DataType::Utf8, false),
-    ]));
-
+    let vectors = embed_texts(chunks, None).await?;
+    let schema = Arc::new(memory_schema());
+    let ids: StringArray = (0..chunks.len())
+        .map(|i| Some(format!("{novel_id}:{node_id}:{i}")))
+        .collect();
     let novel_ids: StringArray = chunks.iter().map(|_| Some(novel_id)).collect();
     let node_ids: StringArray = chunks.iter().map(|_| Some(node_id)).collect();
     let idxs: Int32Array = (0..chunks.len() as i32).map(Some).collect();
     let contents: StringArray = chunks.iter().map(|c| Some(c.as_str())).collect();
+    let embedding = FixedSizeListArray::from_iter_primitive::<Float64Type, _, _>(
+        vectors.into_iter().map(|v| {
+            Some(
+                v.into_iter()
+                    .map(|x| Some(f64::from(x)))
+                    .collect::<Vec<_>>(),
+            )
+        }),
+        MINILM_DIMS as i32,
+    );
 
     let batch = RecordBatch::try_new(
         schema.clone(),
         vec![
+            Arc::new(ids) as ArrayRef,
             Arc::new(novel_ids) as ArrayRef,
             Arc::new(node_ids) as ArrayRef,
             Arc::new(idxs) as ArrayRef,
             Arc::new(contents) as ArrayRef,
+            Arc::new(embedding) as ArrayRef,
         ],
     )?;
     let batches = RecordBatchIterator::new(vec![Ok(batch)].into_iter(), schema.clone());
     let reader: Box<dyn arrow_array::RecordBatchReader + Send> = Box::new(batches);
 
+    let db = open_db().await?;
     let names = db.table_names().execute().await.unwrap_or_default();
     if names.iter().any(|n| n == TABLE) {
         let table = db.open_table(TABLE).execute().await?;
@@ -56,9 +101,7 @@ pub async fn upsert_lance(novel_id: &str, node_id: &str, chunks: &[String]) -> R
 }
 
 pub async fn delete_lance(novel_id: &str, node_id: &str) -> Result<()> {
-    let db = lancedb::connect(lancedb_dir().to_str().unwrap_or("./lancedb"))
-        .execute()
-        .await?;
+    let db = open_db().await?;
     let names = db.table_names().execute().await.unwrap_or_default();
     if !names.iter().any(|n| n == TABLE) {
         return Ok(());
@@ -73,9 +116,7 @@ pub async fn delete_lance(novel_id: &str, node_id: &str) -> Result<()> {
 }
 
 pub async fn delete_lance_novel(novel_id: &str) -> Result<()> {
-    let db = lancedb::connect(lancedb_dir().to_str().unwrap_or("./lancedb"))
-        .execute()
-        .await?;
+    let db = open_db().await?;
     let names = db.table_names().execute().await.unwrap_or_default();
     if !names.iter().any(|n| n == TABLE) {
         return Ok(());
@@ -84,6 +125,39 @@ pub async fn delete_lance_novel(novel_id: &str) -> Result<()> {
     let n = novel_id.replace('\'', "''");
     let _ = table.delete(&format!("novel_id = '{n}'")).await;
     Ok(())
+}
+
+pub async fn search_vectors(
+    novel_id: &str,
+    query: &str,
+    k: usize,
+) -> Result<Vec<(f64, String, String)>> {
+    if novel_id.is_empty() || query.trim().is_empty() || k == 0 {
+        return Ok(Vec::new());
+    }
+    let db = open_db().await?;
+    let names = db.table_names().execute().await.unwrap_or_default();
+    if !names.iter().any(|n| n == TABLE) {
+        return Ok(Vec::new());
+    }
+    let table = db.open_table(TABLE).execute().await?;
+    let params = SearchParams::default()
+        .distance_type(lancedb::DistanceType::Cosine)
+        .search_type(SearchType::Flat);
+    let index = LanceDbVectorIndex::new(table, MiniLmEmbedding::new(), "id", params).await?;
+    let req = VectorSearchRequestBuilder::<LanceDBFilter>::default()
+        .query(query)
+        .samples(k as u64)
+        .filter(LanceDBFilter::eq(
+            "novel_id",
+            serde_json::Value::String(novel_id.to_string()),
+        ))
+        .build();
+    let hits = index.top_n::<MemoryRow>(req).await?;
+    Ok(hits
+        .into_iter()
+        .map(|(score, _id, row)| (score, row.node_id, row.content))
+        .collect())
 }
 
 fn is_section_header(line: &str) -> bool {

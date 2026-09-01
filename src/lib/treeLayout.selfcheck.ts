@@ -216,8 +216,8 @@ console.assert(Math.abs(get("pm").position.x - expectMultiX) < 1e-6);
   );
   console.assert(
     JSON.stringify(chapterEffectiveKnowledgeIds("ch", nodes, [])) ===
-      JSON.stringify(["rk", "ck"]),
-    "chapter knowledge root then chapter",
+      JSON.stringify(["ck"]),
+    "chapter knowledge is local only",
   );
 }
 
@@ -266,8 +266,8 @@ console.assert(Math.abs(get("pm").position.x - expectMultiX) < 1e-6);
   );
   console.assert(
     JSON.stringify(chapterEffectiveKnowledgeIds("ch", nodes, edges)) ===
-      JSON.stringify(["rk", "vk", "ck"]),
-    "chapter knowledge order root→volume→chapter",
+      JSON.stringify(["ck"]),
+    "chapter knowledge is local only",
   );
 }
 

@@ -1,28 +1,13 @@
 <script setup lang="ts">
 import {
   computed,
-  markRaw,
   nextTick,
   onMounted,
   onUnmounted,
   provide,
   ref,
   watch,
-  type Ref,
 } from "vue";
-import {
-  VueFlow,
-  ConnectionMode,
-  useVueFlow,
-  type Connection,
-  type Edge,
-  type EdgeUpdateEvent,
-  type Node,
-  type NodeMouseEvent,
-} from "@vue-flow/core";
-import { Background } from "@vue-flow/background";
-import { Controls } from "@vue-flow/controls";
-import { MiniMap } from "@vue-flow/minimap";
 import { useLocalStorage, useDebounceFn } from "@vueuse/core";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -41,7 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
-import StoryNode from "@/components/flow/StoryNode.vue";
+import ReteCanvas from "@/components/flow/ReteCanvas.vue";
 import CharacterCardPanel from "@/components/CharacterCardPanel.vue";
 import CoreLawsPanel from "@/components/CoreLawsPanel.vue";
 import WorldAxiomPanel from "@/components/WorldAxiomPanel.vue";
@@ -143,7 +128,6 @@ import {
   Copy,
   GitBranch,
   Layers,
-  LayoutGrid,
   Library,
   Lightbulb,
   ListTree,
@@ -169,8 +153,6 @@ import {
   splitBodyLines,
 } from "@/lib/chapterParagraphs";
 import {
-  applyAutoLayout,
-  chapterInheritedKnowledgeIds,
   chapterInheritedPlotIds,
   chapterLocalKnowledgeIds,
   chapterLocalPlotIds,
@@ -194,6 +176,14 @@ import {
   worldviewComplete,
   worldviewFanTitle,
 } from "@/lib/worldview";
+import {
+  ensureWritePromptsCard,
+  isWritePromptsRootEdge,
+  isWritePromptsSlot,
+  writePromptsLinkHost,
+} from "@/lib/writePrompts";
+import { migrateRootSpecialEdges } from "@/lib/flowSockets";
+import type { FlowCanvasEdge, FlowCanvasNode, FlowConnect } from "@/lib/flowCanvas";
 import {
   formatStoryRulesBlockExtracted,
   normalizeStoryRulesBlock,
@@ -222,12 +212,13 @@ import {
 
 const props = defineProps<{ id: string }>();
 const { t, locale } = useI18n();
-const { fitView, setNodes, setEdges, removeNodes, findNode } = useVueFlow({
-  id: "nove-workspace",
-});
+const reteCanvas = ref<{
+  fitView: (opts?: { nodes?: string[] }) => void | Promise<void>;
+} | null>(null);
 
-/** 禁用 Vue Flow 自带 Delete（只改画布不落盘）；改由 onCanvasKeydown 走后端删除。 */
-const flowDeleteKeyCode = null as null;
+function fitView(opts?: { padding?: number; duration?: number; nodes?: string[]; maxZoom?: number }) {
+  void reteCanvas.value?.fitView({ nodes: opts?.nodes });
+}
 
 const novel = ref<NovelProject | null>(null);
 const tree = ref<NovelTree | null>(null);
@@ -360,9 +351,8 @@ const coverPromptBusy = ref(false);
 const coverPrompt = ref("");
 const coverPromptHint = ref("");
 const copyHint = ref("");
-const nodeTypes = { story: markRaw(StoryNode) };
-const flowNodes = ref<Node[]>([]) as Ref<Node[]>;
-const flowEdges = ref<Edge[]>([]) as Ref<Edge[]>;
+const flowNodes = ref<FlowCanvasNode[]>([]);
+const flowEdges = ref<FlowCanvasEdge[]>([]);
 
 const coverUrl = computed(() =>
   novel.value?.cover_path ? convertFileSrc(novel.value.cover_path) : "",
@@ -388,7 +378,7 @@ function cloneTreeNodeData(n: TreeNode): TreeNode {
   };
 }
 
-/** 丢掉指向已删节点的边与 linked_*；章节/分卷剥离继承剧情与知识（只读，不参与排序）。 */
+/** 丢掉指向已删节点的边与 linked_*；章节/分卷剥离继承剧情（只读，不参与排序）。知识卡不继承。 */
 function pruneTreeRefs(tr: NovelTree) {
   const alive = new Set(tr.nodes.map((n) => n.id));
   tr.edges = tr.edges.filter((e) => alive.has(e.source) && alive.has(e.target));
@@ -399,13 +389,9 @@ function pruneTreeRefs(tr: NovelTree) {
     if (n.kind === "chapter") {
       const inheritedPlots = new Set(chapterInheritedPlotIds(n.id, tr.nodes, tr.edges));
       n.linked_side_plot_ids = n.linked_side_plot_ids.filter((id) => !inheritedPlots.has(id));
-      const inheritedKnow = new Set(chapterInheritedKnowledgeIds(n.id, tr.nodes, tr.edges));
-      n.linked_knowledge_ids = n.linked_knowledge_ids.filter((id) => !inheritedKnow.has(id));
     } else if (n.kind === "volume") {
       const rootPlots = new Set(rootLinkedPlotIds(tr.nodes, tr.edges));
       n.linked_side_plot_ids = n.linked_side_plot_ids.filter((id) => !rootPlots.has(id));
-      const rootKnow = new Set(rootLinkedKnowledgeIds(tr.nodes, tr.edges));
-      n.linked_knowledge_ids = n.linked_knowledge_ids.filter((id) => !rootKnow.has(id));
     }
   }
 }
@@ -424,15 +410,11 @@ function toggleVolumeCollapse(volumeId: string) {
   });
 }
 
-provide("novework.toggleVolumeCollapse", toggleVolumeCollapse);
-
 function syncFlowFromTree() {
   const tr = tree.value;
   if (!tr) {
     flowNodes.value = [];
     flowEdges.value = [];
-    setNodes([]);
-    setEdges([]);
     return;
   }
   const aliveVols = tr.nodes.filter((n) => n.kind === "volume").map((n) => n.id);
@@ -458,9 +440,6 @@ function syncFlowFromTree() {
   }
   const visNodes = tr.nodes.filter((n) => !hiddenIds.has(n.id)).map(cloneTreeNodeData);
   const visEdges = tr.edges.filter((e) => !hiddenIds.has(e.source) && !hiddenIds.has(e.target));
-  // ponytail: display-only pack; freeze drag while collapsed so compact coords aren't persisted
-  if (hiddenIds.size) applyAutoLayout(visNodes, visEdges);
-  const canDrag = hiddenIds.size === 0;
   const nodes = visNodes.map((n) => {
     const extra =
       n.kind === "volume"
@@ -479,18 +458,15 @@ function syncFlowFromTree() {
             cover_url: novel.value.cover_path
               ? convertFileSrc(novel.value.cover_path)
               : "",
+            toggleVolumeCollapse,
             ...extra,
           }
-        : { ...n, ...extra };
+        : { ...n, toggleVolumeCollapse, ...extra };
     return {
       id: n.id,
-      type: "story" as const,
       position: { ...n.position },
       data,
       selected: n.id === selected.value?.id,
-      draggable: canDrag,
-      // 禁止 Vue Flow 内置删除；统一走 deleteTreeCard
-      deletable: false,
     };
   });
   const edges = visEdges.map((e) => ({
@@ -499,16 +475,11 @@ function syncFlowFromTree() {
     target: e.target,
     sourceHandle: e.source_handle ?? edgeDefaultSource(e.kind),
     targetHandle: e.target_handle ?? edgeDefaultTarget(e.kind),
-    // ponytail: animated edges keep WebKit.GPU busy at idle; use color/style instead
-    animated: false,
-    // 世界观 / 故事规则连线不可拖改、不可双击切断
-    updatable: !isFixedRootKnowledgeEdge(tr.nodes, e),
+    kind: e.kind,
+    locked: isFixedRootKnowledgeEdge(tr.nodes, e),
     label: edgeDisplayLabel(e),
     style: edgeStyle(e.kind),
   }));
-  // 用 setNodes/setEdges 全量替换，避免 v-model 合并导致已删节点「复活」
-  setNodes(nodes);
-  setEdges(edges);
   flowNodes.value = nodes;
   flowEdges.value = edges;
 }
@@ -563,6 +534,7 @@ function kindFromNodes(sourceId: string, targetId: string): string {
   const hasVolume = a === "volume" || b === "volume";
   const host = hasChapter || hasNovel || hasVolume;
   if (hasKnowledge && host) return "knowledge";
+  if (a === "knowledge" && b === "knowledge") return "knowledge";
   if (hasChar && (hasPlot || host)) return "character";
   if (hasPlot && host) return "side_plot";
   if (a === "volume" && b === "volume") return "volume";
@@ -607,22 +579,15 @@ async function reloadTreeFromDisk() {
 async function maybeMigrateWorldview(tr: NovelTree): Promise<NovelTree> {
   const titleFn = (key: string) => t(key as Parameters<typeof t>[0]);
   const wv = ensureWorldviewCards(tr, titleFn);
+  const wp = ensureWritePromptsCard(tr, titleFn);
   const sr = ensureStoryRulesFanCards(tr, titleFn);
   const ax = migrateInlineAxiomsToCards(tr);
   const loc = migrateInlineLocationsToCards(tr);
   const sp = migrateInlineSocialPowerToCards(tr);
   const hc = migrateInlineHistoryCultureToCards(tr);
-  if (!ax && !loc && !sp && !hc && !wv && !sr) return tr;
-  applyAutoLayout(tr.nodes, tr.edges);
+  const handles = migrateRootSpecialEdges(tr);
+  if (!ax && !loc && !sp && !hc && !wv && !sr && !wp && !handles) return tr;
   return persistTree(tr);
-}
-
-function markFlowSelection() {
-  const id = selected.value?.id;
-  flowNodes.value = flowNodes.value.map((n) => ({
-    ...n,
-    selected: n.id === id,
-  }));
 }
 
 async function selectNode(n: TreeNode) {
@@ -632,7 +597,6 @@ async function selectNode(n: TreeNode) {
   }
   const resolved = tree.value?.nodes.find((x) => x.id === n.id) ?? n;
   selected.value = resolved;
-  markFlowSelection();
   await api.setWorkspaceSelection(props.id, n.id);
   notice.value = "";
   chapterResultNotice.value = "";
@@ -664,6 +628,7 @@ function enterChapterBodyEdit() {
   bodyEditing.value = true;
   bodyAutosaved.value = false;
   lastSavedBody = bodyDraft.value;
+  nextTick(() => bodyEditor.value?.scrollToTop());
   if (bodySuggestOn.value) scheduleBodySuggest();
 }
 
@@ -764,9 +729,12 @@ async function confirmParaRewrite() {
   paraRewriteError.value = "";
   try {
     const out = await api.rewriteChapterParagraph(props.id, pending.text, note);
-    bodyDraft.value = replaceBodyLine(bodyDraft.value, pending.index, out);
     pendingParaRewrite.value = null;
     paraRewriteNote.value = "";
+    await nextTick();
+    if (!bodyEditor.value?.replaceLineAndSelect(pending.index, out)) {
+      bodyDraft.value = replaceBodyLine(bodyDraft.value, pending.index, out);
+    }
     await persistChapterBody();
   } catch (e) {
     paraRewriteError.value = String(e);
@@ -834,8 +802,8 @@ function applyBodySuggest(item: string) {
   });
 }
 
-function onNodeClick(ev: NodeMouseEvent) {
-  const data = ev.node.data as TreeNode;
+function onNodeClick(ev: { node: { data: FlowCanvasNode["data"] } }) {
+  const data = ev.node.data;
   if (data) void selectNode(data);
 }
 
@@ -857,9 +825,18 @@ function unlinkEdgeRefs(e: TreeEdge) {
     if (plotId) host.linked_side_plot_ids = host.linked_side_plot_ids.filter((id) => id !== plotId);
   }
   if (e.kind === "knowledge") {
-    const kid = src.kind === "knowledge" ? src.id : tgt.kind === "knowledge" ? tgt.id : null;
-    const host = src.kind === "knowledge" ? tgt : src;
-    if (kid) host.linked_knowledge_ids = (host.linked_knowledge_ids ?? []).filter((id) => id !== kid);
+    const wp = writePromptsLinkHost(src, tgt);
+    const kid = wp
+      ? wp.card.kind === "knowledge"
+        ? wp.card
+        : null
+      : src.kind === "knowledge"
+        ? src
+        : tgt.kind === "knowledge"
+          ? tgt
+          : null;
+    const host = wp ? wp.host : src.kind === "knowledge" ? tgt : src;
+    if (kid) host.linked_knowledge_ids = (host.linked_knowledge_ids ?? []).filter((id) => id !== kid.id);
   }
 }
 
@@ -895,8 +872,17 @@ function linkEdgeRefs(e: TreeEdge) {
     }
   }
   if (e.kind === "knowledge") {
-    const k = src.kind === "knowledge" ? src : tgt.kind === "knowledge" ? tgt : null;
-    const host = src.kind === "knowledge" ? tgt : src;
+    const wp = writePromptsLinkHost(src, tgt);
+    const k = wp
+      ? wp.card.kind === "knowledge"
+        ? wp.card
+        : null
+      : src.kind === "knowledge"
+        ? src
+        : tgt.kind === "knowledge"
+          ? tgt
+          : null;
+    const host = wp ? wp.host : src.kind === "knowledge" ? tgt : src;
     host.linked_knowledge_ids = host.linked_knowledge_ids ?? [];
     if (k && !host.linked_knowledge_ids.includes(k.id)) {
       host.linked_knowledge_ids.push(k.id);
@@ -954,7 +940,7 @@ async function saveRelation() {
   closeRelationEditor();
 }
 
-async function onConnect(conn: Connection) {
+async function onConnect(conn: FlowConnect) {
   if (!tree.value || !conn.source || !conn.target) return;
   const kind = kindFromNodes(conn.source, conn.target);
   const edge: TreeEdge = {
@@ -974,30 +960,7 @@ async function onConnect(conn: Connection) {
   tree.value = await persistTree(tree.value);
   syncFlowFromTree();
   if (isCharCharEdge(edge)) openRelationEditor(edge);
-  else linkedNotice(kind);
-}
-
-async function onEdgeUpdate(ev: EdgeUpdateEvent) {
-  if (!tree.value || !ev.connection.source || !ev.connection.target) return;
-  const te = tree.value.edges.find((e) => e.id === ev.edge.id);
-  if (!te) return;
-  if (isFixedRootKnowledgeEdge(tree.value.nodes, te)) {
-    notice.value = t("workspace.wv.linkLocked");
-    syncFlowFromTree();
-    return;
-  }
-  unlinkEdgeRefs(te);
-  const kind = kindFromNodes(ev.connection.source, ev.connection.target);
-  te.source = ev.connection.source;
-  te.target = ev.connection.target;
-  te.source_handle = ev.connection.sourceHandle;
-  te.target_handle = ev.connection.targetHandle;
-  te.kind = kind;
-  if (!isCharCharEdge(te)) te.label = "";
-  linkEdgeRefs(te);
-  tree.value = await persistTree(tree.value);
-  syncFlowFromTree();
-  linkedNotice(kind);
+  else   linkedNotice(kind);
 }
 
 function onEdgeClick(ev: { edge: { id: string } }) {
@@ -1012,7 +975,9 @@ async function onEdgeDoubleClick(ev: { edge: { id: string } }) {
   const te = tree.value.edges.find((e) => e.id === ev.edge.id);
   if (!te) return;
   if (isFixedRootKnowledgeEdge(tree.value.nodes, te)) {
-    notice.value = t("workspace.wv.linkLocked");
+    notice.value = isWritePromptsRootEdge(tree.value.nodes, te)
+      ? t("workspace.writePrompts.linkLocked")
+      : t("workspace.wv.linkLocked");
     return;
   }
   if (relationEdgeId.value === te.id) closeRelationEditor();
@@ -1818,14 +1783,8 @@ async function reorderHostKnowledge(
       node.linked_knowledge_ids ?? [],
       knowledgeIds,
     );
-  } else if (hostKind === "chapter") {
-    const inherited = new Set(
-      chapterInheritedKnowledgeIds(hostId, tree.value.nodes, tree.value.edges),
-    );
-    next = knowledgeIds.filter((id) => !inherited.has(id));
   } else {
-    const rootSet = new Set(rootLinkedKnowledgeIds(tree.value.nodes, tree.value.edges));
-    next = knowledgeIds.filter((id) => !rootSet.has(id));
+    next = knowledgeIds;
   }
   const prev = node.linked_knowledge_ids ?? [];
   if (prev.length === next.length && prev.every((id, i) => id === next[i])) return;
@@ -1839,26 +1798,6 @@ async function reorderHostKnowledge(
     const cur = tree.value.nodes.find((x) => x.id === hostId);
     if (cur) selected.value = cur;
   }
-}
-
-async function autoLayout() {
-  if (!tree.value) return;
-  // 从 Vue Flow 取最新坐标 + 实测尺寸（人物卡高度不一，避免叠住）
-  const layoutSizes = new Map<string, { w: number; h: number }>();
-  for (const n of tree.value.nodes) {
-    const gn = findNode(n.id);
-    if (!gn) continue;
-    n.position = { x: gn.position.x, y: gn.position.y };
-    const w = gn.dimensions?.width ?? 0;
-    const h = gn.dimensions?.height ?? 0;
-    if (w > 8 && h > 8) layoutSizes.set(n.id, { w, h });
-  }
-  pruneTreeRefs(tree.value);
-  applyAutoLayout(tree.value.nodes, tree.value.edges, layoutSizes);
-  tree.value = await persistTree(tree.value);
-  syncFlowFromTree();
-  await nextTick();
-  void fitView({ padding: 0.18, duration: 280 });
 }
 
 async function addCard(kind: "chapter" | "volume" | "character" | "side_plot" | "knowledge") {
@@ -2074,7 +2013,6 @@ async function addCard(kind: "chapter" | "volume" | "character" | "side_plot" | 
   tree.value.nodes.push(node);
   tree.value.edges.push(edge);
   pruneTreeRefs(tree.value);
-  applyAutoLayout(tree.value.nodes, tree.value.edges);
   tree.value = await persistTree(tree.value);
   syncFlowFromTree();
   await selectNode(node);
@@ -2185,6 +2123,10 @@ const selectedWorldviewFanSlot = computed(() => {
 const selectedIsStoryRules = computed(
   () =>
     selected.value?.kind === "knowledge" && isStoryRulesSlot(knowledgeSlot(selected.value)),
+);
+const selectedIsWritePrompts = computed(
+  () =>
+    selected.value?.kind === "knowledge" && isWritePromptsSlot(knowledgeSlot(selected.value)),
 );
 const selectedIsStoryRulesBlock = computed(
   () =>
@@ -2310,7 +2252,6 @@ async function openWorldviewChat(slot?: string | null) {
     migrateInlineLocationsToCards(tree.value);
     migrateInlineSocialPowerToCards(tree.value);
     migrateInlineHistoryCultureToCards(tree.value);
-    applyAutoLayout(tree.value.nodes, tree.value.edges);
     tree.value = await persistTree(tree.value);
     syncFlowFromTree();
     if (before > 0) {
@@ -2551,22 +2492,17 @@ async function confirmPendingCardDelete() {
     pruneTreeRefs(tree.value);
     if (axiomHost) {
       syncCoreLawsExtracted(tree.value, axiomHost);
-      applyAutoLayout(tree.value.nodes, tree.value.edges);
       tree.value = await persistTree(tree.value);
     } else if (locationHost) {
       syncSpatiotemporalExtracted(tree.value, locationHost);
-      applyAutoLayout(tree.value.nodes, tree.value.edges);
       tree.value = await persistTree(tree.value);
     } else if (socialHost) {
       syncSocialPowerExtracted(tree.value, socialHost);
-      applyAutoLayout(tree.value.nodes, tree.value.edges);
       tree.value = await persistTree(tree.value);
     } else if (historyHost) {
       syncHistoryCultureExtracted(tree.value, historyHost);
-      applyAutoLayout(tree.value.nodes, tree.value.edges);
       tree.value = await persistTree(tree.value);
     }
-    removeNodes([id], true);
     syncFlowFromTree();
 
     pendingCardDelete.value = null;
@@ -2683,7 +2619,6 @@ async function addCoreLawsAxiom() {
     t("workspace.coreLaws.axiomN", { n }),
   );
   if (!node) return;
-  applyAutoLayout(tree.value.nodes, tree.value.edges);
   tree.value = await persistTree(tree.value);
   syncFlowFromTree();
   await selectNode(node);
@@ -2801,7 +2736,6 @@ async function addHistoryCultureReligion() {
   const label = t("workspace.hc.religionUntitled");
   const node = createReligionCard(tree.value, selected.value.id, label);
   if (!node) return;
-  applyAutoLayout(tree.value.nodes, tree.value.edges);
   tree.value = await persistTree(tree.value);
   syncFlowFromTree();
   await selectNode(node);
@@ -2812,7 +2746,6 @@ async function addHistoryCultureEvent() {
   const label = t("workspace.hc.eventUntitled");
   const node = createMajorEventCard(tree.value, selected.value.id, label);
   if (!node) return;
-  applyAutoLayout(tree.value.nodes, tree.value.edges);
   tree.value = await persistTree(tree.value);
   syncFlowFromTree();
   await selectNode(node);
@@ -2858,7 +2791,6 @@ async function addSpatiotemporalLocation() {
     t("workspace.st.locationN", { n }),
   );
   if (!node) return;
-  applyAutoLayout(tree.value.nodes, tree.value.edges);
   tree.value = await persistTree(tree.value);
   syncFlowFromTree();
   await selectNode(node);
@@ -2884,7 +2816,6 @@ async function addSpatiotemporalLocations(locs: KeyLocation[]) {
     );
   }
   if (!last) return;
-  applyAutoLayout(tree.value.nodes, tree.value.edges);
   tree.value = await persistTree(tree.value);
   syncFlowFromTree();
   await nextTick();
@@ -2958,7 +2889,6 @@ async function addSocialPowerRace() {
     t("workspace.pow.raceN", { n }),
   );
   if (!node) return;
-  applyAutoLayout(tree.value.nodes, tree.value.edges);
   tree.value = await persistTree(tree.value);
   syncFlowFromTree();
   await selectNode(node);
@@ -2975,7 +2905,6 @@ async function addSocialPowerFaction() {
     t("workspace.pow.factionN", { n }),
   );
   if (!node) return;
-  applyAutoLayout(tree.value.nodes, tree.value.edges);
   tree.value = await persistTree(tree.value);
   syncFlowFromTree();
   await selectNode(node);
@@ -3530,26 +3459,6 @@ function mapKnowledgeRow(
   };
 }
 
-const chapterLinkedKnowledgeFromRoot = computed(() => {
-  const ch = selected.value;
-  const tr = tree.value;
-  if (!ch || ch.kind !== "chapter" || !tr) return [] as ReturnType<typeof mapKnowledgeRow>[];
-  return filterHostPanelLinkedKnowledge(
-    orderKnowledgeNodesByIds(tr.nodes, rootLinkedKnowledgeIds(tr.nodes, tr.edges)),
-  ).map((n) => mapKnowledgeRow(n, "root"));
-});
-
-const chapterLinkedKnowledgeFromVolume = computed(() => {
-  const ch = selected.value;
-  const tr = tree.value;
-  if (!ch || ch.kind !== "chapter" || !tr) return [] as ReturnType<typeof mapKnowledgeRow>[];
-  const vid = chapterParentVolumeId(ch.id, tr.nodes, tr.edges);
-  if (!vid) return [];
-  return filterHostPanelLinkedKnowledge(
-    orderKnowledgeNodesByIds(tr.nodes, volumeLocalKnowledgeIds(vid, tr.nodes, tr.edges)),
-  ).map((n) => mapKnowledgeRow(n, "volume"));
-});
-
 const chapterLinkedKnowledgeLocal = computed(() => {
   const ch = selected.value;
   const tr = tree.value;
@@ -3559,15 +3468,6 @@ const chapterLinkedKnowledgeLocal = computed(() => {
   return filterHostPanelLinkedKnowledge(
     orderKnowledgeNodesByIds(tr.nodes, chapterLocalKnowledgeIds(ch.id, tr.nodes, tr.edges)),
   ).map((n, order) => ({ ...mapKnowledgeRow(n, "chapter"), order }));
-});
-
-const volumeLinkedKnowledgeFromRoot = computed(() => {
-  const vol = selected.value;
-  const tr = tree.value;
-  if (!vol || vol.kind !== "volume" || !tr) return [] as ReturnType<typeof mapKnowledgeRow>[];
-  return filterHostPanelLinkedKnowledge(
-    orderKnowledgeNodesByIds(tr.nodes, rootLinkedKnowledgeIds(tr.nodes, tr.edges)),
-  ).map((n) => mapKnowledgeRow(n, "root"));
 });
 
 const volumeLinkedKnowledgeLocal = computed(() => {
@@ -3819,7 +3719,7 @@ function startResizeChatH(ev: MouseEvent) {
 }
 
 async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y: number } } }) {
-  if (!tree.value || collapsedVolumeIdSet.value.size) return;
+  if (!tree.value) return;
   const n = tree.value.nodes.find((x) => x.id === ev.node.id);
   if (!n) return;
   n.position = { x: ev.node.position.x, y: ev.node.position.y };
@@ -4160,6 +4060,10 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
             :data="selected?.knowledge"
             @save="persistSelectedStoryRulesBlock"
           />
+          <div v-else-if="selectedIsWritePrompts" class="space-y-2 text-sm">
+            <h3 class="text-sm font-semibold">{{ t("workspace.writePrompts.title") }}</h3>
+            <p class="text-[11px] leading-relaxed text-muted-foreground">{{ t("workspace.writePrompts.hint") }}</p>
+          </div>
           <div v-else-if="selectedIsKnowledge" class="space-y-4 text-sm">
             <div>
               <div class="mb-1 flex items-start justify-between gap-2">
@@ -4437,18 +4341,6 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                   {{ t("workspace.volumeLinkedKnowledge") }}
                 </p>
                 <p class="text-[10px] text-muted-foreground">{{ t("workspace.knowledgeReorderHint") }}</p>
-                <ul v-if="volumeLinkedKnowledgeFromRoot.length" class="mb-1.5 space-y-1">
-                  <li
-                    v-for="k in volumeLinkedKnowledgeFromRoot"
-                    :key="'rk-' + k.id"
-                    class="flex items-center gap-2 rounded border border-dashed bg-muted/40 px-2 py-1.5 text-xs"
-                  >
-                    <span
-                      class="shrink-0 rounded bg-muted px-1 py-0.5 text-[9px] font-medium text-muted-foreground"
-                    >{{ t("workspace.chapterPlotInherited") }}</span>
-                    <span class="min-w-0 flex-1 truncate">{{ k.label }}</span>
-                  </li>
-                </ul>
                 <ul v-if="volumeLinkedKnowledgeLocal.length" ref="knowledgeListEl" class="space-y-1">
                   <li
                     v-for="(k, i) in volumeLinkedKnowledgeLocal"
@@ -4471,7 +4363,7 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                   </li>
                 </ul>
                 <p
-                  v-if="!volumeLinkedKnowledgeFromRoot.length && !volumeLinkedKnowledgeLocal.length"
+                  v-if="!volumeLinkedKnowledgeLocal.length"
                   class="text-[10px] text-muted-foreground"
                 >{{ t("workspace.volumeLinkedKnowledgeEmpty") }}</p>
               </div>
@@ -4557,30 +4449,6 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                 {{ t("workspace.chapterLinkedKnowledge") }}
               </p>
               <p class="text-[10px] text-muted-foreground">{{ t("workspace.knowledgeReorderHint") }}</p>
-              <ul v-if="chapterLinkedKnowledgeFromRoot.length" class="mb-1.5 space-y-1">
-                <li
-                  v-for="k in chapterLinkedKnowledgeFromRoot"
-                  :key="'rk-' + k.id"
-                  class="flex items-center gap-2 rounded border border-dashed bg-muted/40 px-2 py-1.5 text-xs"
-                >
-                  <span
-                    class="shrink-0 rounded bg-muted px-1 py-0.5 text-[9px] font-medium text-muted-foreground"
-                  >{{ t("workspace.chapterPlotInherited") }}</span>
-                  <span class="min-w-0 flex-1 truncate">{{ k.label }}</span>
-                </li>
-              </ul>
-              <ul v-if="chapterLinkedKnowledgeFromVolume.length" class="mb-1.5 space-y-1">
-                <li
-                  v-for="k in chapterLinkedKnowledgeFromVolume"
-                  :key="'vk-' + k.id"
-                  class="flex items-center gap-2 rounded border border-dashed bg-muted/40 px-2 py-1.5 text-xs"
-                >
-                  <span
-                    class="shrink-0 rounded bg-violet-100 px-1 py-0.5 text-[9px] font-medium text-violet-800 dark:bg-violet-900 dark:text-violet-100"
-                  >{{ t("workspace.volumePlotInherited") }}</span>
-                  <span class="min-w-0 flex-1 truncate">{{ k.label }}</span>
-                </li>
-              </ul>
               <ul v-if="chapterLinkedKnowledgeLocal.length" ref="knowledgeListEl" class="space-y-1">
                 <li
                   v-for="(k, i) in chapterLinkedKnowledgeLocal"
@@ -4603,11 +4471,7 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                 </li>
               </ul>
               <p
-                v-if="
-                  !chapterLinkedKnowledgeFromRoot.length &&
-                  !chapterLinkedKnowledgeFromVolume.length &&
-                  !chapterLinkedKnowledgeLocal.length
-                "
+                v-if="!chapterLinkedKnowledgeLocal.length"
                 class="text-[10px] text-muted-foreground"
               >{{ t("workspace.chapterLinkedKnowledgeEmpty") }}</p>
             </div>
@@ -4875,17 +4739,6 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
               size="sm"
               variant="outline"
               class="h-7 w-7 bg-background/95 px-0"
-              :disabled="!tree"
-              :title="t('workspace.autoLayout')"
-              :aria-label="t('workspace.autoLayout')"
-              @click="autoLayout"
-            >
-              <LayoutGrid class="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              class="h-7 w-7 bg-background/95 px-0"
               :disabled="!tree || allMemoryBusy"
               :title="t('workspace.allChapterMemory')"
               :aria-label="t('workspace.allChapterMemory')"
@@ -4977,34 +4830,18 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
             <Button size="sm" @click="saveRelation">{{ t("workspace.relationSave") }}</Button>
           </div>
         </div>
-        <VueFlow
-          id="nove-workspace"
+        <ReteCanvas
+          ref="reteCanvas"
+          class="h-full w-full"
           :nodes="flowNodes"
           :edges="flowEdges"
-          :node-types="nodeTypes"
-          :connection-mode="ConnectionMode.Loose"
-          :edges-updatable="true"
-          :delete-key-code="flowDeleteKeyCode"
-          :default-viewport="{ x: 40, y: 20, zoom: 0.85 }"
-          :min-zoom="0.15"
-          :max-zoom="2.5"
-          :pan-on-drag="true"
-          :zoom-on-scroll="true"
-          :zoom-on-pinch="true"
-          :nodes-draggable="true"
-          fit-view-on-init
-          class="h-full w-full"
+          :selected-id="selected?.id ?? null"
           @node-click="onNodeClick"
           @connect="onConnect"
           @edge-click="onEdgeClick"
-          @edge-update="onEdgeUpdate"
           @edge-double-click="onEdgeDoubleClick"
           @node-drag-stop="onNodeDragStop"
-        >
-          <Background pattern-color="#d5ddd4" :gap="18" />
-          <Controls />
-          <MiniMap />
-        </VueFlow>
+        />
       </div>
 
       <div
@@ -5025,12 +4862,12 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
 
       <!-- 章节正文：右侧栏 或 树图下方（原 Chat 位） -->
       <div
-        class="flex min-h-0 min-w-0 flex-col bg-background"
+        class="chapter-body-dock flex min-h-0 min-w-0 flex-col"
         style="grid-area: chat"
         :class="chatDock === 'right' ? 'border-l' : 'border-t'"
       >
-        <div class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b px-3 py-2">
-          <div class="min-w-0 truncate text-sm font-medium">
+        <div class="chapter-body-dock-bar flex shrink-0 flex-wrap items-center justify-between gap-2 border-b px-3 py-2">
+          <div class="chapter-body-dock-title min-w-0 truncate text-sm font-medium">
             {{ t("workspace.bodyDockTitle") }}
           </div>
           <div class="flex min-w-0 flex-wrap items-center justify-end gap-2">
@@ -5039,6 +4876,7 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                 v-if="chapterBusy"
                 size="sm"
                 variant="destructive"
+                class="chapter-body-tool-stop"
                 @click="stopChapter"
               >
                 <Square class="mr-1.5 h-3.5 w-3.5" />
@@ -5047,8 +4885,7 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
               <Button
                 size="sm"
                 variant="outline"
-                class="px-2"
-                :class="bodySuggestOn ? 'border-amber-500/70 bg-amber-50 text-amber-900 dark:bg-amber-950 dark:text-amber-100' : ''"
+                class="chapter-body-tool-btn px-2"
                 :aria-pressed="bodySuggestOn"
                 :title="bodySuggestOn ? t('workspace.bodySuggestOn') : t('workspace.bodySuggestOff')"
                 :aria-label="bodySuggestOn ? t('workspace.bodySuggestOn') : t('workspace.bodySuggestOff')"
@@ -5060,7 +4897,8 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
               <Button
                 size="sm"
                 variant="outline"
-                class="px-2"
+                class="chapter-body-tool-btn px-2"
+                :aria-pressed="bodyTts !== 'idle'"
                 :disabled="
                   bodyTts === 'idle' &&
                   (!!busy || !(bodyEditing ? bodyDraft : chapterMd).trim())
@@ -5083,7 +4921,7 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
               </Button>
               <select
                 v-model.number="ttsSpeed"
-                class="h-8 rounded-md border border-input bg-background px-1.5 text-xs outline-none hover:bg-muted disabled:opacity-50"
+                class="chapter-body-tool-select h-8 rounded-md border px-1.5 text-xs outline-none disabled:opacity-50"
                 :disabled="bodyTts !== 'idle'"
                 :title="t('workspace.readAloudSpeed')"
                 :aria-label="t('workspace.readAloudSpeed')"
@@ -5095,7 +4933,7 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
               <Button
                 size="sm"
                 variant="outline"
-                class="px-2"
+                class="chapter-body-tool-btn px-2"
                 :disabled="!!busy || !(bodyEditing ? bodyDraft : chapterMd)"
                 :title="t('workspace.copyBody')"
                 :aria-label="t('workspace.copyBody')"
@@ -5106,7 +4944,7 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
               <Button
                 size="sm"
                 variant="outline"
-                class="px-2"
+                class="chapter-body-tool-btn px-2"
                 :disabled="shotsBusy || (chapterBusy && !['split-shots','shot-prompts','submit-comfy'].includes(busy))"
                 :title="shotsPreviewTitle"
                 :aria-label="shotsPreviewTitle"
@@ -5121,7 +4959,7 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
               <Button
                 size="sm"
                 variant="outline"
-                class="px-2"
+                class="chapter-body-tool-btn px-2"
                 :disabled="memoryBusy || (chapterBusy && busy !== 'regen-memory')"
                 :title="t('workspace.memoryPreview')"
                 :aria-label="t('workspace.memoryPreview')"
@@ -5133,21 +4971,17 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                 />
                 <Brain v-else class="h-3.5 w-3.5" />
               </Button>
-              <span v-if="copyHint" class="text-[11px] text-muted-foreground">{{ copyHint }}</span>
+              <span v-if="copyHint" class="chapter-body-dock-muted text-[11px]">{{ copyHint }}</span>
             </template>
             <div
-              class="inline-flex rounded-md border bg-muted/40 p-0.5"
+              class="chapter-body-dock-pos inline-flex rounded-md border p-0.5"
               role="group"
               :aria-label="t('workspace.bodyDockHint')"
             >
               <button
                 type="button"
                 class="rounded px-1.5 py-1 transition-colors"
-                :class="
-                  chatDock === 'right'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                "
+                :class="chatDock === 'right' ? 'is-on' : ''"
                 :aria-pressed="chatDock === 'right'"
                 :title="t('workspace.bodyDockRight')"
                 :aria-label="t('workspace.bodyDockRight')"
@@ -5158,11 +4992,7 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
               <button
                 type="button"
                 class="rounded px-1.5 py-1 transition-colors"
-                :class="
-                  chatDock === 'bottom'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                "
+                :class="chatDock === 'bottom' ? 'is-on' : ''"
                 :aria-pressed="chatDock === 'bottom'"
                 :title="t('workspace.bodyDockBottom')"
                 :aria-label="t('workspace.bodyDockBottom')"
@@ -5173,9 +5003,12 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
             </div>
           </div>
         </div>
-        <div class="flex min-h-0 flex-1 flex-col overflow-hidden p-3">
+        <div
+          class="flex min-h-0 flex-1 flex-col overflow-hidden"
+          :class="selectedIsChapter ? '' : 'p-3'"
+        >
           <template v-if="!selectedIsChapter">
-            <p class="text-xs text-muted-foreground">{{ t("workspace.bodyDockPickChapter") }}</p>
+            <p class="chapter-body-dock-muted text-xs">{{ t("workspace.bodyDockPickChapter") }}</p>
           </template>
           <template v-else>
             <div class="flex min-h-0 w-full flex-1 flex-col gap-2">
@@ -5193,10 +5026,10 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
             />
             <div
               v-if="bodySuggestOn"
-              class="max-h-36 shrink-0 overflow-y-auto rounded-md border bg-muted/20 px-2 py-1.5"
+              class="chapter-body-suggest max-h-36 shrink-0 overflow-y-auto rounded-md border px-2 py-1.5"
             >
-              <p class="mb-1 text-[11px] text-muted-foreground">{{ t("workspace.bodySuggestHint") }}</p>
-              <div v-if="bodySuggestBusy && !bodySuggestItems.length" class="flex items-center gap-2 text-xs text-muted-foreground">
+              <p class="chapter-body-dock-muted mb-1 text-[11px]">{{ t("workspace.bodySuggestHint") }}</p>
+              <div v-if="bodySuggestBusy && !bodySuggestItems.length" class="chapter-body-dock-muted flex items-center gap-2 text-xs">
                 <Loader2 class="h-3.5 w-3.5 animate-spin" />
                 {{ t("workspace.bodySuggestBusy") }}
               </div>
@@ -5207,7 +5040,7 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
                 <li v-for="(item, i) in bodySuggestItems" :key="i">
                   <button
                     type="button"
-                    class="w-full rounded px-1.5 py-1 text-left text-xs leading-relaxed hover:bg-muted"
+                    class="chapter-body-suggest-item w-full rounded px-1.5 py-1 text-left text-xs leading-relaxed"
                     @click="applyBodySuggest(item)"
                   >
                     {{ i + 1 }}. {{ item }}
@@ -5220,9 +5053,9 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
         </div>
         <div
           v-if="selectedIsChapter && bodyEditing && (bodySaveBusy || bodyAutosaved)"
-          class="flex shrink-0 items-center border-t px-3 py-1.5"
+          class="chapter-body-dock-bar flex shrink-0 items-center border-t px-3 py-1.5"
         >
-          <span class="text-[11px] text-muted-foreground">{{
+          <span class="chapter-body-dock-muted text-[11px]">{{
             bodySaveBusy ? t("workspace.bodySaving") : t("workspace.bodyAutosaved")
           }}</span>
         </div>
@@ -6037,3 +5870,84 @@ async function onNodeDragStop(ev: { node: { id: string; position: { x: number; y
     </div>
   </div>
 </template>
+
+<style scoped>
+.chapter-body-dock {
+  --cb-paper: #ffffff;
+  --cb-ink: #111111;
+  --cb-muted: #737373;
+  --cb-border: #d4d4d4;
+  --cb-wash: rgba(0, 0, 0, 0.06);
+  background-color: var(--cb-paper);
+  border-color: var(--cb-border);
+  color: var(--cb-ink);
+}
+:global(.dark) .chapter-body-dock {
+  --cb-paper: #111111;
+  --cb-ink: #f5f5f5;
+  --cb-muted: #a3a3a3;
+  --cb-border: #404040;
+  --cb-wash: rgba(255, 255, 255, 0.08);
+}
+.chapter-body-dock-bar {
+  border-color: var(--cb-border);
+}
+.chapter-body-dock-title {
+  color: var(--cb-ink);
+}
+.chapter-body-dock-muted {
+  color: var(--cb-muted);
+}
+.chapter-body-dock :deep(.chapter-body-tool-btn) {
+  border-color: var(--cb-border);
+  background-color: transparent;
+  color: var(--cb-ink);
+}
+.chapter-body-dock :deep(.chapter-body-tool-btn:hover:not(:disabled)) {
+  background-color: var(--cb-wash);
+}
+.chapter-body-dock :deep(.chapter-body-tool-btn[aria-pressed="true"]) {
+  border-color: var(--cb-ink);
+  background-color: var(--cb-wash);
+  color: var(--cb-ink);
+}
+.chapter-body-dock :deep(.chapter-body-tool-stop) {
+  background-color: var(--cb-ink);
+  color: var(--cb-paper);
+}
+.chapter-body-dock :deep(.chapter-body-tool-stop:hover:not(:disabled)) {
+  background-color: var(--cb-ink);
+  opacity: 0.9;
+}
+.chapter-body-tool-select {
+  border-color: var(--cb-border);
+  background-color: transparent;
+  color: var(--cb-ink);
+}
+.chapter-body-tool-select:hover:not(:disabled) {
+  background-color: var(--cb-wash);
+}
+.chapter-body-dock-pos {
+  border-color: var(--cb-border);
+  background-color: var(--cb-wash);
+}
+.chapter-body-dock-pos button {
+  color: var(--cb-muted);
+}
+.chapter-body-dock-pos button:hover {
+  color: var(--cb-ink);
+  background-color: var(--cb-wash);
+}
+.chapter-body-dock-pos button.is-on {
+  background-color: var(--cb-ink);
+  color: var(--cb-paper);
+}
+.chapter-body-suggest {
+  border-color: var(--cb-border);
+  background-color: color-mix(in srgb, var(--cb-ink) 6%, var(--cb-paper));
+  color: var(--cb-ink);
+}
+.chapter-body-suggest-item:hover {
+  background-color: var(--cb-wash);
+}
+</style>

@@ -90,6 +90,7 @@ console.assert(
 
 console.assert(isHostPanelHiddenKnowledgeSlot("wv_core_laws"), "hide fan slot");
 console.assert(isHostPanelHiddenKnowledgeSlot("story_rules"), "hide story rules");
+console.assert(isHostPanelHiddenKnowledgeSlot("write_prompts"), "hide write prompts hub");
 console.assert(!isHostPanelHiddenKnowledgeSlot("wv_axiom"), "show axiom in panel");
 
 const panelNodes = filterHostPanelLinkedKnowledge(tree.nodes.filter((n) => n.kind === "knowledge"));

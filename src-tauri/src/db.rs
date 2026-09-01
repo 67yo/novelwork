@@ -8,6 +8,51 @@ pub struct Db {
     conn: Mutex<Connection>,
 }
 
+/// Move leftover standalone Gemini/Claude keys into AI API providers, then clear the old slots.
+fn absorb_legacy_gemini_claude(
+    providers: &mut Vec<crate::models::CompatProvider>,
+    gemini_key: &mut String,
+    claude_key: &mut String,
+) -> bool {
+    use crate::models::{PROTOCOL_ANTHROPIC, PROTOCOL_GEMINI};
+    let mut changed = false;
+    if !gemini_key.trim().is_empty() {
+        if !providers
+            .iter()
+            .any(|p| p.chat_protocol() == PROTOCOL_GEMINI)
+        {
+            providers.push(crate::models::CompatProvider {
+                id: uuid::Uuid::new_v4().to_string(),
+                label: "Gemini".into(),
+                protocol: PROTOCOL_GEMINI.into(),
+                base_url: "https://generativelanguage.googleapis.com".into(),
+                api_key: gemini_key.clone(),
+                models: vec![],
+            });
+        }
+        gemini_key.clear();
+        changed = true;
+    }
+    if !claude_key.trim().is_empty() {
+        if !providers
+            .iter()
+            .any(|p| p.chat_protocol() == PROTOCOL_ANTHROPIC)
+        {
+            providers.push(crate::models::CompatProvider {
+                id: uuid::Uuid::new_v4().to_string(),
+                label: "Claude".into(),
+                protocol: PROTOCOL_ANTHROPIC.into(),
+                base_url: "https://api.anthropic.com".into(),
+                api_key: claude_key.clone(),
+                models: vec![],
+            });
+        }
+        claude_key.clear();
+        changed = true;
+    }
+    changed
+}
+
 impl Db {
     pub fn open() -> Result<Self> {
         let conn = Connection::open(db_path()).context("open sqlite")?;
@@ -191,8 +236,8 @@ impl Db {
 
         let mut deepseek_api_key = decrypt("deepseek_api_key")?;
         let mut chatgpt_api_key = decrypt("chatgpt_api_key")?;
-        let gemini_api_key = decrypt("gemini_api_key")?;
-        let claude_api_key = decrypt("claude_api_key")?;
+        let mut gemini_api_key = decrypt("gemini_api_key")?;
+        let mut claude_api_key = decrypt("claude_api_key")?;
         let mut grok_api_key = decrypt("grok_api_key")?;
         let mut kimi_api_key = decrypt("kimi_api_key")?;
         let deepseek_base_url = get("deepseek_base_url", &d.deepseek_base_url);
@@ -204,7 +249,7 @@ impl Db {
                 compat_providers.push(crate::models::CompatProvider {
                     id: uuid::Uuid::new_v4().to_string(),
                     label: "DeepSeek".into(),
-                    protocol: "openai".into(),
+                    protocol: "deepseek".into(),
                     base_url: deepseek_base_url.clone(),
                     api_key: deepseek_api_key.clone(),
                     models: vec![],
@@ -252,6 +297,13 @@ impl Db {
                 grok_api_key.clear();
             }
         }
+        if absorb_legacy_gemini_claude(
+            &mut compat_providers,
+            &mut gemini_api_key,
+            &mut claude_api_key,
+        ) {
+            migrated = true;
+        }
 
         let s = AppSettings {
             compat_providers,
@@ -280,6 +332,14 @@ impl Db {
             },
             mcp_lan: matches!(
                 get("mcp_lan", if d.mcp_lan { "1" } else { "0" }).as_str(),
+                "1" | "true" | "True" | "yes"
+            ),
+            ai_interaction_log: matches!(
+                get(
+                    "ai_interaction_log",
+                    if d.ai_interaction_log { "1" } else { "0" }
+                )
+                .as_str(),
                 "1" | "true" | "True" | "yes"
             ),
             comfyui_url: {
@@ -376,6 +436,10 @@ impl Db {
                 if s.mcp_enabled { "1" } else { "0" }.to_string(),
             ),
             ("mcp_lan", if s.mcp_lan { "1" } else { "0" }.to_string()),
+            (
+                "ai_interaction_log",
+                if s.ai_interaction_log { "1" } else { "0" }.to_string(),
+            ),
             ("comfyui_url", s.comfyui_url.clone()),
             ("comfyui_workflow", s.comfyui_workflow.clone()),
             ("comfyui_prompt_node", s.comfyui_prompt_node.clone()),
@@ -1177,5 +1241,19 @@ mod tests {
             .map(|r| r.unwrap())
             .collect();
         assert_eq!(rows, vec![("m1".into(), 30)]);
+    }
+
+    #[test]
+    fn absorb_legacy_gemini_claude_moves_keys_once() {
+        let mut providers = vec![];
+        let mut g = "gk".to_string();
+        let mut c = "ck".to_string();
+        assert!(absorb_legacy_gemini_claude(&mut providers, &mut g, &mut c));
+        assert!(g.is_empty() && c.is_empty());
+        assert_eq!(providers.len(), 2);
+        assert_eq!(providers[0].protocol, crate::models::PROTOCOL_GEMINI);
+        assert_eq!(providers[1].protocol, crate::models::PROTOCOL_ANTHROPIC);
+        assert!(!absorb_legacy_gemini_claude(&mut providers, &mut g, &mut c));
+        assert_eq!(providers.len(), 2);
     }
 }

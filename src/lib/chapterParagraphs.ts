@@ -4,13 +4,29 @@ export function splitBodyLines(text: string): string[] {
   return text.replace(/\r\n/g, "\n").split("\n");
 }
 
+/** 用 `next`（可含多行）替换第 `index` 行。`from`/`to` 为新文中该段选区（光标宜放在 `to`）。 */
+export function replaceBodyLineSpan(
+  text: string,
+  index: number,
+  next: string,
+): { text: string; from: number; oldTo: number; to: number } {
+  const src = text.replace(/\r\n/g, "\n");
+  const lines = splitBodyLines(src);
+  if (index < 0 || index >= lines.length) {
+    return { text: src, from: 0, oldTo: 0, to: 0 };
+  }
+  let from = 0;
+  for (let i = 0; i < index; i++) from += lines[i]!.length + 1;
+  const oldTo = from + lines[index]!.length;
+  const parts = splitBodyLines(next.trimEnd());
+  const insert = (parts.length ? parts : [""]).join("\n");
+  lines.splice(index, 1, ...(parts.length ? parts : [""]));
+  return { text: lines.join("\n"), from, oldTo, to: from + insert.length };
+}
+
 /** 用 `next`（可含多行）替换第 `index` 行，再拼回全文。 */
 export function replaceBodyLine(text: string, index: number, next: string): string {
-  const lines = splitBodyLines(text);
-  if (index < 0 || index >= lines.length) return text;
-  const parts = splitBodyLines(next.trimEnd());
-  lines.splice(index, 1, ...(parts.length ? parts : [""]));
-  return lines.join("\n");
+  return replaceBodyLineSpan(text, index, next).text;
 }
 
 export function nonEmptyLineIndexes(text: string): number[] {

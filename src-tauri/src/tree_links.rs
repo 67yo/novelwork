@@ -1,4 +1,4 @@
-//! 根 → 分卷 → 章节继承：剧情/知识并集；章节本机剧情排序不含继承项。
+//! 根 → 分卷 → 章节：剧情仍继承；知识卡不继承（世界观/故事规则/根或卷直连知识只留在本节点）。
 
 use crate::models::{NodeKind, NovelTree, TreeNode};
 use std::collections::HashSet;
@@ -56,6 +56,9 @@ pub fn root_knowledge_ids(tree: &NovelTree) -> Vec<String> {
         &root.linked_knowledge_ids,
         NodeKind::Knowledge,
     )
+    .into_iter()
+    .filter(|id| !crate::write_prompts::is_write_prompt_excluded_id(tree, id))
+    .collect()
 }
 
 pub fn root_character_ids(tree: &NovelTree) -> Vec<String> {
@@ -205,8 +208,34 @@ pub fn chapter_local_plot_ids(tree: &NovelTree, chapter_id: &str) -> Vec<String>
     ids
 }
 
-/// 章节继承的知识卡：根 + 父分卷。
-pub fn chapter_inherited_knowledge_ids(tree: &NovelTree, chapter_id: &str) -> Vec<String> {
+/// 知识卡不向章/卷继承。
+pub fn chapter_inherited_knowledge_ids(_tree: &NovelTree, _chapter_id: &str) -> Vec<String> {
+    vec![]
+}
+
+/// 章节直连知识卡。
+pub fn chapter_local_knowledge_ids(tree: &NovelTree, chapter_id: &str) -> Vec<String> {
+    let listed = tree
+        .nodes
+        .iter()
+        .find(|n| n.id == chapter_id)
+        .map(|n| n.linked_knowledge_ids.as_slice())
+        .unwrap_or(&[]);
+    union_linked_ids(tree, chapter_id, listed, NodeKind::Knowledge)
+}
+
+/// 分卷直连知识（不含根上的卡，除非本卷也直连）。
+pub fn volume_local_knowledge_ids(tree: &NovelTree, volume_id: &str) -> Vec<String> {
+    volume_knowledge_ids(tree, volume_id)
+}
+
+/// 章节面板/MCP 章快照用的知识：仅本章直连。
+pub fn chapter_effective_knowledge_ids(tree: &NovelTree, chapter_id: &str) -> Vec<String> {
+    chapter_local_knowledge_ids(tree, chapter_id)
+}
+
+/// 写章注入：根 ∪ 卷直连 ∪ 章直连（去重，先到优先）。
+pub fn chapter_write_knowledge_ids(tree: &NovelTree, chapter_id: &str) -> Vec<String> {
     let mut ids = root_knowledge_ids(tree);
     if let Some(vid) = chapter_parent_volume_id(tree, chapter_id) {
         for kid in volume_local_knowledge_ids(tree, &vid) {
@@ -215,55 +244,20 @@ pub fn chapter_inherited_knowledge_ids(tree: &NovelTree, chapter_id: &str) -> Ve
             }
         }
     }
-    ids
-}
-
-/// 章节本机知识卡（不含根/分卷继承）。
-pub fn chapter_local_knowledge_ids(tree: &NovelTree, chapter_id: &str) -> Vec<String> {
-    let inherited: HashSet<String> = chapter_inherited_knowledge_ids(tree, chapter_id)
-        .into_iter()
-        .collect();
-    let listed = tree
-        .nodes
-        .iter()
-        .find(|n| n.id == chapter_id)
-        .map(|n| n.linked_knowledge_ids.as_slice())
-        .unwrap_or(&[]);
-    union_linked_ids(tree, chapter_id, listed, NodeKind::Knowledge)
-        .into_iter()
-        .filter(|id| !inherited.contains(id))
-        .collect()
-}
-
-/// 分卷本机知识（不含根）。
-pub fn volume_local_knowledge_ids(tree: &NovelTree, volume_id: &str) -> Vec<String> {
-    let root_set: HashSet<String> = root_knowledge_ids(tree).into_iter().collect();
-    volume_knowledge_ids(tree, volume_id)
-        .into_iter()
-        .filter(|id| !root_set.contains(id))
-        .collect()
-}
-
-/// 章节有效知识卡：根排序 ∪ 卷排序 ∪ 本章排序（去重，先到优先）。
-pub fn chapter_effective_knowledge_ids(tree: &NovelTree, chapter_id: &str) -> Vec<String> {
-    let mut ids = chapter_inherited_knowledge_ids(tree, chapter_id);
     for kid in chapter_local_knowledge_ids(tree, chapter_id) {
         if !ids.iter().any(|id| id == &kid) {
             ids.push(kid);
         }
     }
     ids
+        .into_iter()
+        .filter(|id| !crate::write_prompts::is_write_prompt_excluded_id(tree, id))
+        .collect()
 }
 
-/// 分卷有效知识：根 ∪ 本卷。
+/// 分卷面板用的知识：仅本卷直连。
 pub fn volume_effective_knowledge_ids(tree: &NovelTree, volume_id: &str) -> Vec<String> {
-    let mut ids = root_knowledge_ids(tree);
-    for kid in volume_local_knowledge_ids(tree, volume_id) {
-        if !ids.iter().any(|id| id == &kid) {
-            ids.push(kid);
-        }
-    }
-    ids
+    volume_local_knowledge_ids(tree, volume_id)
 }
 
 /// 分卷本机剧情（不含根继承）。
@@ -331,7 +325,7 @@ mod tests {
     }
 
     #[test]
-    fn chapter_effective_knowledge_merges_root() {
+    fn chapter_effective_knowledge_is_local_only() {
         let tree = NovelTree {
             novel_id: "n".into(),
             nodes: vec![
@@ -342,8 +336,10 @@ mod tests {
             ],
             edges: vec![],
         };
+        assert!(chapter_inherited_knowledge_ids(&tree, "ch").is_empty());
+        assert_eq!(chapter_effective_knowledge_ids(&tree, "ch"), vec!["ck"]);
         assert_eq!(
-            chapter_effective_knowledge_ids(&tree, "ch"),
+            chapter_write_knowledge_ids(&tree, "ch"),
             vec!["rk", "ck"]
         );
     }
@@ -371,15 +367,13 @@ mod tests {
         assert_eq!(chapter_parent_volume_id(&tree, "ch").as_deref(), Some("vol"));
         assert_eq!(chapter_local_plot_ids(&tree, "ch"), vec!["cp"]);
         assert_eq!(volume_local_plot_ids(&tree, "vol"), vec!["vp"]);
-        assert_eq!(
-            volume_effective_knowledge_ids(&tree, "vol"),
-            vec!["rk", "vk"]
-        );
+        assert_eq!(volume_effective_knowledge_ids(&tree, "vol"), vec!["vk"]);
         let inherited = chapter_inherited_plot_ids(&tree, "ch");
         assert!(inherited.iter().any(|id| id == "rp"));
         assert!(inherited.iter().any(|id| id == "vp"));
+        assert_eq!(chapter_effective_knowledge_ids(&tree, "ch"), vec!["ck"]);
         assert_eq!(
-            chapter_effective_knowledge_ids(&tree, "ch"),
+            chapter_write_knowledge_ids(&tree, "ch"),
             vec!["rk", "vk", "ck"]
         );
     }
@@ -442,9 +436,37 @@ mod tests {
             ],
         };
         assert!(chapter_parent_volume_id(&tree, "ch").is_none());
+        assert_eq!(chapter_effective_knowledge_ids(&tree, "ch"), vec!["ck"]);
         assert_eq!(
-            chapter_effective_knowledge_ids(&tree, "ch"),
+            chapter_write_knowledge_ids(&tree, "ch"),
             vec!["rk", "ck"]
         );
+    }
+
+    #[test]
+    fn write_prompts_excluded_from_inherit() {
+        use crate::models::KnowledgeCardPayload;
+        let mut hub = node("hub", NodeKind::Knowledge, &[], &["g1"]);
+        hub.knowledge = Some(KnowledgeCardPayload {
+            slot: crate::write_prompts::WRITE_PROMPTS_SLOT.into(),
+            ..Default::default()
+        });
+        let tree = NovelTree {
+            novel_id: "n".into(),
+            nodes: vec![
+                node("root", NodeKind::Novel, &[], &["hub", "rk"]),
+                hub,
+                node("g1", NodeKind::Knowledge, &[], &[]),
+                node("rk", NodeKind::Knowledge, &[], &[]),
+                node("ch", NodeKind::Chapter, &[], &["ck"]),
+                node("ck", NodeKind::Knowledge, &[], &[]),
+            ],
+            edges: vec![
+                edge("e-root-hub", "root", "hub", "knowledge"),
+                edge("e-hub-g", "hub", "g1", "knowledge"),
+            ],
+        };
+        assert_eq!(root_knowledge_ids(&tree), vec!["rk"]);
+        assert_eq!(chapter_write_knowledge_ids(&tree, "ch"), vec!["rk", "ck"]);
     }
 }

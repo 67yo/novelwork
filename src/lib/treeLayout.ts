@@ -12,6 +12,8 @@ export type LayoutEdge = {
   source: string;
   target: string;
   kind: string;
+  source_handle?: string | null;
+  target_handle?: string | null;
 };
 
 /** 可选：Vue Flow 实测尺寸；缺省按 kind 估高 */
@@ -181,6 +183,55 @@ function placeKnowLeftOfChars(
 function knowledgeSlotOf(n: LayoutNode): string {
   return (n.knowledge?.slot ?? "").trim();
 }
+
+function writePromptsHubOf(nodes: LayoutNode[]): LayoutNode | undefined {
+  return nodes.find((n) => n.kind === "knowledge" && knowledgeSlotOf(n) === "write_prompts");
+}
+
+function writePromptHubSide(
+  hubId: string,
+  edge: LayoutEdge,
+  nodes: LayoutNode[],
+): "generate" | "refine" | null {
+  const handle =
+    edge.source === hubId
+      ? edge.source_handle
+      : edge.target === hubId
+        ? edge.target_handle
+        : null;
+  const h = (handle ?? "").trim();
+  if (h === "right") return "refine";
+  if (h === "left") return "generate";
+  const other = edge.source === hubId ? edge.target : edge.target === hubId ? edge.source : "";
+  if (!other) return null;
+  const hub = nodes.find((n) => n.id === hubId);
+  const o = nodes.find((n) => n.id === other);
+  if (!hub || !o) return null;
+  return o.position.x < hub.position.x ? "generate" : "refine";
+}
+
+function writePromptKids(
+  hub: LayoutNode,
+  nodes: LayoutNode[],
+  edges: LayoutEdge[],
+  kind: "generate" | "refine",
+): LayoutNode[] {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const out: LayoutNode[] = [];
+  for (const e of edges) {
+    if (e.kind !== "knowledge") continue;
+    const other = e.source === hub.id ? e.target : e.target === hub.id ? e.source : "";
+    if (!other || other === hub.id) continue;
+    const n = byId.get(other);
+    if (!n || n.kind !== "knowledge") continue;
+    if (knowledgeSlotOf(n) === "write_prompts") continue;
+    if (writePromptHubSide(hub.id, e, nodes) !== kind) continue;
+    if (!out.some((x) => x.id === n.id)) out.push(n);
+  }
+  return out;
+}
+
+const WRITE_PROMPTS_HUB_X = CHAR_X - KNOW_GAP_FROM_CHAR - SIDE_DX;
 
 const WV_FAN_ORDER = [
   "wv_core_laws",
@@ -1325,8 +1376,19 @@ export function applyAutoLayout(
   const factionCards: LayoutNode[] = [];
   const religionCards: LayoutNode[] = [];
   const majorEventCards: LayoutNode[] = [];
+  const writeHub = writePromptsHubOf(nodes);
+  const writeGenKids = writeHub ? writePromptKids(writeHub, nodes, edges, "generate") : [];
+  const writeRefineKids = writeHub ? writePromptKids(writeHub, nodes, edges, "refine") : [];
+  const writeSkip = new Set<string>([
+    ...(writeHub ? [writeHub.id] : []),
+    ...writeGenKids.map((n) => n.id),
+    ...writeRefineKids.map((n) => n.id),
+  ]);
   for (const n of nodes.filter((n) => n.kind === "knowledge")) {
     const slot = knowledgeSlotOf(n);
+    if (writeSkip.has(n.id) || slot === "write_prompts") {
+      continue;
+    }
     if (slot === "story_rules") {
       storyRules = n;
       continue;
@@ -1439,6 +1501,31 @@ export function applyAutoLayout(
           for (const c of storyRulesFan) occupiedPlots.push({ ...c.position });
         }
       }
+      if (writeHub) {
+        writeHub.position = { x: WRITE_PROMPTS_HUB_X, y };
+        occupiedPlots.push({ ...writeHub.position });
+        placeSideByHeight(
+          writeGenKids,
+          WRITE_PROMPTS_HUB_X - SIDE_DX,
+          y,
+          SIDE_DX,
+          MAX_SIDE_COL,
+          -1,
+          sizes,
+        );
+        placeSideByHeight(
+          writeRefineKids,
+          WRITE_PROMPTS_HUB_X + SIDE_DX,
+          y,
+          SIDE_DX,
+          MAX_SIDE_COL,
+          1,
+          sizes,
+        );
+        for (const c of [...writeGenKids, ...writeRefineKids]) {
+          occupiedPlots.push({ ...c.position });
+        }
+      }
     }
 
     const srFanReach =
@@ -1458,7 +1545,28 @@ export function applyAutoLayout(
       -1,
       sizes,
     );
-    const knowSpan = placeKnowLeftOfChars(knows, chars, y, sizes);
+    const knowSpan =
+      host.kind === "novel" && writeHub
+        ? placeSideByHeight(
+            knows,
+            (writeGenKids.length ? WRITE_PROMPTS_HUB_X - SIDE_DX : WRITE_PROMPTS_HUB_X) - SIDE_DX,
+            y,
+            SIDE_DX,
+            MAX_SIDE_COL,
+            -1,
+            sizes,
+          )
+        : placeKnowLeftOfChars(knows, chars, y, sizes);
+    const writeSpan =
+      host.kind === "novel" && writeHub
+        ? Math.max(
+            defaultNodeH("knowledge"),
+            writeGenKids.length ? writeGenKids.length * (defaultNodeH("knowledge") + SIDE_GAP) : 0,
+            writeRefineKids.length
+              ? writeRefineKids.length * (defaultNodeH("knowledge") + SIDE_GAP)
+              : 0,
+          )
+        : 0;
     const storySpan =
       host.kind === "novel" && storyRules ? PLOT_DY : 0;
     const span = Math.max(
@@ -1466,6 +1574,7 @@ export function applyAutoLayout(
       charSpan,
       knowSpan,
       storySpan,
+      writeSpan,
     );
     const linked = hostHasLinkedCards(host, plotHosts, plotsByHost, charsByHost, knowsByHost);
     const step = linked
@@ -1638,18 +1747,53 @@ export function chapterInheritedPlotIds(
 }
 
 export function chapterInheritedKnowledgeIds(
+  _chapterId: string,
+  _nodes: LayoutNode[],
+  _edges: LayoutEdge[],
+): string[] {
+  return [];
+}
+
+/** 章节直连知识卡 */
+export function chapterLocalKnowledgeIds(
   chapterId: string,
   nodes: LayoutNode[],
   edges: LayoutEdge[],
 ): string[] {
-  const ids = [...rootLinkedKnowledgeIds(nodes, edges)];
-  const vid = chapterParentVolumeId(chapterId, nodes, edges);
-  if (vid) {
-    for (const kid of volumeLocalKnowledgeIds(vid, nodes, edges)) {
-      if (!ids.includes(kid)) ids.push(kid);
-    }
-  }
-  return ids;
+  const ch = nodes.find((n) => n.id === chapterId);
+  return unionLinkedIds(
+    nodes,
+    edges,
+    chapterId,
+    ch?.linked_knowledge_ids ?? [],
+    "knowledge",
+  );
+}
+
+/** 章节面板：仅本章直连（知识不继承） */
+export function chapterEffectiveKnowledgeIds(
+  chapterId: string,
+  nodes: LayoutNode[],
+  edges: LayoutEdge[],
+): string[] {
+  return chapterLocalKnowledgeIds(chapterId, nodes, edges);
+}
+
+/** 分卷直连知识 */
+export function volumeLocalKnowledgeIds(
+  volumeId: string,
+  nodes: LayoutNode[],
+  edges: LayoutEdge[],
+): string[] {
+  return hostLinked(volumeId, nodes, edges, "linked_knowledge_ids", "knowledge");
+}
+
+export function volumeEffectiveKnowledgeIds(
+  volumeId: string,
+  nodes: LayoutNode[],
+  edges: LayoutEdge[],
+): string[] {
+  return volumeLocalKnowledgeIds(volumeId, nodes, edges);
 }
 
 /** 章节本机剧情（不含根/分卷继承） */
@@ -1671,19 +1815,6 @@ export function chapterLocalPlotIds(
   return ids;
 }
 
-/** 章节有效知识：根排序 ∪ 卷排序 ∪ 本章排序（去重） */
-export function chapterEffectiveKnowledgeIds(
-  chapterId: string,
-  nodes: LayoutNode[],
-  edges: LayoutEdge[],
-): string[] {
-  const ids = [...chapterInheritedKnowledgeIds(chapterId, nodes, edges)];
-  for (const kid of chapterLocalKnowledgeIds(chapterId, nodes, edges)) {
-    if (!ids.includes(kid)) ids.push(kid);
-  }
-  return ids;
-}
-
 /** 分卷本机剧情（不含根） */
 export function volumeLocalPlotIds(
   volumeId: string,
@@ -1694,47 +1825,6 @@ export function volumeLocalPlotIds(
   return hostLinked(volumeId, nodes, edges, "linked_side_plot_ids", "side_plot").filter(
     (id) => !rootSet.has(id),
   );
-}
-
-/** 分卷本机知识（不含根） */
-export function volumeLocalKnowledgeIds(
-  volumeId: string,
-  nodes: LayoutNode[],
-  edges: LayoutEdge[],
-): string[] {
-  const rootSet = new Set(rootLinkedKnowledgeIds(nodes, edges));
-  return hostLinked(volumeId, nodes, edges, "linked_knowledge_ids", "knowledge").filter(
-    (id) => !rootSet.has(id),
-  );
-}
-
-export function volumeEffectiveKnowledgeIds(
-  volumeId: string,
-  nodes: LayoutNode[],
-  edges: LayoutEdge[],
-): string[] {
-  const ids = [...rootLinkedKnowledgeIds(nodes, edges)];
-  for (const kid of volumeLocalKnowledgeIds(volumeId, nodes, edges)) {
-    if (!ids.includes(kid)) ids.push(kid);
-  }
-  return ids;
-}
-
-/** 章节本机知识（不含根/分卷继承） */
-export function chapterLocalKnowledgeIds(
-  chapterId: string,
-  nodes: LayoutNode[],
-  edges: LayoutEdge[],
-): string[] {
-  const inherited = new Set(chapterInheritedKnowledgeIds(chapterId, nodes, edges));
-  const ch = nodes.find((n) => n.id === chapterId);
-  return unionLinkedIds(
-    nodes,
-    edges,
-    chapterId,
-    ch?.linked_knowledge_ids ?? [],
-    "knowledge",
-  ).filter((id) => !inherited.has(id));
 }
 
 export const __layoutConsts = {

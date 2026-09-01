@@ -39,6 +39,7 @@ struct CompatEndpoint<'a> {
     api_key: &'a str,
     base_url: &'a str,
     label: &'a str,
+    protocol: &'static str,
 }
 
 fn compat_endpoint<'a>(settings: &'a AppSettings, model: &str) -> CompatEndpoint<'a> {
@@ -51,12 +52,14 @@ fn compat_endpoint<'a>(settings: &'a AppSettings, model: &str) -> CompatEndpoint
             } else {
                 p.label.as_str()
             },
+            protocol: p.chat_protocol(),
         }
     } else {
         CompatEndpoint {
             api_key: "",
             base_url: "",
             label: "OpenAI",
+            protocol: crate::models::PROTOCOL_OPENAI,
         }
     }
 }
@@ -96,10 +99,20 @@ pub async fn complete(
 
     let ep = compat_endpoint(settings, &model);
     let api_model = crate::models::api_model_id(&model).to_string();
-    if ep.api_key.trim().is_empty() {
+    if ep.api_key.trim().is_empty()
+        && !crate::models::protocol_allows_empty_key(ep.protocol)
+    {
         let content = mock_complete(system, user);
         let prompt_tokens = ((system.len() + user.len()) / 4) as u32;
         let completion_tokens = (content.len() / 4) as u32;
+        crate::ai_log::write(
+            "llm.mock",
+            json!({
+                "model": model,
+                "system": system,
+                "user": user,
+            }),
+        );
         return Ok(CompletionResult {
             content,
             used_mock: true,
@@ -112,7 +125,6 @@ pub async fn complete(
 
     // ponytail: 仅预热，失败不影响主 HTTP 路径；切勿 expect（会拖垮整个进程）
     rig_bridge::warm_client(settings);
-    let _ = adk_bridge::describe();
 
     let url = chat_completions_url(ep.base_url);
     let mut body = json!({
@@ -131,6 +143,19 @@ pub async fn complete(
     if json_object {
         body["response_format"] = json!({"type": "json_object"});
     }
+    crate::compat_messages::fill_missing_message_content(&mut body);
+
+    crate::ai_log::write(
+        "llm.request",
+        json!({
+            "url": url,
+            "model": model,
+            "api_model": api_model,
+            "provider": ep.label,
+            "json_object": json_object,
+            "messages": body.get("messages").cloned().unwrap_or(Value::Null),
+        }),
+    );
 
     let client = reqwest::Client::new();
     let send = client
@@ -140,7 +165,22 @@ pub async fn complete(
         .send();
 
     let resp = tokio::select! {
-        r = send => r?,
+        r = send => match r {
+            Ok(resp) => resp,
+            Err(e) => {
+                crate::ai_log::write(
+                    "llm.transport_error",
+                    json!({
+                        "url": url,
+                        "model": model,
+                        "request": body,
+                        "error": e.to_string(),
+                        "chain": crate::ai_log::error_chain(&e),
+                    }),
+                );
+                return Err(e.into());
+            }
+        },
         _ = wait_cancel(&cancel) => return Err(anyhow!("cancelled")),
     };
 
@@ -154,12 +194,38 @@ pub async fn complete(
             r = resp.text() => r.unwrap_or_default(),
             _ = wait_cancel(&cancel) => return Err(anyhow!("cancelled")),
         };
+        crate::ai_log::write(
+            "llm.http_error",
+            json!({
+                "url": url,
+                "model": model,
+                "status": status.as_u16(),
+                "request": body,
+                "response": text,
+            }),
+        );
         return Err(anyhow!("{} API {status}: {text}", ep.label));
     }
 
-    let parsed: Value = tokio::select! {
-        r = resp.json() => r?,
+    let raw = tokio::select! {
+        r = resp.text() => r?,
         _ = wait_cancel(&cancel) => return Err(anyhow!("cancelled")),
+    };
+    let parsed: Value = match serde_json::from_str(&raw) {
+        Ok(v) => v,
+        Err(e) => {
+            crate::ai_log::write(
+                "llm.parse_error",
+                json!({
+                    "url": url,
+                    "model": model,
+                    "request": body,
+                    "response": raw,
+                    "error": e.to_string(),
+                }),
+            );
+            return Err(anyhow!("{} API JSON: {e}; body: {raw}", ep.label));
+        }
     };
     let content = extract_assistant_text(&parsed);
 
@@ -180,6 +246,20 @@ pub async fn complete(
         let c = (content.len() / 4) as u32;
         (p, c, p + c)
     };
+
+    crate::ai_log::write(
+        "llm.response",
+        json!({
+            "url": url,
+            "model": model,
+            "content": content,
+            "usage": {
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": total_tokens,
+            },
+        }),
+    );
 
     Ok(CompletionResult {
         content,
@@ -240,9 +320,9 @@ fn truncate(s: &str, n: usize) -> String {
 
 mod rig_bridge {
     use crate::models::AppSettings;
-    use rig_core::providers::openai;
+    use rig_core::providers::openai::CompletionsClient;
 
-    /// Wire rig-core OpenAI-compatible client to first configured provider.
+    /// Wire rig-core Chat Completions client to first configured provider.
     pub fn warm_client(settings: &AppSettings) {
         let Some(p) = settings
             .compat_providers
@@ -251,18 +331,11 @@ mod rig_bridge {
         else {
             return;
         };
-        let _ = openai::Client::builder()
+        let _ = CompletionsClient::builder()
             .api_key(&p.api_key)
             .base_url(&p.base_url)
             .build()
-            .or_else(|_| openai::Client::new(&p.api_key));
-    }
-}
-
-mod adk_bridge {
-    /// Skills injection lives in `crate::skills` (adk-rust `skills` feature).
-    pub fn describe() -> &'static str {
-        "adk-rust skills enabled for chat"
+            .or_else(|_| CompletionsClient::new(&p.api_key));
     }
 }
 

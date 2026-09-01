@@ -23,10 +23,6 @@ export type ModelCatalog = {
 
 export type SettingsView = {
   compat_providers: CompatProviderView[];
-  gemini_api_key_masked: string;
-  gemini_api_key_configured: boolean;
-  claude_api_key_masked: string;
-  claude_api_key_configured: boolean;
   default_model: string;
   create_model: string;
   generate_model: string;
@@ -38,6 +34,8 @@ export type SettingsView = {
   mcp_port: number;
   mcp_enabled: boolean;
   mcp_lan: boolean;
+  ai_interaction_log: boolean;
+  ai_log_dir: string;
   comfyui_url: string;
   comfyui_workflow: string;
   comfyui_prompt_node: string;
@@ -353,9 +351,10 @@ export function fillKnowledgeCard(novelId: string, nodeId: string) {
 
 export const api = {
   getSettings: () => invoke<SettingsView>("get_settings"),
+  openAiLogDir: () => invoke<string>("open_ai_log_dir"),
   refreshModelCatalog: () => invoke<ModelCatalog>("refresh_model_catalog"),
-  fetchCompatModels: (baseUrl: string, apiKey: string) =>
-    invoke<string[]>("fetch_compat_models", { baseUrl, apiKey }),
+  fetchCompatModels: (baseUrl: string, apiKey: string, protocol?: string) =>
+    invoke<string[]>("fetch_compat_models", { baseUrl, apiKey, protocol: protocol ?? null }),
   refreshCompatProviderModels: (providerId: string) =>
     invoke<string[]>("refresh_compat_provider_models", { providerId }),
   saveSettings: (input: {
@@ -367,8 +366,6 @@ export const api = {
       api_key?: string | null;
       models: string[];
     }[];
-    gemini_api_key?: string | null;
-    claude_api_key?: string | null;
     default_model?: string | null;
     create_model?: string | null;
     generate_model?: string | null;
@@ -379,6 +376,7 @@ export const api = {
     mcp_port?: number | null;
     mcp_enabled?: boolean | null;
     mcp_lan?: boolean | null;
+    ai_interaction_log?: boolean | null;
     comfyui_url?: string | null;
     comfyui_workflow?: string | null;
     comfyui_prompt_node?: string | null;
@@ -396,8 +394,6 @@ export const api = {
               models: p.models,
             }))
           : null,
-        geminiApiKey: input.gemini_api_key ?? null,
-        claudeApiKey: input.claude_api_key ?? null,
         defaultModel: input.default_model ?? null,
         createModel: input.create_model ?? null,
         generateModel: input.generate_model ?? null,
@@ -408,6 +404,7 @@ export const api = {
         mcpPort: input.mcp_port ?? null,
         mcpEnabled: input.mcp_enabled ?? null,
         mcpLan: input.mcp_lan ?? null,
+        aiInteractionLog: input.ai_interaction_log ?? null,
         comfyuiUrl: input.comfyui_url ?? null,
         comfyuiWorkflow: input.comfyui_workflow ?? null,
         comfyuiPromptNode: input.comfyui_prompt_node ?? null,

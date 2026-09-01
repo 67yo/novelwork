@@ -33,10 +33,7 @@ let mcpTimer: number | undefined;
 async function refreshKey() {
   try {
     const s = await api.getSettings();
-    keyOk.value =
-      (s.compat_providers || []).some((p) => p.api_key_configured) ||
-      s.gemini_api_key_configured ||
-      s.claude_api_key_configured;
+    keyOk.value = (s.compat_providers || []).some((p) => p.api_key_configured);
     setLocalePreference((s.ui_locale || "system") as LocalePreference);
   } catch {
     keyOk.value = false;

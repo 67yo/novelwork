@@ -7,8 +7,9 @@
 - Tauri 2 + Rust
 - Vite + Vue 3 + TypeScript + Tailwind + shadcn-vue 风格组件
 - SQLite（项目 / Chat / 设置）
-- LanceDB（知识库分段）
-- DeepSeek API（`rig-core` / `adk-rust` 已接入链路）
+- sqlite-vec（`rig-sqlite`，公共库向量）
+- LanceDB（`rig-lancedb`，章节记忆向量）
+- DeepSeek API（`rig-agent` Chat + 本机 MCP 工具）
 
 ## 开发
 
@@ -60,6 +61,7 @@ src-tauri/target/release/bundle/nsis/
 ```text
 novework/
   nove.db
+  knowledge_vec.db
   lancedb/
   novels/{id}/meta.json, tree.json, chapters/*.md, cover.*
 ```

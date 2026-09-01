@@ -1,13 +1,7 @@
 use crate::chunk::chunk_text;
-use crate::paths::lancedb_dir;
 use anyhow::{anyhow, Result};
-use arrow_array::{ArrayRef, Int32Array, RecordBatch, RecordBatchIterator, StringArray};
-use arrow_schema::{DataType, Field, Schema};
 use epub::doc::{EpubDoc, NavPoint};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
-
-const TABLE: &str = "knowledge_chunks";
 
 #[derive(Debug, Clone)]
 pub struct SourceChapter {
@@ -54,59 +48,6 @@ impl ParsedSource {
             .collect::<Vec<_>>()
             .join("\n")
     }
-}
-
-/// Persist chunks into LanceDB (text columns).
-pub async fn upsert_chunks(book_id: &str, chunks: &[String]) -> Result<()> {
-    let db = lancedb::connect(lancedb_dir().to_str().unwrap_or("./lancedb"))
-        .execute()
-        .await?;
-
-    let schema = Arc::new(Schema::new(vec![
-        Field::new("book_id", DataType::Utf8, false),
-        Field::new("idx", DataType::Int32, false),
-        Field::new("content", DataType::Utf8, false),
-    ]));
-
-    let book_ids: StringArray = chunks.iter().map(|_| Some(book_id)).collect();
-    let idxs: Int32Array = (0..chunks.len() as i32).map(Some).collect();
-    let contents: StringArray = chunks.iter().map(|c| Some(c.as_str())).collect();
-
-    let batch = RecordBatch::try_new(
-        schema.clone(),
-        vec![
-            Arc::new(book_ids) as ArrayRef,
-            Arc::new(idxs) as ArrayRef,
-            Arc::new(contents) as ArrayRef,
-        ],
-    )?;
-
-    let batches = RecordBatchIterator::new(vec![Ok(batch)].into_iter(), schema.clone());
-    let reader: Box<dyn arrow_array::RecordBatchReader + Send> = Box::new(batches);
-
-    let names = db.table_names().execute().await.unwrap_or_default();
-    if names.iter().any(|n| n == TABLE) {
-        let table = db.open_table(TABLE).execute().await?;
-        table.add(reader).execute().await?;
-    } else {
-        db.create_table(TABLE, reader).execute().await?;
-    }
-    Ok(())
-}
-
-/// Best-effort remove Lance rows for a book (SQLite remains source of truth for listing).
-pub async fn delete_chunks(book_id: &str) -> Result<()> {
-    let db = lancedb::connect(lancedb_dir().to_str().unwrap_or("./lancedb"))
-        .execute()
-        .await?;
-    let names = db.table_names().execute().await.unwrap_or_default();
-    if !names.iter().any(|n| n == TABLE) {
-        return Ok(());
-    }
-    let table = db.open_table(TABLE).execute().await?;
-    let safe = book_id.replace('\'', "''");
-    let _ = table.delete(&format!("book_id = '{safe}'")).await;
-    Ok(())
 }
 
 pub fn split_book(text: &str) -> Vec<String> {
