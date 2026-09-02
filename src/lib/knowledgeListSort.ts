@@ -14,7 +14,13 @@ import {
   knowledgeSlot,
   worldviewFanTitleKey,
 } from "@/lib/worldview";
-import { isWritePromptsSlot, WRITE_PROMPTS_SLOT, WRITE_PROMPTS_TITLE_KEY } from "@/lib/writePrompts";
+import {
+  isWritePromptsSlot,
+  writePromptSideFromEdge,
+  WRITE_PROMPTS_SLOT,
+  WRITE_PROMPTS_TITLE_KEY,
+} from "@/lib/writePrompts";
+import { rootLinkedKnowledgeIds, rootLinkedPlotIds, volumeLocalPlotIds, chapterLocalPlotIds } from "@/lib/treeLayout";
 import { worldviewFanVisual } from "@/lib/worldviewStyle";
 
 /** 控制台 / 关联知识：前 6 扇形 + 第 7 故事规则 */
@@ -173,53 +179,467 @@ export function sortLinkedKnowledgeNodes(nodes: TreeNode[]): TreeNode[] {
   });
 }
 
-/** 画布左侧控制台 · 知识卡列表 */
-export function buildKnowledgeNavItems(tree: NovelTree, t: (key: MessageKey) => string): KnowledgeNavItem[] {
-  const knowledgeNodes = tree.nodes.filter((n) => n.kind === "knowledge");
+function pushKnowledgeNavItem(
+  n: TreeNode,
+  indent: number,
+  t: (key: MessageKey) => string,
+  listed: Set<string>,
+  out: KnowledgeNavItem[],
+) {
+  if (listed.has(n.id)) return;
+  listed.add(n.id);
+  out.push({
+    id: n.id,
+    label: knowledgeNodeLabel(n, t),
+    kind: "knowledge",
+    indent,
+    chipShell: knowledgeChipShell(n),
+  });
+}
+
+function knowledgeBySlot(tree: NovelTree): Map<string, TreeNode> {
   const bySlot = new Map<string, TreeNode>();
-  for (const n of knowledgeNodes) {
+  for (const n of tree.nodes) {
+    if (n.kind !== "knowledge") continue;
     const slot = knowledgeSlot(n);
     if (slot && !bySlot.has(slot)) bySlot.set(slot, n);
   }
+  return bySlot;
+}
+
+export type WorldviewNavTone = "rose" | "indigo" | "amber" | "sky" | "teal";
+
+export type WorldviewNavRow = {
+  role: "parent" | "group" | "child";
+  id: string;
+  label: string;
+  tone?: WorldviewNavTone;
+};
+
+function appendChildGroup(
+  out: WorldviewNavRow[],
+  t: (key: MessageKey) => string,
+  parentId: string,
+  labelKey: MessageKey,
+  kids: TreeNode[],
+  tone: WorldviewNavTone,
+) {
+  if (!kids.length) return;
+  out.push({
+    role: "group",
+    id: `g:${parentId}:${labelKey}`,
+    label: t(labelKey),
+    tone,
+  });
+  for (const k of kids) {
+    out.push({
+      role: "child",
+      id: k.id,
+      label: knowledgeNodeLabel(k, t),
+      tone,
+    });
+  }
+}
+
+/** 世界观六总卡 + 分类子卡（种族/势力等分组标题，无 ASCII 树） */
+export function buildWorldviewNavItems(
+  tree: NovelTree,
+  t: (key: MessageKey) => string,
+): WorldviewNavRow[] {
+  const bySlot = knowledgeBySlot(tree);
+  const out: WorldviewNavRow[] = [];
+  for (const def of WORLDVIEW_FAN_SLOTS) {
+    const parent = bySlot.get(def.slot);
+    if (!parent) continue;
+    out.push({
+      role: "parent",
+      id: parent.id,
+      label: knowledgeNodeLabel(parent, t),
+    });
+    if (def.slot === "wv_core_laws") {
+      appendChildGroup(
+        out,
+        t,
+        parent.id,
+        "workspace.coreLaws.axioms",
+        sortByLinkedOrder(parent, linkedAxiomCards(tree, parent.id)),
+        "teal",
+      );
+    } else if (def.slot === "wv_spatiotemporal") {
+      appendChildGroup(
+        out,
+        t,
+        parent.id,
+        "workspace.st.locations",
+        sortByLinkedOrder(parent, linkedLocationCards(tree, parent.id)),
+        "teal",
+      );
+    } else if (def.slot === "wv_social_power") {
+      appendChildGroup(
+        out,
+        t,
+        parent.id,
+        "workspace.pow.races",
+        sortByLinkedOrder(parent, linkedRaceCards(tree, parent.id)),
+        "rose",
+      );
+      appendChildGroup(
+        out,
+        t,
+        parent.id,
+        "workspace.pow.factions",
+        sortByLinkedOrder(parent, linkedFactionCards(tree, parent.id)),
+        "indigo",
+      );
+    } else if (def.slot === "wv_history_culture") {
+      appendChildGroup(
+        out,
+        t,
+        parent.id,
+        "workspace.hc.religions",
+        sortByLinkedOrder(parent, linkedReligionCards(tree, parent.id)),
+        "amber",
+      );
+      appendChildGroup(
+        out,
+        t,
+        parent.id,
+        "workspace.hc.majorEvents",
+        sortByLinkedOrder(parent, linkedMajorEventCards(tree, parent.id)),
+        "sky",
+      );
+    }
+  }
+  return out;
+}
+
+/** 全书：封面与规划 + 生成/精修（按左右边分子卡）+ 根上普通知识 */
+export function buildBookNavItems(
+  tree: NovelTree,
+  t: (key: MessageKey) => string,
+): WorldviewNavRow[] {
+  const out: WorldviewNavRow[] = [];
+  const root = tree.nodes.find((n) => n.kind === "novel");
+  if (root) {
+    out.push({
+      role: "parent",
+      id: root.id,
+      label: t("workspace.bookSelectRoot"),
+    });
+  }
+  const hub = tree.nodes.find(
+    (n) => n.kind === "knowledge" && isWritePromptsSlot(knowledgeSlot(n)),
+  );
+  const listed = new Set<string>();
+  if (hub) {
+    out.push({
+      role: "parent",
+      id: hub.id,
+      label: knowledgeNodeLabel(hub, t),
+    });
+    listed.add(hub.id);
+    const generate: TreeNode[] = [];
+    const refine: TreeNode[] = [];
+    const other: TreeNode[] = [];
+    for (const k of linkedChildCards(tree, hub)) {
+      listed.add(k.id);
+      const edge = tree.edges.find(
+        (e) =>
+          (e.source === hub.id && e.target === k.id) ||
+          (e.source === k.id && e.target === hub.id),
+      );
+      const side = edge ? writePromptSideFromEdge(hub.id, edge) : null;
+      if (side === "generate") generate.push(k);
+      else if (side === "refine") refine.push(k);
+      else other.push(k);
+    }
+    appendChildGroup(
+      out,
+      t,
+      hub.id,
+      "workspace.writePrompts.handleGenerate",
+      generate,
+      "teal",
+    );
+    appendChildGroup(
+      out,
+      t,
+      hub.id,
+      "workspace.writePrompts.handleRefine",
+      refine,
+      "indigo",
+    );
+    for (const k of other) {
+      out.push({
+        role: "child",
+        id: k.id,
+        label: knowledgeNodeLabel(k, t),
+        tone: "teal",
+      });
+    }
+  }
+  const generic = filterHostPanelLinkedKnowledge(
+    orderKnowledgeNodesByIds(
+      tree.nodes,
+      rootLinkedKnowledgeIds(tree.nodes, tree.edges),
+    ),
+  ).filter((n) => !listed.has(n.id));
+  if (generic.length) {
+    out.push({
+      role: "group",
+      id: "g:book:knowledge",
+      label: t("workspace.rootLinkedKnowledge"),
+      tone: "teal",
+    });
+    for (const k of generic) {
+      out.push({
+        role: "child",
+        id: k.id,
+        label: knowledgeNodeLabel(k, t),
+        tone: "teal",
+      });
+    }
+  }
+  return out;
+}
+
+function characterHostIds(tree: NovelTree, charId: string): string[] {
+  const ids: string[] = [];
+  for (const n of tree.nodes) {
+    if (n.kind === "character") continue;
+    if ((n.linked_character_ids ?? []).includes(charId)) ids.push(n.id);
+  }
+  for (const e of tree.edges) {
+    if (e.kind !== "character") continue;
+    const other = e.source === charId ? e.target : e.target === charId ? e.source : null;
+    if (other && other !== charId) ids.push(other);
+  }
+  return [...new Set(ids)];
+}
+
+function primaryCharacterHost(tree: NovelTree, charId: string): TreeNode | null {
+  const byId = new Map(tree.nodes.map((n) => [n.id, n]));
+  const hosts = characterHostIds(tree, charId)
+    .map((id) => byId.get(id))
+    .filter((n): n is TreeNode => !!n && n.kind !== "character");
+  const rank = (k: string) =>
+    k === "novel" ? 0 : k === "volume" ? 1 : k === "chapter" ? 2 : 3;
+  hosts.sort((a, b) => rank(a.kind) - rank(b.kind) || a.id.localeCompare(b.id));
+  return hosts[0] ?? null;
+}
+
+function characterNavHostLabel(host: TreeNode, t: (key: MessageKey) => string): string {
+  if (host.kind === "novel") return t("workspace.tabBook");
+  if (host.kind === "volume") return host.label?.trim() || t("workspace.volumeBadge");
+  if (host.kind === "chapter") return host.label?.trim() || t("workspace.newChapter");
+  if (host.kind === "side_plot") return host.label?.trim() || t("workspace.plot");
+  return host.label?.trim() || host.id;
+}
+
+function sortCharactersForNav(host: TreeNode | null, kids: TreeNode[]): TreeNode[] {
+  const order = host?.linked_character_ids ?? [];
+  const rank = new Map(order.map((id, i) => [id, i]));
+  return kids.slice().sort((a, b) => {
+    const ia = rank.get(a.id) ?? 9999;
+    const ib = rank.get(b.id) ?? 9999;
+    return ia - ib || (a.label ?? "").localeCompare(b.label ?? "") || a.id.localeCompare(b.id);
+  });
+}
+
+/** 人物：按宿主分组（全书 / 卷 / 章），无 ASCII 树 */
+export function buildCharacterNavItems(
+  tree: NovelTree,
+  t: (key: MessageKey) => string,
+): WorldviewNavRow[] {
+  const buckets = new Map<string, { host: TreeNode; kids: TreeNode[] }>();
+  const orphans: TreeNode[] = [];
+  for (const n of tree.nodes) {
+    if (n.kind !== "character") continue;
+    const host = primaryCharacterHost(tree, n.id);
+    if (!host) {
+      orphans.push(n);
+      continue;
+    }
+    const bucket = buckets.get(host.id) ?? { host, kids: [] };
+    bucket.kids.push(n);
+    buckets.set(host.id, bucket);
+  }
+  const hostRank = (k: string) =>
+    k === "novel" ? 0 : k === "volume" ? 1 : k === "chapter" ? 2 : 3;
+  const groups = [...buckets.values()].sort(
+    (a, b) =>
+      hostRank(a.host.kind) - hostRank(b.host.kind) ||
+      a.host.position.y - b.host.position.y ||
+      a.host.id.localeCompare(b.host.id),
+  );
+  const out: WorldviewNavRow[] = [];
+  for (const { host, kids } of groups) {
+    out.push({
+      role: "group",
+      id: `g:char:${host.id}`,
+      label: characterNavHostLabel(host, t),
+      tone: "amber",
+    });
+    for (const k of sortCharactersForNav(host, kids)) {
+      out.push({
+        role: "child",
+        id: k.id,
+        label: k.label?.trim() || t("workspace.newCharacter"),
+        tone: "amber",
+      });
+    }
+  }
+  for (const k of sortCharactersForNav(null, orphans)) {
+    out.push({
+      role: "parent",
+      id: k.id,
+      label: k.label?.trim() || t("workspace.newCharacter"),
+    });
+  }
+  return out;
+}
+
+function plotNavLabel(n: TreeNode, t: (key: MessageKey) => string): string {
+  return n.label?.trim() || t("workspace.plot");
+}
+
+function appendPlotGroup(
+  out: WorldviewNavRow[],
+  listed: Set<string>,
+  hostId: string,
+  label: string,
+  ids: string[],
+  byId: Map<string, TreeNode>,
+  t: (key: MessageKey) => string,
+) {
+  const kids = ids
+    .map((id) => byId.get(id))
+    .filter((n): n is TreeNode => !!n && n.kind === "side_plot");
+  if (!kids.length) return;
+  out.push({ role: "group", id: `g:plot:${hostId}`, label, tone: "sky" });
+  for (const k of kids) {
+    listed.add(k.id);
+    out.push({
+      role: "child",
+      id: k.id,
+      label: plotNavLabel(k, t),
+      tone: "sky",
+    });
+  }
+}
+
+/** 自定义剧情：按全书 / 卷 / 章分组 */
+export function buildPlotNavItems(
+  tree: NovelTree,
+  t: (key: MessageKey) => string,
+): WorldviewNavRow[] {
+  const byId = new Map(tree.nodes.map((n) => [n.id, n]));
+  const listed = new Set<string>();
+  const out: WorldviewNavRow[] = [];
+  const root = tree.nodes.find((n) => n.kind === "novel");
+  if (root) {
+    appendPlotGroup(
+      out,
+      listed,
+      root.id,
+      t("workspace.tabBook"),
+      rootLinkedPlotIds(tree.nodes, tree.edges),
+      byId,
+      t,
+    );
+  }
+  const byY = (a: TreeNode, b: TreeNode) =>
+    a.position.y - b.position.y || a.id.localeCompare(b.id);
+  for (const vol of tree.nodes.filter((n) => n.kind === "volume").sort(byY)) {
+    appendPlotGroup(
+      out,
+      listed,
+      vol.id,
+      vol.label?.trim() || t("workspace.volumeBadge"),
+      volumeLocalPlotIds(vol.id, tree.nodes, tree.edges),
+      byId,
+      t,
+    );
+  }
+  for (const ch of tree.nodes.filter((n) => n.kind === "chapter").sort(byY)) {
+    appendPlotGroup(
+      out,
+      listed,
+      ch.id,
+      ch.label?.trim() || t("workspace.newChapter"),
+      chapterLocalPlotIds(ch.id, tree.nodes, tree.edges),
+      byId,
+      t,
+    );
+  }
+  for (const n of tree.nodes.filter((x) => x.kind === "side_plot" && !listed.has(x.id))) {
+    out.push({ role: "parent", id: n.id, label: plotNavLabel(n, t) });
+  }
+  return out;
+}
+
+/** 故事规则总卡 + 四块（表层/引擎/兑现/红线） */
+export function buildStoryRulesNavItems(
+  tree: NovelTree,
+  t: (key: MessageKey) => string,
+): WorldviewNavRow[] {
+  const hub = knowledgeBySlot(tree).get(STORY_RULES_SLOT.slot);
+  if (!hub) return [];
+  const out: WorldviewNavRow[] = [
+    {
+      role: "parent",
+      id: hub.id,
+      label: knowledgeNodeLabel(hub, t),
+    },
+  ];
+  for (const k of linkedStoryRulesBlocks(tree, hub.id)) {
+    out.push({
+      role: "child",
+      id: k.id,
+      label: knowledgeNodeLabel(k, t),
+      tone: "teal",
+    });
+  }
+  return out;
+}
+
+/** 画布左侧控制台 · 知识卡列表 */
+export function buildKnowledgeNavItems(tree: NovelTree, t: (key: MessageKey) => string): KnowledgeNavItem[] {
+  const knowledgeNodes = tree.nodes.filter((n) => n.kind === "knowledge");
+  const bySlot = knowledgeBySlot(tree);
   const listed = new Set<string>();
   const out: KnowledgeNavItem[] = [];
-
-  const push = (n: TreeNode, indent: number) => {
-    if (listed.has(n.id)) return;
-    listed.add(n.id);
-    out.push({
-      id: n.id,
-      label: knowledgeNodeLabel(n, t),
-      kind: "knowledge",
-      indent,
-      chipShell: knowledgeChipShell(n),
-    });
-  };
 
   for (const def of WORLDVIEW_FAN_SLOTS) {
     const parent = bySlot.get(def.slot);
     if (!parent) continue;
-    push(parent, 0);
-    for (const child of linkedChildCards(tree, parent)) push(child, 1);
+    pushKnowledgeNavItem(parent, 0, t, listed, out);
+    for (const child of linkedChildCards(tree, parent)) {
+      pushKnowledgeNavItem(child, 1, t, listed, out);
+    }
   }
 
   const rules = bySlot.get(STORY_RULES_SLOT.slot);
   if (rules) {
-    push(rules, 0);
-    for (const child of linkedChildCards(tree, rules)) push(child, 1);
+    pushKnowledgeNavItem(rules, 0, t, listed, out);
+    for (const child of linkedChildCards(tree, rules)) {
+      pushKnowledgeNavItem(child, 1, t, listed, out);
+    }
   }
 
   const writePrompts = bySlot.get(WRITE_PROMPTS_SLOT);
   if (writePrompts) {
-    push(writePrompts, 0);
-    for (const child of linkedChildCards(tree, writePrompts)) push(child, 1);
+    pushKnowledgeNavItem(writePrompts, 0, t, listed, out);
+    for (const child of linkedChildCards(tree, writePrompts)) {
+      pushKnowledgeNavItem(child, 1, t, listed, out);
+    }
   }
 
   const rest = knowledgeNodes.filter((n) => !listed.has(n.id));
   rest.sort(
     (a, b) => knowledgeShuffleKey(a.id) - knowledgeShuffleKey(b.id) || a.id.localeCompare(b.id),
   );
-  for (const n of rest) push(n, 0);
+  for (const n of rest) pushKnowledgeNavItem(n, 0, t, listed, out);
 
   return out;
 }

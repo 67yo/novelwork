@@ -61,16 +61,7 @@ pub async fn refresh(db: &Db) -> Result<ModelCatalog> {
         }
         match fetch_provider_models(p.chat_protocol(), &p.base_url, &p.api_key).await {
             Ok(ids) => {
-                // Keep previously selected models that still exist; if none selected yet, take all.
-                if p.models.is_empty() {
-                    p.models = ids;
-                } else {
-                    let set: std::collections::HashSet<_> = ids.iter().cloned().collect();
-                    p.models.retain(|m| set.contains(m));
-                    if p.models.is_empty() {
-                        p.models = ids;
-                    }
-                }
+                p.models = merge_intersect_models(&p.models, ids);
             }
             Err(e) => {
                 catalog
@@ -93,7 +84,53 @@ pub async fn refresh(db: &Db) -> Result<ModelCatalog> {
     Ok(catalog)
 }
 
-/// Refresh models for one saved provider; replaces its models list with API result.
+/// Names in `previous` that the `/models` API did not return (manual extras).
+fn unlisted_models(previous: &[String], fetched: &[String]) -> Vec<String> {
+    let set: std::collections::HashSet<&str> = fetched.iter().map(String::as_str).collect();
+    previous
+        .iter()
+        .filter(|m| {
+            let t = m.trim();
+            !t.is_empty() && !set.contains(t)
+        })
+        .cloned()
+        .collect()
+}
+
+fn append_unlisted(mut out: Vec<String>, extras: Vec<String>) -> Vec<String> {
+    for e in extras {
+        if !out.iter().any(|x| x == &e) {
+            out.push(e);
+        }
+    }
+    out
+}
+
+/// Full API list plus names the catalog omitted.
+fn merge_replace_models(previous: &[String], fetched: Vec<String>) -> Vec<String> {
+    let extras = unlisted_models(previous, &fetched);
+    append_unlisted(fetched, extras)
+}
+
+/// Keep the user's subset that still exists, plus names the catalog omitted.
+fn merge_intersect_models(previous: &[String], fetched: Vec<String>) -> Vec<String> {
+    if previous.is_empty() {
+        return fetched;
+    }
+    let extras = unlisted_models(previous, &fetched);
+    let set: std::collections::HashSet<&str> = fetched.iter().map(String::as_str).collect();
+    let mut kept: Vec<String> = previous
+        .iter()
+        .filter(|m| set.contains(m.as_str()))
+        .cloned()
+        .collect();
+    if kept.is_empty() {
+        kept = fetched;
+    }
+    append_unlisted(kept, extras)
+}
+
+/// Refresh models for one saved provider; API result plus previously listed extras.
 pub async fn refresh_provider_models(db: &Db, provider_id: &str) -> Result<Vec<String>> {
     let mut settings = db.get_settings()?;
     let p = settings
@@ -105,14 +142,15 @@ pub async fn refresh_provider_models(db: &Db, provider_id: &str) -> Result<Vec<S
         return Err(anyhow!("api key not configured"));
     }
     let ids = fetch_provider_models(p.chat_protocol(), &p.base_url, &p.api_key).await?;
-    p.models = ids.clone();
+    p.models = merge_replace_models(&p.models, ids);
+    let models = p.models.clone();
     db.save_settings(&settings)?;
 
     let mut catalog = db.get_model_catalog().unwrap_or_default();
     catalog.compat = settings.all_compat_model_ids();
     catalog.updated_at = Utc::now().to_rfc3339();
     db.save_model_catalog(&catalog)?;
-    Ok(ids)
+    Ok(models)
 }
 
 async fn fetch_openai_compat(url: &str, api_key: &str) -> Result<Vec<String>> {
@@ -279,7 +317,7 @@ async fn fetch_azure(base_url: &str, api_key: &str) -> Result<Vec<String>> {
 
 #[cfg(test)]
 mod tests {
-    use super::models_list_url;
+    use super::{merge_intersect_models, merge_replace_models, models_list_url};
 
     #[test]
     fn models_url_uses_base_as_is() {
@@ -290,6 +328,30 @@ mod tests {
         assert_eq!(
             models_list_url("https://api.deepseek.com/v1"),
             "https://api.deepseek.com/v1/models"
+        );
+    }
+
+    #[test]
+    fn merge_keeps_manual_names() {
+        let prev = vec!["gpt-4".into(), "my-custom".into()];
+        let fetched = vec!["gpt-4".into(), "gpt-5".into()];
+        assert_eq!(
+            merge_replace_models(&prev, fetched.clone()),
+            vec!["gpt-4", "gpt-5", "my-custom"]
+        );
+        assert_eq!(
+            merge_intersect_models(&prev, fetched),
+            vec!["gpt-4", "my-custom"]
+        );
+    }
+
+    #[test]
+    fn merge_intersect_only_manual_takes_fetched_plus_manual() {
+        let prev = vec!["custom".into()];
+        let fetched = vec!["a".into(), "b".into()];
+        assert_eq!(
+            merge_intersect_models(&prev, fetched),
+            vec!["a", "b", "custom"]
         );
     }
 }

@@ -16,6 +16,7 @@ import { useI18n } from "@/i18n";
 import { usePersistedChatModel } from "@/lib/chatModel";
 import { choiceReply, joinChosen, parseChatChoices, type ChatChoices } from "@/lib/chatChoices";
 import { createChatRunProgress, type ChatRunProgress } from "@/lib/chatRunProgress";
+import { subscribeGlobalChatSend } from "@/lib/globalChatBridge";
 
 const emit = defineEmits<{ close: [] }>();
 
@@ -41,6 +42,7 @@ const { model, options, load: loadModel, persist: persistModel } = usePersistedC
 let run: ChatRunProgress | null = null;
 let unlistenProgress: UnlistenFn | null = null;
 let unlistenTokens: UnlistenFn | null = null;
+let unsubBridge: (() => void) | null = null;
 
 function formatStepMs(ms: number): string {
   const sec = Math.max(0, ms) / 1000;
@@ -334,6 +336,9 @@ watch(
 );
 
 onMounted(() => {
+  unsubBridge = subscribeGlobalChatSend((text) => {
+    void sendText(text);
+  });
   void loadModel(t("settings.deprecated"));
   void api
     .listChatSkills()
@@ -369,6 +374,8 @@ watch(
 );
 
 onUnmounted(() => {
+  unsubBridge?.();
+  unsubBridge = null;
   unlistenProgress?.();
   unlistenTokens?.();
   stopRun();

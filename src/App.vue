@@ -16,6 +16,7 @@ import {
   Sparkles,
 } from "@lucide/vue";
 import GlobalChatPanel from "@/components/GlobalChatPanel.vue";
+import { subscribeGlobalChatOpen } from "@/lib/globalChatBridge";
 
 const BASE_TITLE = "Novel Work";
 const route = useRoute();
@@ -29,6 +30,7 @@ const NAV_W = 64;
 const chatW = ref(352);
 const { t } = useI18n();
 let mcpTimer: number | undefined;
+let unsubChatOpen: (() => void) | null = null;
 
 async function refreshKey() {
   try {
@@ -71,6 +73,9 @@ onMounted(() => {
   void refreshMcp();
   void syncWindowTitle();
   mcpTimer = window.setInterval(() => void refreshMcp(), 4000);
+  unsubChatOpen = subscribeGlobalChatOpen(() => {
+    chatOpen.value = true;
+  });
 });
 watch(
   () => route.path,
@@ -80,6 +85,8 @@ watch(
 );
 onUnmounted(() => {
   if (mcpTimer) window.clearInterval(mcpTimer);
+  unsubChatOpen?.();
+  unsubChatOpen = null;
 });
 watch(() => route.path, () => {
   void refreshKey();

@@ -101,6 +101,47 @@ export function ensureWritePromptsCard(tree: NovelTree, t: TitleFn): boolean {
   return changed;
 }
 
+export function writePromptEdgeHandles(side: WritePromptKind): {
+  source: string;
+  target: string;
+} {
+  return side === "refine"
+    ? { source: "right", target: "left" }
+    : { source: "left", target: "right" };
+}
+
+/** 生成/精修总卡上，某一侧挂着的知识卡（无边手柄的算生成侧）。 */
+export function writePromptCardsForSide(
+  tree: NovelTree,
+  side: WritePromptKind,
+): TreeNode[] {
+  const hub = writePromptsHub(tree);
+  if (!hub) return [];
+  const byId = new Map(tree.nodes.map((n) => [n.id, n]));
+  const out: TreeNode[] = [];
+  const seen = new Set<string>();
+  const take = (id: string) => {
+    if (seen.has(id)) return;
+    const n = byId.get(id);
+    if (!n || n.kind !== "knowledge" || isWritePromptsSlot(knowledgeSlot(n))) return;
+    const edge = tree.edges.find(
+      (e) =>
+        (e.source === hub.id && e.target === id) || (e.source === id && e.target === hub.id),
+    );
+    const s = edge ? writePromptSideFromEdge(hub.id, edge) : null;
+    if (s !== side && !(side === "generate" && s == null)) return;
+    seen.add(id);
+    out.push(n);
+  };
+  for (const id of hub.linked_knowledge_ids ?? []) take(id);
+  for (const e of tree.edges) {
+    if (e.kind !== "knowledge") continue;
+    const other = e.source === hub.id ? e.target : e.target === hub.id ? e.source : "";
+    if (other) take(other);
+  }
+  return out;
+}
+
 export function writePromptSideFromEdge(
   hubId: string,
   edge: Pick<TreeEdge, "source" | "target" | "source_handle" | "target_handle">,

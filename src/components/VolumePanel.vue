@@ -178,7 +178,7 @@ const injectionPreview = computed(() =>
     <!-- 本卷定位 -->
     <div class="space-y-1.5 rounded-md border bg-muted/20 p-3">
       <div class="flex items-center justify-between gap-2">
-        <label class="text-xs font-medium text-muted-foreground">{{ t("workspace.vol.positioning") }}</label>
+        <label class="text-sm font-semibold">{{ t("workspace.vol.positioning") }}</label>
         <Button type="button" size="sm" variant="ghost" class="h-7 px-2 text-xs" :disabled="busy || aiBusy" @click="openAi({ kind: 'positioning' })">
           <Sparkles class="mr-1 h-3.5 w-3.5" />
           {{ t("workspace.vol.aiRewrite") }}
@@ -195,10 +195,10 @@ const injectionPreview = computed(() =>
 
     <!-- 三层结构 -->
     <div>
-      <p class="mb-2 text-xs font-semibold">{{ t("workspace.vol.layers") }}</p>
+      <p class="mb-2 text-sm font-semibold">{{ t("workspace.vol.layers") }}</p>
       <div class="space-y-2">
         <div v-for="L in layers" :key="L.key" class="space-y-2 rounded-md border bg-violet-50/40 p-3 dark:bg-violet-950/20">
-          <p class="text-xs font-medium">{{ t(L.titleKey) }}</p>
+          <p class="text-sm font-semibold">{{ t(L.titleKey) }}</p>
           <div class="space-y-1.5">
             <div class="flex items-center justify-between gap-2">
               <label class="text-[11px] text-muted-foreground">{{ t("workspace.vol.chapters") }}</label>
@@ -237,7 +237,7 @@ const injectionPreview = computed(() =>
 
     <!-- 冲突层级 -->
     <div>
-      <p class="mb-2 text-xs font-semibold">{{ t("workspace.vol.conflicts") }}</p>
+      <p class="mb-2 text-sm font-semibold">{{ t("workspace.vol.conflicts") }}</p>
       <div class="space-y-2">
         <div
           v-for="item in [
@@ -249,7 +249,7 @@ const injectionPreview = computed(() =>
           class="space-y-1.5 rounded-md border bg-muted/20 p-3"
         >
           <div class="flex items-center justify-between gap-2">
-            <label class="text-xs font-medium text-muted-foreground">{{ t(item.label) }}</label>
+            <label class="text-sm font-semibold">{{ t(item.label) }}</label>
             <Button type="button" size="sm" variant="ghost" class="h-7 px-2 text-xs" :disabled="busy || aiBusy" @click="openAi({ kind: 'conflict', field: item.field })">
               <Sparkles class="mr-1 h-3.5 w-3.5" />
               {{ t("workspace.vol.aiRewrite") }}
@@ -269,7 +269,7 @@ const injectionPreview = computed(() =>
     <!-- 关键节点 -->
     <div>
       <div class="mb-2 flex items-center justify-between gap-2">
-        <p class="text-xs font-semibold">{{ t("workspace.vol.keyBeats") }}</p>
+        <p class="text-sm font-semibold">{{ t("workspace.vol.keyBeats") }}</p>
         <Button type="button" size="sm" variant="outline" class="h-7 px-2 text-xs" :disabled="busy" @click="addBeat">
           <Plus class="mr-1 h-3.5 w-3.5" />
           {{ t("workspace.vol.addBeat") }}
@@ -320,7 +320,7 @@ const injectionPreview = computed(() =>
 
     <!-- 写作注入预览（只读，不落 outline） -->
     <div class="shrink-0 space-y-1.5 border-t pt-3">
-      <label class="block text-xs font-medium text-muted-foreground">{{ t("workspace.volumeOutline") }}</label>
+      <label class="block text-sm font-semibold">{{ t("workspace.volumeOutline") }}</label>
       <Textarea
         :model-value="injectionPreview"
         rows="6"

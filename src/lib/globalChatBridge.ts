@@ -3,16 +3,25 @@
 type Listener = (text: string) => void;
 
 const listeners = new Set<Listener>();
+const openers = new Set<() => void>();
 let pending: string | null = null;
 
 export function enqueueGlobalChatSend(text: string) {
   const t = text.trim();
   if (!t) return;
+  for (const fn of openers) fn();
   if (listeners.size === 0) {
     pending = t;
     return;
   }
   for (const fn of listeners) fn(t);
+}
+
+export function subscribeGlobalChatOpen(fn: () => void): () => void {
+  openers.add(fn);
+  return () => {
+    openers.delete(fn);
+  };
 }
 
 export function subscribeGlobalChatSend(fn: Listener): () => void {

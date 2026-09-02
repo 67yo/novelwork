@@ -20,6 +20,7 @@ import {
   type ViewUpdate,
 } from "@codemirror/view";
 import { replaceBodyLineSpan } from "../lib/chapterParagraphs";
+import { clauseOffsets, reliableClickCount, resetClickCount } from "../lib/chapterMouseSelect";
 
 const LINE = 32;
 const SPARKLE_SVG =
@@ -114,6 +115,11 @@ function rewriteGutter() {
     lineMarkerChange(update) {
       return update.transactions.some((tr) => tr.effects.some((e) => e.is(setHoveredLine)));
     },
+    domEventHandlers: {
+      mousedown() {
+        return true;
+      },
+    },
   });
 }
 
@@ -139,11 +145,12 @@ function nounExt() {
 }
 
 const paperTheme = EditorView.theme({
-  "&": { height: "100%", backgroundColor: "transparent", border: "none" },
+  "&": { height: "100%", width: "100%", minWidth: 0, backgroundColor: "transparent", border: "none" },
   "&.cm-focused": { outline: "none" },
   ".cm-scroller": {
     fontFamily: 'ui-serif, "Songti SC", "Noto Serif SC", "Source Han Serif SC", Georgia, serif',
     lineHeight: `${LINE}px`,
+    minWidth: 0,
   },
   ".cm-gutters": {
     backgroundColor: "transparent",
@@ -181,6 +188,7 @@ const paperTheme = EditorView.theme({
     lineHeight: `${LINE}px`,
     padding: "8px 28px 72px 16px",
     minHeight: "100%",
+    overflowWrap: "anywhere",
     borderLeft: "1px solid #d4d4d4",
     backgroundImage: `repeating-linear-gradient(to bottom, transparent 0, transparent ${LINE - 1}px, #d4d4d4 ${LINE - 1}px, #d4d4d4 ${LINE}px)`,
     backgroundPosition: "0 8px",
@@ -222,7 +230,51 @@ function setHover(n: number | null) {
 }
 
 function onMouseMove(ev: MouseEvent) {
+  if (ev.buttons) return;
   hoverLineAt(ev.clientX, ev.clientY);
+}
+
+function rangeForPaperClick(view: EditorView, pos: number, assoc: -1 | 1, type: 1 | 2 | 3) {
+  if (type === 1) return EditorSelection.cursor(pos, assoc);
+  const line = view.state.doc.lineAt(pos);
+  if (type === 2) {
+    const [from, to] = clauseOffsets(line.text, pos - line.from);
+    return from === to
+      ? EditorSelection.cursor(line.from + from)
+      : EditorSelection.range(line.from + from, line.from + to);
+  }
+  return EditorSelection.range(line.from, line.to);
+}
+
+/** 不用 event.detail：WKWebView 单击常被报成双击，中文整段会被当成一个词选中。 */
+function paperMouseSelection(view: EditorView, event: MouseEvent) {
+  if (event.button !== 0) return null;
+  // 点章节列表后编辑器失焦；下一次点正文必须是单击。hasFocus 在 mousedown 里可能已经变 true。
+  if (!view.hasFocus) resetClickCount();
+  const start = view.posAndSideAtCoords({ x: event.clientX, y: event.clientY }, false);
+  const type = reliableClickCount(event);
+  let startSel = view.state.selection;
+  return {
+    update(update: ViewUpdate) {
+      if (update.docChanged) {
+        start.pos = update.changes.mapPos(start.pos);
+        startSel = startSel.map(update.changes);
+      }
+    },
+    get(ev: MouseEvent, extend: boolean, multiple: boolean) {
+      const cur = view.posAndSideAtCoords({ x: ev.clientX, y: ev.clientY }, false);
+      let range = rangeForPaperClick(view, cur.pos, cur.assoc, type);
+      if (start.pos !== cur.pos && !extend) {
+        const a = rangeForPaperClick(view, start.pos, start.assoc, type);
+        const from = Math.min(a.from, range.from);
+        const to = Math.max(a.to, range.to);
+        range = EditorSelection.range(from, to);
+      }
+      if (extend) return startSel.replaceRange(startSel.main.extend(range.from, range.to));
+      if (multiple) return startSel.addRange(range);
+      return EditorSelection.create([range]);
+    },
+  };
 }
 
 function onMouseLeave() {
@@ -244,6 +296,7 @@ function mountEditor() {
         keymap.of([...defaultKeymap, ...historyKeymap]),
         EditorView.lineWrapping,
         drawSelection(),
+        EditorView.mouseSelectionStyle.of(paperMouseSelection),
         EditorView.contentAttributes.of({ spellcheck: "false" }),
         hoveredLine,
         rewriteGutter(),
@@ -257,6 +310,7 @@ function mountEditor() {
   });
   view.dom.addEventListener("mousemove", onMouseMove);
   view.dom.addEventListener("mouseleave", onMouseLeave);
+  view.contentDOM.addEventListener("blur", resetClickCount);
 }
 
 onMounted(() => {
@@ -264,6 +318,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  view?.contentDOM.removeEventListener("blur", resetClickCount);
   view?.dom.removeEventListener("mousemove", onMouseMove);
   view?.dom.removeEventListener("mouseleave", onMouseLeave);
   view?.destroy();
@@ -275,6 +330,7 @@ watch(
   (text) => {
     if (!view) return;
     if (view.state.doc.toString() === text) return;
+    resetClickCount();
     view.dispatch({
       changes: { from: 0, to: view.state.doc.length, insert: text },
     });
@@ -376,7 +432,7 @@ defineExpose({ getCursor, setSelection, replaceLineAndSelect, focus, scrollToTop
 </script>
 
 <template>
-  <div class="chapter-paper relative min-h-0 w-full flex-1">
+  <div class="chapter-paper relative min-h-0 min-w-0 w-full flex-1 overflow-hidden">
     <div class="chapter-paper-sheet relative h-full min-h-0 overflow-hidden">
       <div ref="hostEl" class="absolute inset-0 min-h-0" />
     </div>

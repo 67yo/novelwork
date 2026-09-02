@@ -1088,8 +1088,10 @@ async fn call_tool(ctx: McpCtx, name: &str, args: Value) -> Result<String, Strin
             let novel_id = arg_novel_id(&ctx, &args)?;
             let node_id = arg_node_id(&ctx, &args)?;
             let content = arg_str(&args, "content")?;
-            let words = save_chapter(novel_id.clone(), node_id, content)?;
+            let before = get_chapter(novel_id.clone(), node_id.clone()).unwrap_or_default();
+            let words = save_chapter(novel_id.clone(), node_id.clone(), content)?;
             emit_tree_changed(&ctx, &novel_id);
+            emit_chapter_content_changed(&ctx, &novel_id, &node_id, &before);
             let (wmin, wmax) = ctx
                 .db
                 .get_novel(&novel_id)
@@ -1209,6 +1211,17 @@ fn emit_tree_changed(ctx: &McpCtx, novel_id: &str) {
     if let Ok(g) = ctx.app.lock() {
         if let Some(h) = g.as_ref() {
             let _ = h.emit("novel-tree-changed", json!({ "novelId": novel_id }));
+        }
+    }
+}
+
+fn emit_chapter_content_changed(ctx: &McpCtx, novel_id: &str, node_id: &str, before: &str) {
+    if let Ok(g) = ctx.app.lock() {
+        if let Some(h) = g.as_ref() {
+            let _ = h.emit(
+                "chapter-content-changed",
+                json!({ "novelId": novel_id, "nodeId": node_id, "before": before }),
+            );
         }
     }
 }

@@ -10,6 +10,7 @@ import {
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Eye, EyeOff } from "@lucide/vue";
 import { LOCALE_OPTIONS, setLocalePreference, useI18n, type LocalePreference } from "@/i18n";
@@ -21,6 +22,7 @@ type DraftProvider = {
   base_url: string;
   api_key: string;
   models: string[];
+  modelsDraft: string;
   api_key_configured: boolean;
   api_key_masked: string;
 };
@@ -84,6 +86,7 @@ const addBaseUrl = ref("https://api.deepseek.com/v1");
 const addKey = ref("");
 const addFetched = ref<string[]>([]);
 const addSelected = ref<Set<string>>(new Set());
+const addExtra = ref("");
 const addBusy = ref(false);
 const addErr = ref("");
 
@@ -99,14 +102,33 @@ const skillQuery = ref("");
 const skillMatchBusy = ref(false);
 const skillMatch = ref<SkillMatchPreview | null>(null);
 
+function parseModelList(raw: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const part of raw.split(/[\n,]+/)) {
+    const m = part.trim();
+    if (!m || seen.has(m)) continue;
+    seen.add(m);
+    out.push(m);
+  }
+  return out;
+}
+
+function commitModels(p: DraftProvider) {
+  p.models = parseModelList(p.modelsDraft);
+  p.modelsDraft = p.models.join("\n");
+}
+
 function fromView(p: CompatProviderView): DraftProvider {
+  const models = [...(p.models || [])];
   return {
     id: p.id,
     label: p.label,
     protocol: p.protocol || "openai",
     base_url: p.base_url,
     api_key: "",
-    models: [...(p.models || [])],
+    models,
+    modelsDraft: models.join("\n"),
     api_key_configured: p.api_key_configured,
     api_key_masked: p.api_key_masked,
   };
@@ -240,6 +262,7 @@ function resetAddForm() {
   addKey.value = "";
   addFetched.value = [];
   addSelected.value = new Set();
+  addExtra.value = "";
   addErr.value = "";
 }
 
@@ -309,7 +332,10 @@ function confirmAdd() {
     addErr.value = t("settings.compatNeedFields");
     return;
   }
-  if (!addSelected.value.size) {
+  const models = parseModelList(
+    [...addSelected.value].sort().join("\n") + "\n" + addExtra.value,
+  );
+  if (!models.length) {
     addErr.value = t("settings.compatNeedModels");
     return;
   }
@@ -321,7 +347,8 @@ function confirmAdd() {
       protocol: addProtocol.value || "openai",
       base_url: addBaseUrl.value.trim(),
       api_key: addKey.value.trim(),
-      models: [...addSelected.value].sort(),
+      models,
+      modelsDraft: models.join("\n"),
       api_key_configured: protocolAllowsEmptyKey(addProtocol.value) || !!addKey.value.trim(),
       api_key_masked: "",
     },
@@ -339,9 +366,7 @@ async function refreshProvider(id: string) {
   try {
     // Persist draft first so backend has latest key/url if newly added
     await persistProvidersOnly();
-    const ids = await api.refreshCompatProviderModels(id);
-    const p = providers.value.find((x) => x.id === id);
-    if (p) p.models = ids;
+    await api.refreshCompatProviderModels(id);
     await load();
   } catch (e) {
     err.value = String(e);
@@ -351,6 +376,7 @@ async function refreshProvider(id: string) {
 }
 
 async function persistProvidersOnly() {
+  for (const p of providers.value) commitModels(p);
   await api.saveSettings({
     compat_providers: providers.value.map((p) => ({
       id: p.id,
@@ -368,6 +394,7 @@ async function save() {
   msg.value = "";
   saving.value = true;
   try {
+    for (const p of providers.value) commitModels(p);
     const s = await api.saveSettings({
       compat_providers: providers.value.map((p) => ({
         id: p.id,
@@ -747,6 +774,16 @@ function scrollToSection(id: string) {
               <label :for="`add-m-${id}`" class="font-mono text-xs">{{ id }}</label>
             </li>
           </ul>
+          <div>
+            <label class="mb-1 block text-sm">{{ t("settings.compatModelsEdit") }}</label>
+            <Textarea
+              v-model="addExtra"
+              rows="3"
+              class="font-mono text-xs"
+              :placeholder="t('settings.compatModelsPh')"
+            />
+            <p class="mt-1 text-xs text-muted-foreground">{{ t("settings.compatModelsHint") }}</p>
+          </div>
           <div class="flex gap-2">
             <Button size="sm" @click="confirmAdd">{{ t("settings.compatConfirm") }}</Button>
             <Button variant="outline" size="sm" @click="cancelAdd">{{ t("settings.compatCancel") }}</Button>
@@ -783,7 +820,7 @@ function scrollToSection(id: string) {
                       )
                     }}
                   </span>
-                  · {{ t("settings.compatModelCount", { n: p.models.length }) }}
+                  · {{ t("settings.compatModelCount", { n: parseModelList(p.modelsDraft).length }) }}
                 </p>
               </div>
               <div class="flex shrink-0 gap-1">
@@ -823,12 +860,17 @@ function scrollToSection(id: string) {
                 </Button>
               </div>
             </div>
-            <p
-              v-if="p.models.length"
-              class="line-clamp-2 font-mono text-[11px] text-muted-foreground"
-            >
-              {{ p.models.join(", ") }}
-            </p>
+            <div>
+              <label class="mb-1 block text-sm">{{ t("settings.compatModelsEdit") }}</label>
+              <Textarea
+                v-model="p.modelsDraft"
+                rows="4"
+                class="font-mono text-xs"
+                :placeholder="t('settings.compatModelsPh')"
+                @blur="commitModels(p)"
+              />
+              <p class="mt-1 text-xs text-muted-foreground">{{ t("settings.compatModelsHint") }}</p>
+            </div>
           </li>
         </ul>
       </CardContent>

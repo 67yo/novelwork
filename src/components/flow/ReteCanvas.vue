@@ -82,6 +82,7 @@ let syncing = false;
 let destroyed = false;
 let draggingNode = false;
 let dragStart: { x: number; y: number } | null = null;
+let didFit = false;
 
 function applyPickClass(side: "input" | "output" | null) {
   const el = host.value;
@@ -228,6 +229,10 @@ async function rebuild() {
       conn.onClick = () => emit("edgeClick", { edge: { id: e.id } });
       conn.onDblClick = () => emit("edgeDoubleClick", { edge: { id: e.id } });
       await editor.addConnection(conn);
+    }
+    if (!didFit && editor.getNodes().length) {
+      didFit = true;
+      await fitView();
     }
   } finally {
     syncing = false;
