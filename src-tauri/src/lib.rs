@@ -16,6 +16,7 @@ mod kb_context;
 mod knowledge;
 mod knowledge_vec;
 mod llm;
+mod llm_extract;
 mod mcp;
 mod models;
 mod paths;

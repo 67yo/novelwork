@@ -367,6 +367,61 @@ pub fn rank_memory(rows: &[(String, String)], query: &str, limit: usize) -> Vec<
         .collect()
 }
 
+fn search_vectors_blocking(
+    novel_id: &str,
+    query: &str,
+    k: usize,
+) -> Vec<(f64, String, String)> {
+    let Ok(h) = tokio::runtime::Handle::try_current() else {
+        return Vec::new();
+    };
+    tokio::task::block_in_place(|| h.block_on(search_vectors(novel_id, query, k))).unwrap_or_default()
+}
+
+/// MiniLM 向量优先；无命中或 Lance 空时回退关键词。`allowed` 为章节 node_id 白名单。
+pub fn retrieve_memory(
+    novel_id: &str,
+    rows: &[(String, String)],
+    query: &str,
+    limit: usize,
+    allowed: Option<&[String]>,
+) -> Vec<(String, String)> {
+    if limit == 0 || query.trim().is_empty() {
+        return Vec::new();
+    }
+    let allow: Option<std::collections::HashSet<&str>> =
+        allowed.map(|ids| ids.iter().map(String::as_str).collect());
+    let hits = search_vectors_blocking(novel_id, query, (limit * 4).max(12));
+    let mut out = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for (_, nid, content) in hits {
+        if let Some(a) = &allow {
+            if !a.contains(nid.as_str()) {
+                continue;
+            }
+        }
+        if !seen.insert((nid.clone(), content.clone())) {
+            continue;
+        }
+        out.push((nid, content));
+        if out.len() >= limit {
+            return out;
+        }
+    }
+    if !out.is_empty() {
+        return out;
+    }
+    let ranked = rank_memory(rows, query, limit);
+    match &allow {
+        Some(a) => ranked
+            .into_iter()
+            .filter(|(nid, _)| a.contains(nid.as_str()))
+            .take(limit)
+            .collect(),
+        None => ranked,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -393,5 +448,16 @@ mod tests {
         let terms = query_terms("林潮 寻人 旧地图");
         let s = score_memory("林潮离开港口，目标是寻人并带回旧地图。", &terms);
         assert!(s >= 2, "score={s} terms={terms:?}");
+    }
+
+    #[test]
+    fn retrieve_falls_back_to_keyword_without_runtime() {
+        let rows = vec![(
+            "n1".into(),
+            "林潮离开港口，目标是寻人并带回旧地图。".into(),
+        )];
+        let hit = retrieve_memory("novel", &rows, "林潮 寻人", 3, None);
+        assert_eq!(hit.len(), 1);
+        assert_eq!(hit[0].0, "n1");
     }
 }
