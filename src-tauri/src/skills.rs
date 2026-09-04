@@ -1,6 +1,6 @@
-//! Chat skills：读 `SKILL.md`（bundled + `~/.agents/skills`）。
+//! Chat skills：读 `SKILL.md`（bundled + `~/.novelwork`）。
 //! Bundled: `{app resources}/skills`（crate `src-tauri/skills` in dev）。
-//! User extras: `~/.agents/skills`（同名覆盖内置）。
+//! User extras: `~/.novelwork`（同名覆盖内置）。
 
 use parking_lot::RwLock;
 use serde::Serialize;
@@ -76,11 +76,10 @@ struct Cache {
 static CACHE: RwLock<Option<Cache>> = RwLock::new(None);
 static BUNDLED_DIR: OnceLock<PathBuf> = OnceLock::new();
 
-pub fn agents_skills_dir() -> PathBuf {
+pub fn user_skills_dir() -> PathBuf {
     dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join(".agents")
-        .join("skills")
+        .join(".novelwork")
 }
 
 /// Crate-relative fallback (tests / `tauri dev` before resource copy).
@@ -107,7 +106,7 @@ pub fn bundled_skills_dir() -> PathBuf {
 
 /// User dir first so same-name skills override bundled.
 fn skill_extra_dirs() -> Vec<PathBuf> {
-    [agents_skills_dir(), bundled_skills_dir()]
+    [user_skills_dir(), bundled_skills_dir()]
         .into_iter()
         .filter(|p| p.is_dir())
         .collect()
@@ -434,7 +433,7 @@ fn slash_hints_from_body(body: &str) -> Vec<SkillSlashHint> {
 pub fn list_previews() -> SkillsPreview {
     invalidate_cache();
     let bundled = bundled_skills_dir();
-    let user = agents_skills_dir();
+    let user = user_skills_dir();
     let exists = bundled.is_dir() || user.is_dir();
     let bundled_s = bundled.to_string_lossy().into_owned();
     let skills = load_index()

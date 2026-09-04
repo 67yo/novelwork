@@ -454,7 +454,7 @@ onUnmounted(() => {
   >
     <header
       class="flex min-w-0 shrink-0 items-center gap-2 border-b px-3 py-2.5"
-      :class="props.mode === 'float' ? 'cursor-move' : ''"
+      :class="props.mode === 'float' ? 'cursor-move bg-primary/10' : ''"
       @mousedown="onHeaderDown"
     >
       <MessageSquare class="h-4 w-4 shrink-0 text-primary" />

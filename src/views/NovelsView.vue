@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
+import { useLocalStorage } from "@vueuse/core";
 import { useRouter } from "vue-router";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { api, type NovelProject } from "@/lib/api";
@@ -17,6 +18,8 @@ function coverSrc(n: NovelProject) {
 
 const { t } = useI18n();
 const router = useRouter();
+const lastNovelId = useLocalStorage("novework.lastNovelId", "");
+const lastWorkspaceNode = useLocalStorage<Record<string, string>>("novework.lastWorkspaceNode", {});
 const novels = ref<NovelProject[]>([]);
 const tab = ref<"active" | "archived">("active");
 const showCreate = ref(false);
@@ -106,6 +109,12 @@ async function confirmDelete() {
   deleting.value = true;
   try {
     await api.deleteNovel(n.id);
+    if (lastNovelId.value === n.id) lastNovelId.value = "";
+    const nodes = { ...lastWorkspaceNode.value };
+    if (nodes[n.id]) {
+      delete nodes[n.id];
+      lastWorkspaceNode.value = nodes;
+    }
     pendingDelete.value = null;
     await refresh();
   } catch (e) {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { RouterLink, RouterView, useRoute } from "vue-router";
 import { useLocalStorage } from "@vueuse/core";
@@ -10,6 +10,7 @@ import {
   Bot,
   ChartColumnStacked,
   Library,
+  List,
   MessageSquare,
   Plug,
   Settings,
@@ -21,9 +22,14 @@ import { useUiTheme } from "@/lib/uiTheme";
 
 const BASE_TITLE = "Novel Work";
 const route = useRoute();
+const openNovelTitle = ref("");
 const keyOk = ref(false);
 const mcpOk = ref(false);
 const mcpEndpoint = ref("");
+const lastNovelId = useLocalStorage("novework.lastNovelId", "");
+const novelsTo = computed(() =>
+  lastNovelId.value ? `/novels/${lastNovelId.value}` : "/novels",
+);
 const chatOpen = useLocalStorage("novework.chatOpen", false);
 const FAB = 48;
 const fabPos = useLocalStorage("novework.chatFab", { x: -1, y: -1 });
@@ -65,18 +71,34 @@ async function refreshMcp() {
   }
 }
 
+function applyWindowTitle(name: string) {
+  openNovelTitle.value = name;
+  const title = name ? `${BASE_TITLE} - ${name}` : BASE_TITLE;
+  document.title = title;
+  void getCurrentWindow()
+    .setTitle(title)
+    .catch(() => {
+      /* 非 Tauri 环境忽略 */
+    });
+}
+
 async function syncWindowTitle() {
+  const routeId = route.params.id;
+  const id =
+    route.name === "workspace" && typeof routeId === "string" && routeId
+      ? routeId
+      : route.name === "novels"
+        ? ""
+        : lastNovelId.value;
+  if (!id) {
+    applyWindowTitle("");
+    return;
+  }
   try {
-    const id = route.params.id;
-    if (route.name === "workspace" && typeof id === "string" && id) {
-      const novel = await api.getNovel(id);
-      const name = novel?.title?.trim();
-      await getCurrentWindow().setTitle(name ? `${BASE_TITLE} - ${name}` : BASE_TITLE);
-    } else {
-      await getCurrentWindow().setTitle(BASE_TITLE);
-    }
+    const novel = await api.getNovel(id);
+    applyWindowTitle(novel?.title?.trim() ?? "");
   } catch {
-    // 非 Tauri 环境忽略
+    applyWindowTitle("");
   }
 }
 
@@ -84,6 +106,10 @@ onMounted(() => {
   clampFloat();
   clampFab();
   window.addEventListener("resize", onWinResize);
+  const bootId = route.params.id;
+  if (route.name === "workspace" && typeof bootId === "string" && bootId) {
+    lastNovelId.value = bootId;
+  }
   void refreshKey();
   void refreshMcp();
   void syncWindowTitle();
@@ -110,18 +136,21 @@ watch(() => route.path, () => {
 });
 watch(
   () => [route.name, route.params.id] as const,
-  () => {
+  ([name, id]) => {
+    if (name === "workspace" && typeof id === "string" && id) lastNovelId.value = id;
     void syncWindowTitle();
   },
 );
 
-function navClass(path: string) {
-  const active =
-    path === "/novels" ? route.path.startsWith("/novels") : route.path === path || route.path.startsWith(`${path}/`);
+function navOn(active: boolean) {
   return [
     "flex w-full flex-col items-center gap-0.5 rounded-md px-1 py-2 text-[11px] leading-tight transition-colors",
     active ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
   ];
+}
+
+function navClass(path: string) {
+  return navOn(route.path === path || route.path.startsWith(`${path}/`));
 }
 
 function onWinResize() {
@@ -286,15 +315,19 @@ function startResizeFloat(ev: MouseEvent) {
       <RouterLink
         to="/novels"
         class="flex flex-col items-center gap-0.5 border-b px-1 py-3 text-primary"
-        :title="'Novel Work'"
+        :title="openNovelTitle ? `${BASE_TITLE} - ${openNovelTitle}` : BASE_TITLE"
       >
         <Sparkles class="h-5 w-5" />
         <span class="text-[10px] font-semibold leading-tight tracking-tight">Novel</span>
       </RouterLink>
       <nav class="flex flex-1 flex-col gap-1 p-1.5">
-        <RouterLink :to="'/novels'" :class="navClass('/novels')" :title="t('nav.novels')">
+        <RouterLink :to="novelsTo" :class="navOn(route.name === 'workspace')" :title="t('nav.novels')">
           <BookOpen class="h-4 w-4" />
           <span>{{ t("nav.novels") }}</span>
+        </RouterLink>
+        <RouterLink :to="'/novels'" :class="navOn(route.name === 'novels')" :title="t('nav.novelsListTitle')">
+          <List class="h-4 w-4" />
+          <span>{{ t("nav.novelsList") }}</span>
         </RouterLink>
         <RouterLink :to="'/library'" :class="navClass('/library')" :title="t('nav.library')">
           <Library class="h-4 w-4" />
@@ -356,7 +389,7 @@ function startResizeFloat(ev: MouseEvent) {
       class="flex"
       :class="
         chatMode === 'float'
-          ? 'fixed z-[80] flex-col overflow-hidden rounded-lg border bg-background shadow-xl'
+          ? 'chat-float fixed z-[80] flex-col overflow-hidden rounded-lg border bg-background shadow-xl'
           : 'h-full shrink-0'
       "
       :style="

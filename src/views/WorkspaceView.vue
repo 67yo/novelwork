@@ -234,6 +234,7 @@ const props = defineProps<{ id: string }>();
 const { t, locale } = useI18n();
 const { scheme: paperScheme } = usePaperScheme();
 const workspaceTab = useLocalStorage<WorkspaceTabId>("novework.workspaceTab", "book");
+const lastWorkspaceNode = useLocalStorage<Record<string, string>>("novework.lastWorkspaceNode", {});
 const reteCanvas = ref<{
   fitView: (opts?: { nodes?: string[] }) => void | Promise<void>;
 } | null>(null);
@@ -582,22 +583,29 @@ function kindFromNodes(sourceId: string, targetId: string): string {
   return "chapter";
 }
 
+function rememberWorkspaceNode(nodeId: string) {
+  lastWorkspaceNode.value = { ...lastWorkspaceNode.value, [props.id]: nodeId };
+}
+
 async function loadAll() {
   novel.value = await api.getNovel(props.id);
   let tr = await api.getTree(props.id);
+  const savedId = lastWorkspaceNode.value[props.id];
+  const savedEarly = savedId ? tr.nodes.find((n) => n.id === savedId) : undefined;
   // Pin MCP "current novel" before slow migrate — Chat/get_novel_info must not keep the previous book.
   const rootEarly = tr.nodes.find((n) => n.kind === "novel");
   const chapterEarly = tr.nodes.find((n) => n.kind === "chapter");
   const pin =
-    workspaceTab.value === "manuscript"
-      ? (chapterEarly ?? rootEarly)
-      : (rootEarly ?? chapterEarly);
+    savedEarly ??
+    (workspaceTab.value === "manuscript" ? (chapterEarly ?? rootEarly) : (rootEarly ?? chapterEarly));
   if (pin) await api.setWorkspaceSelection(props.id, pin.id);
   tr = await maybeMigrateWorldview(tr);
   tree.value = tr;
   publicKnowledgeCards.value = await api.listPublicKnowledgeCards().catch(() => []);
   syncFlowFromTree();
-  await applyTabDefaultSelection(true);
+  const saved = savedId ? tr.nodes.find((n) => n.id === savedId) : undefined;
+  if (saved && selectionFitsTab(saved, workspaceTab.value)) await selectNode(saved);
+  else await applyTabDefaultSelection(true);
 }
 
 async function reloadTreeFromDisk() {
@@ -633,6 +641,7 @@ async function selectNode(n: TreeNode) {
   const prevId = selected.value?.id;
   const resolved = tree.value?.nodes.find((x) => x.id === n.id) ?? n;
   selected.value = resolved;
+  rememberWorkspaceNode(n.id);
   await api.setWorkspaceSelection(props.id, n.id);
   notice.value = "";
   chapterResultNotice.value = "";
