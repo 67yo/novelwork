@@ -9,7 +9,10 @@ use chrono::{Local, Timelike, Utc};
 
 use futures::StreamExt;
 use parking_lot::Mutex as ParkingMutex;
-use rig_agent::agent::{AgentBuilder, MultiTurnStreamItem, NoToolConfig};
+use rig_agent::agent::{
+    AgentBuilder, AgentHook, HookContext, InvalidToolCallAction, InvalidToolCallContext,
+    MultiTurnStreamItem, NoToolConfig,
+};
 use rig_agent::Agent;
 use rig_core::client::CompletionClient;
 use rig_core::completion::{CompletionModel, Message};
@@ -30,6 +33,9 @@ use rig_core::tool::{PortableDynamicTool, ToolErrorKind, ToolExecutionError, Too
 use rig_core::vector_store::request::Filter;
 use rig_core::vector_store::{TopNResults, VectorSearchRequest, VectorStoreError, VectorStoreIndexDyn};
 use rig_core::wasm_compat::WasmBoxedFuture;
+use rig_memory::{
+    CompactingMemory, HeuristicTokenCounter, TemplateCompactor, TokenWindowMemory,
+};
 use rmcp::RoleClient;
 use rmcp::model::CallToolRequestParams;
 use rmcp::service::{Peer, RunningService, ServiceExt};
@@ -39,6 +45,7 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 use uuid::Uuid;
 
@@ -71,6 +78,16 @@ pub struct GlobalChatSendInput {
 pub struct GlobalChatRuntime {
     slots: Arc<ParkingMutex<HashMap<String, ChatSlot>>>,
     busy: AtomicBool,
+    memory: Arc<ChatMem>,
+    ask: ParkingMutex<Option<AskWait>>,
+}
+
+type ChatMem = CompactingMemory<SlotMemory, TokenWindowMemory, TemplateCompactor>;
+
+struct AskWait {
+    options: Vec<String>,
+    multi: bool,
+    tx: Option<tokio::sync::oneshot::Sender<String>>,
 }
 
 struct ChatSlot {
@@ -89,13 +106,14 @@ impl ConversationMemory for SlotMemory {
         conversation_id: &'a str,
     ) -> WasmBoxedFuture<'a, Result<Vec<Message>, MemoryError>> {
         Box::pin(async move {
-            let raw = self
+            let mut raw = self
                 .slots
                 .lock()
                 .get(conversation_id)
                 .map(|s| s.history.clone())
                 .unwrap_or_default();
-            Ok(shape_chat_history(raw))
+            let _ = stub_history_tools(&mut raw);
+            Ok(raw)
         })
     }
 
@@ -146,16 +164,24 @@ fn new_slot() -> ChatSlot {
 
 impl GlobalChatRuntime {
     pub fn new() -> Self {
+        let slots = Arc::new(ParkingMutex::new(HashMap::new()));
+        let memory = Arc::new(CompactingMemory::new(
+            SlotMemory {
+                slots: slots.clone(),
+            },
+            TokenWindowMemory::new(8000, HeuristicTokenCounter::default()),
+            TemplateCompactor::with_header("【更早轮次】").with_max_bytes(4000),
+        ));
         Self {
-            slots: Arc::new(ParkingMutex::new(HashMap::new())),
+            slots,
             busy: AtomicBool::new(false),
+            memory,
+            ask: ParkingMutex::new(None),
         }
     }
 
-    fn memory(&self) -> SlotMemory {
-        SlotMemory {
-            slots: self.slots.clone(),
-        }
+    fn memory(&self) -> Arc<ChatMem> {
+        self.memory.clone()
     }
 
     pub fn list(&self, novel_id: Option<&str>) -> Vec<GlobalChatMessage> {
@@ -168,7 +194,67 @@ impl GlobalChatRuntime {
     }
 
     pub fn clear(&self, novel_id: Option<&str>) {
-        self.slots.lock().insert(scope_key(novel_id), new_slot());
+        let key = scope_key(novel_id);
+        self.slots.lock().insert(key.clone(), new_slot());
+        self.memory.forget(&key);
+        self.abort_ask();
+    }
+
+    fn begin_ask(
+        &self,
+        options: Vec<String>,
+        multi: bool,
+    ) -> Result<tokio::sync::oneshot::Receiver<String>, String> {
+        let mut g = self.ask.lock();
+        if g.is_some() {
+            return Err("已有未回答的提问".into());
+        }
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        *g = Some(AskWait {
+            options,
+            multi,
+            tx: Some(tx),
+        });
+        Ok(rx)
+    }
+
+    pub fn answer_ask(&self, answers: Vec<String>) -> Result<(), String> {
+        let mut g = self.ask.lock();
+        let Some(mut wait) = g.take() else {
+            return Err("当前没有待回答的提问".into());
+        };
+        let mut picked: Vec<String> = Vec::new();
+        for a in answers {
+            let a = a.trim();
+            if a.is_empty() {
+                continue;
+            }
+            if !wait.options.iter().any(|o| o == a) {
+                *g = Some(wait);
+                return Err("无效选项".into());
+            }
+            if !picked.iter().any(|p| p == a) {
+                picked.push(a.to_string());
+            }
+        }
+        if picked.is_empty() {
+            *g = Some(wait);
+            return Err("请选择一项".into());
+        }
+        if !wait.multi && picked.len() != 1 {
+            *g = Some(wait);
+            return Err("请只选一项".into());
+        }
+        let text = picked.join("、");
+        let Some(tx) = wait.tx.take() else {
+            return Err("提问已失效".into());
+        };
+        let _ = tx.send(text);
+        Ok(())
+    }
+
+    pub fn abort_ask(&self) {
+        let _ = self.ask.lock().take();
     }
 }
 
@@ -430,13 +516,13 @@ fn chat_tool_allowlist(
 fn intent_tool_rule(intent: &str) -> &'static str {
     match intent {
         "write" => {
-            "\n本轮只开放写章工具。读一次 get_chapter_write_context，细纲空则 generate_detailed_outline，再 set_chapter_content 一次后立刻用一句话结束。禁止反复 get/set 同一章。"
+            "\n本轮只开放写章工具与 ask_user。读一次 get_chapter_write_context，细纲空则 generate_detailed_outline，再 set_chapter_content 一次后立刻用一句话结束。禁止反复 get/set 同一章。"
         }
         "outline" | "cards-outline" => {
-            "\n本轮只开放细纲工具：generate_detailed_outline / regenerate_detailed_outline_item / update_chapter_outline / get_selected_card。禁止调用 get_chapter_write_context、set_chapter_content、get_chapter_content。细纲完成后用一句话结束，不要写正文。"
+            "\n本轮只开放细纲工具与 ask_user：generate_detailed_outline / regenerate_detailed_outline_item / update_chapter_outline / get_selected_card。禁止调用 get_chapter_write_context、set_chapter_content、get_chapter_content。细纲完成后用一句话结束，不要写正文。"
         }
         "cards" => {
-            "\n本轮只开放改卡工具。禁止调用 get_chapter_write_context、set_chapter_content、get_tree、get_novel_info。"
+            "\n本轮只开放改卡工具与 ask_user。禁止调用 get_chapter_write_context、set_chapter_content、get_tree、get_novel_info。"
         }
         _ => "",
     }
@@ -445,8 +531,8 @@ fn intent_tool_rule(intent: &str) -> &'static str {
 fn system_instruction(novel_id: &str, novel_title: &str) -> String {
     let plan_and_ask = "\
 回答简洁，操作完成后用中文简要说明结果。默认直接做完，不要每次结尾问「要不要继续 / 是否继续 / 下一步吗」。\
-仅当缺关键信息或有互斥路径、不选就无法下一步时才提问一次：是否题只问一句；单选列出 1. 2. 3.；多选写明「可多选」并用 1. 2. 3. 列出。\
-用户答「是/否」针对上一问：同意则马上用工具落地，并连续做完其余可自主步骤；禁止重复已做过的检索/提炼，也禁止再问同一句或同义确认（含「要不要开始做任务」「是否继续下一项」）。\n\
+仅当缺关键信息或有互斥路径、不选就无法下一步时才调用 ask_user（question + options；多选设 multi=true）。禁止只在正文里列 1. 2. 3. 当提问。\
+用户选定后立刻用工具落地，并连续做完其余可自主步骤；禁止再问同一句或同义确认。\n\
 【大需求 → 任务列表】用户一次给出多项目标、多章写作、长文多段指令，或明显需要 ≥3 个独立 MCP 动作时：\
 先拆成编号任务列表（格式「1. …（待办）」；进行中/已完成改括号状态；**禁止**用 `- [ ]` 勾选行），\
 再按顺序逐项执行。任务列表是执行计划，默认直接开做，不要先问用户「是否按此执行」。\
@@ -585,8 +671,6 @@ fn friendly_chat_err(msg: String) -> String {
         msg
     }
 }
-
-const COMPACTION_USER_TEXT_CAP: usize = 80;
 
 fn unwrap_tool_json(v: &Value) -> Value {
     if let Some(s) = v.as_str() {
@@ -754,142 +838,6 @@ fn successful_write_word_counts(msgs: &[Message]) -> HashMap<String, u32> {
     out
 }
 
-fn extract_root_payload(v: &Value) -> Option<Value> {
-    let v = unwrap_tool_json(v);
-    let included_root = v.get("included").and_then(|i| i.get("root")).and_then(|r| r.as_bool()) == Some(true);
-    if !included_root {
-        return None;
-    }
-    let root = v.get("root")?;
-    if root.is_null() {
-        return None;
-    }
-    Some(root.clone())
-}
-
-fn extract_root_from_compaction_text(text: &str) -> Option<Value> {
-    let rest = text.split("【根材料】").nth(1)?;
-    let json_str = rest.split("\n【").next()?.trim();
-    serde_json::from_str(json_str).ok()
-}
-
-fn truncate_user_text(text: &str) -> String {
-    let t = text.trim();
-    if t.chars().count() <= COMPACTION_USER_TEXT_CAP {
-        return t.to_string();
-    }
-    let mut s: String = t.chars().take(COMPACTION_USER_TEXT_CAP).collect();
-    s.push('…');
-    s
-}
-
-fn message_text(m: &Message) -> String {
-    match m {
-        Message::User { content } => content
-            .iter()
-            .filter_map(|c| match c {
-                UserContent::Text(t) => Some(t.text.as_str()),
-                _ => None,
-            })
-            .collect(),
-        Message::Assistant { content, .. } => content
-            .iter()
-            .filter_map(|c| match c {
-                AssistantContent::Text(t) => Some(t.text.as_str()),
-                _ => None,
-            })
-            .collect(),
-        Message::System { content } => content.clone(),
-    }
-}
-
-fn summarize_chat_history(msgs: &[Message]) -> String {
-    let word_by_call = successful_write_word_counts(msgs);
-    let mut latest_root: Option<Value> = None;
-    let mut writes: Vec<String> = Vec::new();
-    let mut users: Vec<String> = Vec::new();
-    for m in msgs {
-        let text = message_text(m);
-        if let Some(root) = extract_root_from_compaction_text(&text) {
-            latest_root = Some(root);
-        }
-        for line in text.lines() {
-            let line = line.trim();
-            if is_write_stub(line) && !writes.iter().any(|w| w == line) {
-                writes.push(line.to_string());
-            }
-        }
-        if let Message::User { content } = m {
-            let t = message_text(m);
-            if !t.is_empty() && content.iter().any(|c| matches!(c, UserContent::Text(_))) {
-                users.push(truncate_user_text(&t));
-            }
-            for p in content.iter() {
-                let UserContent::ToolResult(r) = p else { continue };
-                let payload = tool_result_value(r);
-                if let Some(root) = extract_root_payload(&payload) {
-                    latest_root = Some(root);
-                }
-                if payload.get("ok").and_then(|v| v.as_bool()) == Some(false) {
-                    continue;
-                }
-                let label = payload.get("label").and_then(|v| v.as_str()).unwrap_or("").trim();
-                let stub = if !label.is_empty() {
-                    format!("已写入{label}")
-                } else {
-                    continue;
-                };
-                if is_write_stub(&stub) && !writes.iter().any(|w| w == &stub) {
-                    writes.push(stub);
-                }
-            }
-        }
-        if let Message::Assistant { content, .. } = m {
-            for p in content.iter() {
-                let AssistantContent::ToolCall(c) = p else { continue };
-                if c.function.name != "set_chapter_content" {
-                    continue;
-                }
-                let key = tool_call_key(c.id.as_str(), &c.function.name);
-                let Some(&words) = word_by_call
-                    .get(c.id.as_str())
-                    .or_else(|| word_by_call.get(&key))
-                else {
-                    continue;
-                };
-                let Some(body) = c.function.arguments.get("content").and_then(|v| v.as_str()) else {
-                    continue;
-                };
-                let stub = if is_write_stub(body) {
-                    body.to_string()
-                } else {
-                    chapter_written_stub(body, words)
-                };
-                if !writes.iter().any(|w| w == &stub) {
-                    writes.push(stub);
-                }
-            }
-        }
-    }
-    let mut parts: Vec<String> = Vec::new();
-    if let Some(root) = latest_root {
-        if let Ok(s) = serde_json::to_string(&root) {
-            parts.push(format!("【根材料】\n{s}"));
-        }
-    }
-    if !writes.is_empty() {
-        parts.push(format!("【已写入】\n{}", writes.join("\n")));
-    }
-    if !users.is_empty() {
-        parts.push(format!("【近期用户】\n{}", users.join("\n")));
-    }
-    if parts.is_empty() {
-        "（较早轮次已压缩）".into()
-    } else {
-        parts.join("\n")
-    }
-}
-
 fn stub_history_tools(msgs: &mut [Message]) -> bool {
     let word_by_call = successful_write_word_counts(msgs);
     let upsert_by_call = successful_upsert_keys(msgs);
@@ -928,42 +876,8 @@ fn stub_history_tools(msgs: &mut [Message]) -> bool {
     changed
 }
 
-const KEEP_USER_TURNS: usize = 2;
-const HISTORY_SUMMARY_PREFIX: &str = "【更早轮次】";
-
-fn is_window_user(m: &Message) -> bool {
-    let t = message_text(m);
-    if t.starts_with(HISTORY_SUMMARY_PREFIX) {
-        return false;
-    }
-    matches!(
-        m,
-        Message::User { content } if content.iter().any(|c| matches!(c, UserContent::Text(_)))
-    )
-}
-
-/// rig `InMemoryConversationMemory::with_filter`：stub 大写入 + 只留最近 2 轮 user。
-fn shape_chat_history(mut msgs: Vec<Message>) -> Vec<Message> {
-    let _ = stub_history_tools(&mut msgs);
-    let user_idx: Vec<usize> = msgs
-        .iter()
-        .enumerate()
-        .filter_map(|(i, m)| is_window_user(m).then_some(i))
-        .collect();
-    if user_idx.len() <= KEEP_USER_TURNS {
-        return msgs;
-    }
-    let keep_from = user_idx[user_idx.len() - KEEP_USER_TURNS];
-    let summary = summarize_chat_history(&msgs[..keep_from]);
-    let kept = msgs[keep_from..].to_vec();
-    let mut out = Vec::with_capacity(kept.len() + 1);
-    out.push(Message::user(format!("{HISTORY_SUMMARY_PREFIX}\n{summary}")));
-    out.extend(kept);
-    out
-}
-
 fn prune_history(msgs: &mut Vec<Message>) {
-    *msgs = shape_chat_history(std::mem::take(msgs));
+    let _ = stub_history_tools(msgs);
 }
 
 struct ChapterMemoryIndex {
@@ -1044,6 +958,23 @@ impl VectorStoreIndexDyn for ChapterMemoryIndex {
             Ok(docs.into_iter().map(|(score, id, _)| (score, id)).collect())
         })
     }
+}
+
+fn emit_ask(
+    app: &Arc<Mutex<Option<AppHandle>>>,
+    question: Option<&str>,
+    options: &[String],
+    multi: bool,
+) {
+    let Some(h) = app.lock().ok().and_then(|g| g.clone()) else {
+        return;
+    };
+    let payload = if let Some(q) = question {
+        json!({ "open": true, "question": q, "options": options, "multi": multi })
+    } else {
+        json!({ "open": false })
+    };
+    let _ = h.emit("global-chat-ask", payload);
 }
 
 fn emit_progress(app: &Arc<Mutex<Option<AppHandle>>>, step: &str) {
@@ -1162,6 +1093,110 @@ fn mcp_portable_tool(peer: Peer<RoleClient>, t: rmcp::model::Tool) -> PortableDy
     })
 }
 
+fn parse_ask_args(args: &Value) -> Result<(String, Vec<String>, bool), String> {
+    let question = args
+        .get("question")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim();
+    if question.is_empty() {
+        return Err("question 不能为空".into());
+    }
+    let mut options: Vec<String> = args
+        .get("options")
+        .and_then(|v| v.as_array())
+        .map(|a| {
+            a.iter()
+                .filter_map(|x| x.as_str().map(|s| s.trim().to_string()))
+                .filter(|s| !s.is_empty())
+                .collect()
+        })
+        .unwrap_or_default();
+    options.truncate(8);
+    if options.len() < 2 {
+        options = vec!["是".into(), "否".into()];
+    }
+    let multi = args.get("multi").and_then(|v| v.as_bool()).unwrap_or(false);
+    Ok((question.to_string(), options, multi))
+}
+
+fn ask_user_tool(
+    runtime: Arc<GlobalChatRuntime>,
+    app: Arc<Mutex<Option<AppHandle>>>,
+    cancel: Arc<AtomicBool>,
+) -> PortableDynamicTool {
+    PortableDynamicTool::new(
+        "ask_user",
+        "向用户提问并等待选择。仅当缺关键信息或路径互斥、不选就无法继续时调用。options 为 2–8 个短选项；多选设 multi=true。禁止用来问要不要继续。",
+        json!({
+            "type": "object",
+            "properties": {
+                "question": { "type": "string", "description": "要问用户的一句问题" },
+                "options": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "可点选项，2–8 个；省略则为是/否"
+                },
+                "multi": { "type": "boolean", "description": "是否可多选" }
+            },
+            "required": ["question"]
+        }),
+        move |args| {
+            let runtime = runtime.clone();
+            let app = app.clone();
+            let cancel = cancel.clone();
+            Box::pin(async move {
+                let (question, options, multi) = parse_ask_args(&args)
+                    .map_err(|e| ToolExecutionError::new(ToolErrorKind::Other, e))?;
+                let rx = runtime
+                    .begin_ask(options.clone(), multi)
+                    .map_err(|e| ToolExecutionError::new(ToolErrorKind::Other, e))?;
+                emit_ask(&app, Some(&question), &options, multi);
+                emit_progress(&app, "ask_user");
+                let out = tokio::select! {
+                    _ = async {
+                        while !cancel.load(Ordering::SeqCst) {
+                            tokio::time::sleep(Duration::from_millis(40)).await;
+                        }
+                    } => {
+                        runtime.abort_ask();
+                        emit_ask(&app, None, &[], false);
+                        Err(ToolExecutionError::new(ToolErrorKind::Other, "用户已取消".to_string()))
+                    }
+                    r = rx => match r {
+                        Ok(answer) => {
+                            emit_ask(&app, None, &[], false);
+                            Ok(ToolOutput::json(json!({ "answer": answer })))
+                        }
+                        Err(_) => {
+                            emit_ask(&app, None, &[], false);
+                            Err(ToolExecutionError::new(ToolErrorKind::Other, "提问已取消".to_string()))
+                        }
+                    }
+                };
+                out
+            })
+        },
+    )
+}
+
+struct RetryUnknownTool;
+
+impl AgentHook for RetryUnknownTool {
+    fn on_invalid_tool_call(
+        &self,
+        _ctx: &HookContext,
+        _event: &InvalidToolCallContext,
+    ) -> impl std::future::Future<Output = Option<InvalidToolCallAction>> + rig_core::wasm_compat::WasmCompatSend
+    {
+        async {
+            Some(InvalidToolCallAction::retry(
+                "该工具本轮不可用。只调用系统下发的工具，不要编造名称。",
+            ))
+        }
+    }
+}
+
 fn assemble_chat_agent(
     model: impl CompletionModel + 'static,
     instruction: &str,
@@ -1179,7 +1214,8 @@ fn assemble_chat_agent(
         .additional_params(extra)
         .default_max_turns(max_turns)
         .memory(runtime.memory())
-        .conversation(scope);
+        .conversation(scope)
+        .add_hook(RetryUnknownTool);
     if !novel_id.is_empty() && cache_intent != "write" {
         builder = builder.dynamic_context(
             kb_context::MEMORY_RETRIEVE_K,
@@ -1284,7 +1320,11 @@ async fn drive_chat(
     app: &Arc<Mutex<Option<AppHandle>>>,
     cancel: &AtomicBool,
 ) -> Result<DriveOut, String> {
-    let mut stream = agent.runner(prompt.clone()).stream().await;
+    let mut stream = agent
+        .runner(prompt.clone())
+        .max_invalid_tool_call_retries(2)
+        .stream()
+        .await;
     let mut reply = String::new();
     let mut last_step = String::new();
     let mut prompt_sum = 0u32;
@@ -1355,6 +1395,9 @@ async fn drive_chat(
                 }
                 final_output = Some(r.output);
             }
+            MultiTurnStreamItem::ModelTurnRetried { .. } => {
+                reply.clear();
+            }
             _ => {}
         }
     }
@@ -1406,6 +1449,7 @@ pub async fn send(
         return Err("全局 Chat 正在回复中".into());
     }
     let _busy = BusyGuard(&runtime.busy);
+    runtime.abort_ask();
     let _run = crate::ai_log::begin_run();
 
     let content = input.content.trim().to_string();
@@ -1502,6 +1546,7 @@ pub async fn send(
         }
         tools.push(mcp_portable_tool(peer.clone(), t));
     }
+    tools.push(ask_user_tool(runtime.clone(), app.clone(), cancel.clone()));
 
     let base = openai_compat_base(&ep.base_url);
     let max_turns = if cache_intent == "write" { 8 } else { 20 };
@@ -1727,7 +1772,7 @@ mod tests {
         let unbound = system_instruction("", "");
         let bound = system_instruction("n1", "测试书");
         for s in [&unbound, &bound] {
-            assert!(s.contains("get_chapter_write_context"), "{s}");
+            assert!(s.contains("ask_user"), "{s}");
             assert!(s.contains("ai_guidance"), "{s}");
             assert!(!s.contains('①'), "{s}");
             assert!(!s.contains("include_root"), "{s}");
@@ -1737,7 +1782,7 @@ mod tests {
         assert!(bound.contains("n1"));
         assert!(unbound.contains("upsert"), "{unbound}");
         assert!(unbound.len() < 2000, "unbound {}", unbound.len());
-        assert!(bound.len() < 2000, "bound {}", bound.len());
+        assert!(bound.len() < 2200, "bound {}", bound.len());
     }
 
     #[test]
@@ -1973,36 +2018,38 @@ mod tests {
     }
 
     #[test]
-    fn summarize_chat_history_keeps_latest_root_and_write_stubs() {
-        let user = Message::user("生成第1章");
-        let ctx = tool_res(
-            "call_ctx",
-            json!({
-                "output": {
-                    "included": { "root": true, "volume": false, "chapter": true },
-                    "root": { "title": "测试书", "synopsis": "纲" }
-                }
-            }),
-        );
-        let write = assistant_calls(vec![test_call(
-            "call_w",
-            ToolFunction::new("set_chapter_content".into(), json!({"content":"# 第1章\n正文正文正文"})),
-        )]);
-        let done = tool_res("call_w", json!({"output":"{\"ok\":true,\"word_count\":7}"}));
-        let text = summarize_chat_history(&[user, ctx, write, done]);
-        assert!(text.contains("【根材料】"), "{text}");
-        assert!(text.contains("测试书"), "{text}");
-        assert!(text.contains("已写入第1章，约 7 字"), "{text}");
-        assert!(!text.contains("正文正文正文"), "{text}");
-        assert!(text.contains("生成第1章"), "{text}");
-    }
-
-    #[test]
-    fn summarize_recovers_root_from_previous_compaction() {
-        let prev = Message::assistant("【根材料】\n{\"title\":\"旧根\"}\n【已写入】\n已写入第1章，约 10 字");
-        let text = summarize_chat_history(&[prev]);
-        assert!(text.contains("旧根"), "{text}");
-        assert!(text.contains("已写入第1章，约 10 字"), "{text}");
+    fn token_window_keeps_recent_under_budget() {
+        use rig_memory::MemoryPolicy;
+        let policy = TokenWindowMemory::new(2, |_: &Message| 1);
+        let msgs = vec![
+            Message::user("第一轮"),
+            Message::assistant("a1"),
+            Message::user("第二轮"),
+            Message::assistant("a2"),
+        ];
+        let kept = policy.apply(msgs).expect("policy");
+        assert_eq!(kept.len(), 2);
+        let texts: Vec<String> = kept
+            .iter()
+            .map(|m| match m {
+                Message::User { content } => content
+                    .iter()
+                    .filter_map(|c| match c {
+                        UserContent::Text(t) => Some(t.text.clone()),
+                        _ => None,
+                    })
+                    .collect(),
+                Message::Assistant { content, .. } => content
+                    .iter()
+                    .filter_map(|c| match c {
+                        AssistantContent::Text(t) => Some(t.text.clone()),
+                        _ => None,
+                    })
+                    .collect(),
+                Message::System { content } => content.clone(),
+            })
+            .collect();
+        assert_eq!(texts, vec!["第二轮".to_string(), "a2".to_string()]);
     }
 
     #[test]
@@ -2037,24 +2084,30 @@ mod tests {
     }
 
     #[test]
-    fn shape_chat_history_keeps_last_two_user_turns() {
-        let msgs = vec![
-            Message::user("第一轮"),
-            Message::assistant("a1"),
-            Message::user("第二轮"),
-            Message::assistant("a2"),
-            Message::user("第三轮"),
-            Message::assistant("a3"),
-        ];
-        let out = shape_chat_history(msgs);
-        let users: Vec<String> = out
-            .iter()
-            .filter(|m| is_window_user(m))
-            .map(message_text)
-            .collect();
-        assert_eq!(users, vec!["第二轮".to_string(), "第三轮".to_string()]);
-        assert!(message_text(&out[0]).starts_with(HISTORY_SUMMARY_PREFIX));
-        assert!(message_text(&out[0]).contains("第一轮"));
-        assert!(!out.iter().any(|m| message_text(m) == "第一轮"));
+    fn parse_ask_args_defaults_yes_no() {
+        let (q, opts, multi) = parse_ask_args(&json!({"question":"覆盖本章？"})).unwrap();
+        assert_eq!(q, "覆盖本章？");
+        assert_eq!(opts, vec!["是".to_string(), "否".to_string()]);
+        assert!(!multi);
+    }
+
+    #[test]
+    fn parse_ask_args_keeps_options() {
+        let (_, opts, multi) = parse_ask_args(&json!({
+            "question": "怎么写？",
+            "options": ["预生成", "精修", ""],
+            "multi": true
+        }))
+        .unwrap();
+        assert_eq!(opts, vec!["预生成".to_string(), "精修".to_string()]);
+        assert!(multi);
+    }
+
+    #[test]
+    fn answer_ask_rejects_unknown_option() {
+        let rt = GlobalChatRuntime::new();
+        let _rx = rt.begin_ask(vec!["预生成".into(), "精修".into()], false).unwrap();
+        assert!(rt.answer_ask(vec!["删书".into()]).is_err());
+        assert!(rt.answer_ask(vec!["预生成".into()]).is_ok());
     }
 }

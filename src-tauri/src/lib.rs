@@ -16,6 +16,7 @@ mod kb_context;
 mod knowledge;
 mod knowledge_vec;
 mod llm;
+mod llm_extract;
 mod mcp;
 mod models;
 mod paths;
@@ -199,6 +200,7 @@ pub fn run() {
             commands::global_chat_send,
             commands::global_chat_clear,
             commands::global_chat_cancel,
+            commands::global_chat_answer_ask,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Novel Work");

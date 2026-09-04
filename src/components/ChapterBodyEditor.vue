@@ -2,6 +2,7 @@
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { autocompletion, type CompletionContext } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
+import { openSearchPanel, search, searchKeymap } from "@codemirror/search";
 import {
   Compartment,
   EditorSelection,
@@ -19,7 +20,9 @@ import {
   type BlockInfo,
   type ViewUpdate,
 } from "@codemirror/view";
+import { useI18n } from "@/i18n";
 import { replaceBodyLineSpan } from "../lib/chapterParagraphs";
+import { clauseOffsets, reliableClickCount, resetClickCount } from "../lib/chapterMouseSelect";
 
 const LINE = 32;
 const SPARKLE_SVG =
@@ -48,13 +51,27 @@ const emit = defineEmits<{
   rewrite: [index: number];
 }>();
 
+const { t, locale } = useI18n();
 const hostEl = ref<HTMLElement | null>(null);
 
 let view: EditorView | null = null;
 const editComp = new Compartment();
 const phComp = new Compartment();
 const nounComp = new Compartment();
+const phraseComp = new Compartment();
 let nounsLive: string[] = [];
+
+function cmPhrases() {
+  return EditorState.phrases.of({
+    Find: t("workspace.findBody"),
+    next: t("workspace.findNext"),
+    previous: t("workspace.findPrev"),
+    Replace: t("workspace.replacePh"),
+    replace: t("workspace.replaceBody"),
+    "replace all": t("workspace.replaceAll"),
+    close: t("workspace.findClose"),
+  });
+}
 let rewriteLabelLive = "";
 let rewriteDisabledLive = false;
 
@@ -114,6 +131,11 @@ function rewriteGutter() {
     lineMarkerChange(update) {
       return update.transactions.some((tr) => tr.effects.some((e) => e.is(setHoveredLine)));
     },
+    domEventHandlers: {
+      mousedown() {
+        return true;
+      },
+    },
   });
 }
 
@@ -139,11 +161,12 @@ function nounExt() {
 }
 
 const paperTheme = EditorView.theme({
-  "&": { height: "100%", backgroundColor: "transparent", border: "none" },
+  "&": { height: "100%", width: "100%", minWidth: 0, backgroundColor: "transparent", border: "none" },
   "&.cm-focused": { outline: "none" },
   ".cm-scroller": {
     fontFamily: 'ui-serif, "Songti SC", "Noto Serif SC", "Source Han Serif SC", Georgia, serif',
     lineHeight: `${LINE}px`,
+    minWidth: 0,
   },
   ".cm-gutters": {
     backgroundColor: "transparent",
@@ -166,32 +189,67 @@ const paperTheme = EditorView.theme({
     border: "none",
     borderRadius: "4px",
     background: "transparent",
-    color: "#111111",
+    color: "var(--cb-ink)",
     opacity: "0",
     cursor: "pointer",
   },
   ".cm-para-rewrite-btn.is-hot, .cm-para-rewrite-btn:hover": {
     opacity: "1",
-    background: "rgba(0, 0, 0, 0.08)",
+    background: "var(--cb-wash)",
   },
   ".cm-content": {
-    color: "#111111",
-    caretColor: "#111111",
+    color: "var(--cb-ink)",
+    caretColor: "var(--cb-ink)",
     fontSize: "16px",
     lineHeight: `${LINE}px`,
     padding: "8px 28px 72px 16px",
     minHeight: "100%",
-    borderLeft: "1px solid #d4d4d4",
-    backgroundImage: `repeating-linear-gradient(to bottom, transparent 0, transparent ${LINE - 1}px, #d4d4d4 ${LINE - 1}px, #d4d4d4 ${LINE}px)`,
+    overflowWrap: "anywhere",
+    borderLeft: "1px solid var(--cb-border)",
+    backgroundImage: `repeating-linear-gradient(to bottom, transparent 0, transparent ${LINE - 1}px, var(--cb-border) ${LINE - 1}px, var(--cb-border) ${LINE}px)`,
     backgroundPosition: "0 8px",
   },
   ".cm-line": { padding: "0" },
-  ".cm-cursor, .cm-dropCursor": { borderLeftColor: "#111111" },
-  ".cm-selectionBackground": { background: "rgba(0, 0, 0, 0.12)" },
-  "&.cm-focused .cm-selectionBackground": { background: "rgba(0, 0, 0, 0.18)" },
+  ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--cb-ink)" },
+  ".cm-selectionBackground": { background: "color-mix(in srgb, var(--cb-ink) 14%, transparent)" },
+  "&.cm-focused .cm-selectionBackground": { background: "color-mix(in srgb, var(--cb-ink) 20%, transparent)" },
   ".cm-tooltip-autocomplete": {
     fontFamily: "ui-sans-serif, system-ui, sans-serif",
     fontSize: "13px",
+  },
+  ".cm-searchMatch": { backgroundColor: "rgba(234, 179, 8, 0.35)" },
+  ".cm-searchMatch-selected": { backgroundColor: "rgba(234, 88, 12, 0.45)" },
+  ".cm-panels": {
+    backgroundColor: "var(--cb-panel)",
+    color: "var(--cb-ink)",
+    borderBottom: "1px solid var(--cb-border)",
+    fontFamily: "ui-sans-serif, system-ui, sans-serif",
+  },
+  ".cm-panel.cm-search": {
+    padding: "6px 28px 6px 8px",
+  },
+  ".cm-panel.cm-search input[name=search], .cm-panel.cm-search input[name=replace]": {
+    minWidth: "8rem",
+    height: "28px",
+    padding: "0 8px",
+    border: "1px solid var(--cb-border)",
+    borderRadius: "6px",
+    fontSize: "12px",
+    background: "var(--cb-paper)",
+    color: "var(--cb-ink)",
+  },
+  ".cm-panel.cm-search .cm-button": {
+    height: "28px",
+    padding: "0 8px",
+    border: "1px solid var(--cb-border)",
+    borderRadius: "6px",
+    background: "var(--cb-paper)",
+    color: "var(--cb-ink)",
+    fontSize: "12px",
+    cursor: "pointer",
+  },
+  ".cm-panel.cm-search [name=select], .cm-panel.cm-search label": {
+    display: "none",
   },
 });
 
@@ -222,7 +280,51 @@ function setHover(n: number | null) {
 }
 
 function onMouseMove(ev: MouseEvent) {
+  if (ev.buttons) return;
   hoverLineAt(ev.clientX, ev.clientY);
+}
+
+function rangeForPaperClick(view: EditorView, pos: number, assoc: -1 | 1, type: 1 | 2 | 3) {
+  if (type === 1) return EditorSelection.cursor(pos, assoc);
+  const line = view.state.doc.lineAt(pos);
+  if (type === 2) {
+    const [from, to] = clauseOffsets(line.text, pos - line.from);
+    return from === to
+      ? EditorSelection.cursor(line.from + from)
+      : EditorSelection.range(line.from + from, line.from + to);
+  }
+  return EditorSelection.range(line.from, line.to);
+}
+
+/** 不用 event.detail：WKWebView 单击常被报成双击，中文整段会被当成一个词选中。 */
+function paperMouseSelection(view: EditorView, event: MouseEvent) {
+  if (event.button !== 0) return null;
+  // 点章节列表后编辑器失焦；下一次点正文必须是单击。hasFocus 在 mousedown 里可能已经变 true。
+  if (!view.hasFocus) resetClickCount();
+  const start = view.posAndSideAtCoords({ x: event.clientX, y: event.clientY }, false);
+  const type = reliableClickCount(event);
+  let startSel = view.state.selection;
+  return {
+    update(update: ViewUpdate) {
+      if (update.docChanged) {
+        start.pos = update.changes.mapPos(start.pos);
+        startSel = startSel.map(update.changes);
+      }
+    },
+    get(ev: MouseEvent, extend: boolean, multiple: boolean) {
+      const cur = view.posAndSideAtCoords({ x: ev.clientX, y: ev.clientY }, false);
+      let range = rangeForPaperClick(view, cur.pos, cur.assoc, type);
+      if (start.pos !== cur.pos && !extend) {
+        const a = rangeForPaperClick(view, start.pos, start.assoc, type);
+        const from = Math.min(a.from, range.from);
+        const to = Math.max(a.to, range.to);
+        range = EditorSelection.range(from, to);
+      }
+      if (extend) return startSel.replaceRange(startSel.main.extend(range.from, range.to));
+      if (multiple) return startSel.addRange(range);
+      return EditorSelection.create([range]);
+    },
+  };
 }
 
 function onMouseLeave() {
@@ -241,9 +343,12 @@ function mountEditor() {
       doc: props.modelValue,
       extensions: [
         history(),
-        keymap.of([...defaultKeymap, ...historyKeymap]),
+        search({ top: true, literal: true }),
+        phraseComp.of(cmPhrases()),
+        keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap]),
         EditorView.lineWrapping,
         drawSelection(),
+        EditorView.mouseSelectionStyle.of(paperMouseSelection),
         EditorView.contentAttributes.of({ spellcheck: "false" }),
         hoveredLine,
         rewriteGutter(),
@@ -257,6 +362,7 @@ function mountEditor() {
   });
   view.dom.addEventListener("mousemove", onMouseMove);
   view.dom.addEventListener("mouseleave", onMouseLeave);
+  view.contentDOM.addEventListener("blur", resetClickCount);
 }
 
 onMounted(() => {
@@ -264,6 +370,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  view?.contentDOM.removeEventListener("blur", resetClickCount);
   view?.dom.removeEventListener("mousemove", onMouseMove);
   view?.dom.removeEventListener("mouseleave", onMouseLeave);
   view?.destroy();
@@ -275,6 +382,7 @@ watch(
   (text) => {
     if (!view) return;
     if (view.state.doc.toString() === text) return;
+    resetClickCount();
     view.dispatch({
       changes: { from: 0, to: view.state.doc.length, insert: text },
     });
@@ -317,6 +425,15 @@ watch(
     if (off) setHover(null);
   },
 );
+
+watch(locale, () => {
+  view?.dispatch({ effects: phraseComp.reconfigure(cmPhrases()) });
+});
+
+function openFind() {
+  if (!view) return;
+  openSearchPanel(view);
+}
 
 function getCursor(): number {
   return view?.state.selection.main.head ?? 0;
@@ -372,11 +489,11 @@ function scrollToTop() {
   view.scrollDOM.scrollLeft = 0;
 }
 
-defineExpose({ getCursor, setSelection, replaceLineAndSelect, focus, scrollToTop });
+defineExpose({ getCursor, setSelection, replaceLineAndSelect, focus, scrollToTop, openFind });
 </script>
 
 <template>
-  <div class="chapter-paper relative min-h-0 w-full flex-1">
+  <div class="chapter-paper relative min-h-0 min-w-0 w-full flex-1 overflow-hidden">
     <div class="chapter-paper-sheet relative h-full min-h-0 overflow-hidden">
       <div ref="hostEl" class="absolute inset-0 min-h-0" />
     </div>
@@ -385,38 +502,9 @@ defineExpose({ getCursor, setSelection, replaceLineAndSelect, focus, scrollToTop
 
 <style scoped>
 .chapter-paper-sheet {
-  background-color: #ffffff;
-}
-:global(.dark) .chapter-paper-sheet {
-  background-color: #111111;
+  background-color: var(--cb-paper, #ffffff);
 }
 :deep(.cm-editor) {
   height: 100%;
-}
-:global(.dark) .chapter-paper :deep(.cm-content) {
-  color: #f5f5f5;
-  caret-color: #f5f5f5;
-  border-left-color: #404040;
-  background-image: repeating-linear-gradient(
-    to bottom,
-    transparent 0,
-    transparent 31px,
-    #404040 31px,
-    #404040 32px
-  );
-  background-position: 0 8px;
-}
-:global(.dark) .chapter-paper :deep(.cm-cursor) {
-  border-left-color: #f5f5f5;
-}
-:global(.dark) .chapter-paper :deep(.cm-para-rewrite-btn) {
-  color: #f5f5f5;
-}
-:global(.dark) .chapter-paper :deep(.cm-para-rewrite-btn.is-hot),
-:global(.dark) .chapter-paper :deep(.cm-para-rewrite-btn:hover) {
-  background: rgba(255, 255, 255, 0.12);
-}
-:global(.dark) .chapter-paper :deep(.cm-selectionBackground) {
-  background: rgba(255, 255, 255, 0.18);
 }
 </style>

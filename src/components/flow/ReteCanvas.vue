@@ -82,6 +82,7 @@ let syncing = false;
 let destroyed = false;
 let draggingNode = false;
 let dragStart: { x: number; y: number } | null = null;
+let didFit = false;
 
 function applyPickClass(side: "input" | "output" | null) {
   const el = host.value;
@@ -229,6 +230,10 @@ async function rebuild() {
       conn.onDblClick = () => emit("edgeDoubleClick", { edge: { id: e.id } });
       await editor.addConnection(conn);
     }
+    if (!didFit && editor.getNodes().length) {
+      didFit = true;
+      await fitView();
+    }
   } finally {
     syncing = false;
   }
@@ -345,6 +350,10 @@ defineExpose({ fitView, zoomBy });
   background-color: oklch(0.97 0.01 145);
   background-image: radial-gradient(#d5ddd4 1px, transparent 1px);
   background-size: 18px 18px;
+}
+:global(.dark) .rete-host {
+  background-color: oklch(0.2 0.012 145);
+  background-image: radial-gradient(#3a4338 1px, transparent 1px);
 }
 .rete-host :deep(> div) {
   will-change: transform;

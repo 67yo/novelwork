@@ -1,11 +1,15 @@
 import {
   applyAutoLayout,
   chapterEffectiveKnowledgeIds,
+  chapterInheritedCharacterIds,
+  chapterLocalCharacterIds,
   chapterLocalPlotIds,
   accordionCollapsedVolumeIds,
   collapsedVolumeHiddenIds,
+  rootLinkedCharacterIds,
   rootLinkedPlotIds,
   volumeChapterIds,
+  volumeLocalCharacterIds,
   __layoutConsts as C,
 } from "./treeLayout.ts";
 
@@ -268,6 +272,53 @@ console.assert(Math.abs(get("pm").position.x - expectMultiX) < 1e-6);
     JSON.stringify(chapterEffectiveKnowledgeIds("ch", nodes, edges)) ===
       JSON.stringify(["ck"]),
     "chapter knowledge is local only",
+  );
+}
+
+{
+  const nodes = [
+    {
+      id: "root",
+      kind: "novel",
+      position: { x: 0, y: 0 },
+      linked_character_ids: ["rc"],
+    },
+    {
+      id: "vol",
+      kind: "volume",
+      position: { x: 0, y: 5 },
+      linked_character_ids: ["rc", "vc"],
+    },
+    {
+      id: "ch",
+      kind: "chapter",
+      position: { x: 0, y: 10 },
+      linked_character_ids: ["rc", "vc", "cc"],
+    },
+    { id: "rc", kind: "character", position: { x: 0, y: 0 } },
+    { id: "vc", kind: "character", position: { x: 0, y: 1 } },
+    { id: "cc", kind: "character", position: { x: 0, y: 2 } },
+  ];
+  const edges = [
+    { id: "e1", source: "root", target: "vol", kind: "volume" },
+    { id: "e2", source: "vol", target: "ch", kind: "chapter" },
+  ];
+  console.assert(
+    JSON.stringify(rootLinkedCharacterIds(nodes, edges)) === JSON.stringify(["rc"]),
+    "root characters",
+  );
+  console.assert(
+    JSON.stringify(volumeLocalCharacterIds("vol", nodes, edges)) === JSON.stringify(["vc"]),
+    "volume local characters exclude root",
+  );
+  console.assert(
+    JSON.stringify(chapterInheritedCharacterIds("ch", nodes, edges)) ===
+      JSON.stringify(["rc", "vc"]),
+    "chapter inherits root then volume",
+  );
+  console.assert(
+    JSON.stringify(chapterLocalCharacterIds("ch", nodes, edges)) === JSON.stringify(["cc"]),
+    "chapter local characters exclude inherited",
   );
 }
 

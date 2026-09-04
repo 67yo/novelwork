@@ -6,6 +6,8 @@ import {
   ensureWritePromptsCard,
   isWritePromptsRootEdge,
   isWritePromptsSlot,
+  writePromptCardsForSide,
+  writePromptEdgeHandles,
   writePromptSideFromEdge,
   writePromptsHub,
   writePromptsLinkHost,
@@ -112,6 +114,16 @@ console.assert(!isWritePromptsRootEdge(tree.nodes, eGen), "child edge not root-l
 console.assert(!isFixedRootKnowledgeEdge(tree.nodes, eGen), "child edge can unlink");
 console.assert(writePromptSideFromEdge(hub!.id, eGen) === "generate", "left = generate");
 console.assert(writePromptSideFromEdge(hub!.id, eRef) === "refine", "right = refine");
+console.assert(
+  writePromptCardsForSide(tree, "generate").map((n) => n.id).join() === "g1",
+  "generate kids",
+);
+console.assert(
+  writePromptCardsForSide(tree, "refine").map((n) => n.id).join() === "r1",
+  "refine kids",
+);
+console.assert(writePromptEdgeHandles("generate").source === "left");
+console.assert(writePromptEdgeHandles("refine").source === "right");
 
 const pair = writePromptsLinkHost(
   tree.nodes.find((n) => n.id === hub!.id)!,

@@ -1827,6 +1827,52 @@ export function volumeLocalPlotIds(
   );
 }
 
+export function rootLinkedCharacterIds(nodes: LayoutNode[], edges: LayoutEdge[]): string[] {
+  const root = nodes.find((n) => n.kind === "novel");
+  if (!root) return [];
+  return unionLinkedIds(nodes, edges, root.id, root.linked_character_ids ?? [], "character");
+}
+
+/** 分卷本机人物（不含根） */
+export function volumeLocalCharacterIds(
+  volumeId: string,
+  nodes: LayoutNode[],
+  edges: LayoutEdge[],
+): string[] {
+  const rootSet = new Set(rootLinkedCharacterIds(nodes, edges));
+  return hostLinked(volumeId, nodes, edges, "linked_character_ids", "character").filter(
+    (id) => !rootSet.has(id),
+  );
+}
+
+/** 章节继承人物：根 ∪ 父分卷本机 */
+export function chapterInheritedCharacterIds(
+  chapterId: string,
+  nodes: LayoutNode[],
+  edges: LayoutEdge[],
+): string[] {
+  const ids = [...rootLinkedCharacterIds(nodes, edges)];
+  const vid = chapterParentVolumeId(chapterId, nodes, edges);
+  if (vid) {
+    for (const cid of volumeLocalCharacterIds(vid, nodes, edges)) {
+      if (!ids.includes(cid)) ids.push(cid);
+    }
+  }
+  return ids;
+}
+
+/** 章节本机人物（不含根/分卷继承） */
+export function chapterLocalCharacterIds(
+  chapterId: string,
+  nodes: LayoutNode[],
+  edges: LayoutEdge[],
+): string[] {
+  const inherited = new Set(chapterInheritedCharacterIds(chapterId, nodes, edges));
+  return hostLinked(chapterId, nodes, edges, "linked_character_ids", "character").filter(
+    (id) => !inherited.has(id),
+  );
+}
+
 export const __layoutConsts = {
   CHAR_X,
   KNOW_GAP_FROM_CHAR,

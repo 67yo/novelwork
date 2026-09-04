@@ -3012,6 +3012,35 @@ async fn extract_outlines_list_or_repair(
             return Ok((reply.to_string(), list));
         }
     }
+    if settings.resolve_compat(model).is_some_and(|ep| ep.is_ready()) {
+        if let Ok(ex) = crate::llm_extract::extract::<crate::llm_extract::OutlinesExtract>(
+            settings,
+            model,
+            &prompts::repair_outlines_json_system(loc),
+            reply,
+        )
+        .await
+        {
+            let arr: Vec<serde_json::Value> = ex
+                .outlines
+                .into_iter()
+                .map(|i| {
+                    let mut v = serde_json::json!({ "outline": i.outline });
+                    if let Some(n) = i.n {
+                        v["n"] = serde_json::json!(n);
+                    }
+                    if let Some(label) = i.label {
+                        v["label"] = serde_json::json!(label);
+                    }
+                    v
+                })
+                .collect();
+            let list = usable_outline_list(arr);
+            if !list.is_empty() {
+                return Ok((reply.to_string(), list));
+            }
+        }
+    }
     let system = prompts::repair_outlines_json_system(loc);
     let user = prompts::repair_outlines_json_user(loc, nums, reply);
     let (fixed, _) = llm_complete_ex(
@@ -4323,18 +4352,34 @@ async fn extract_and_store_chapter_memory(
         user_notes,
         other_memory,
     );
-    let (raw, used_mock) = llm_complete_ex(
-        app,
-        db,
-        settings,
-        &system,
-        &user,
-        Some(&model),
-        Some(novel_id),
-        cancel,
-        false,
-    )
-    .await?;
+    let extracted = if settings.resolve_compat(&model).is_some_and(|ep| ep.is_ready()) {
+        crate::llm_extract::extract::<crate::llm_extract::ChapterMemoryExtract>(
+            settings, &model, &system, &user,
+        )
+        .await
+        .ok()
+        .map(|e| e.into_chunks())
+        .filter(|c| !c.is_empty())
+    } else {
+        None
+    };
+    let (chunks, used_mock) = if let Some(chunks) = extracted {
+        (chunks, false)
+    } else {
+        let (raw, used_mock) = llm_complete_ex(
+            app,
+            db,
+            settings,
+            &system,
+            &user,
+            Some(&model),
+            Some(novel_id),
+            cancel,
+            false,
+        )
+        .await?;
+        (chapter_memory::split_memory_text(&raw), used_mock)
+    };
     if used_mock {
         return Err(if loc.is_zh() {
             "当前为模拟模式，未写入记忆".into()
@@ -4342,7 +4387,6 @@ async fn extract_and_store_chapter_memory(
             "Mock mode: memory was not written".into()
         });
     }
-    let chunks = chapter_memory::split_memory_text(&raw);
     if chunks.is_empty() {
         return Err(if loc.is_zh() {
             "未能从正文中抽取出记忆".into()
@@ -4854,16 +4898,21 @@ fn build_refine_memory_context(
 ) -> String {
     // ponytail: top-k within picks; raise MEMORY_* when writers need denser recall
     let node_ids: Vec<String> = prev_chapters.iter().map(|c| c.id.clone()).collect();
-    let mut facts: Vec<(String, String)> = Vec::new(); // (memory:node_id, content)
+    let mut facts: Vec<(String, String)> = Vec::new();
     if let Ok(rows) = state.db.list_chapter_memory_for_nodes(novel_id, &node_ids) {
-        for (nid, content) in rows {
-            facts.push((format!("memory:{nid}"), content));
-        }
+        facts.extend(rows);
     }
-    let ranked = chapter_memory::rank_memory(&facts, query, crate::kb_context::MEMORY_RETRIEVE_K);
+    let ranked = chapter_memory::retrieve_memory(
+        novel_id,
+        &facts,
+        query,
+        crate::kb_context::MEMORY_RETRIEVE_K,
+        Some(&node_ids),
+    );
     let mut fact_lines = Vec::new();
     let mut used = 0usize;
-    for (sid, content) in ranked {
+    for (nid, content) in ranked {
+        let sid = format!("memory:{nid}");
         let snip = crate::kb_context::truncate_chars(&content, crate::kb_context::MEMORY_FACT_CAP);
         let line = format!("- [{sid}] {snip}");
         let add = line.chars().count() + 1;
@@ -8621,7 +8670,16 @@ pub fn global_chat_clear(state: State<'_, AppState>, novel_id: Option<String>) -
 #[tauri::command]
 pub fn global_chat_cancel(state: State<'_, AppState>) -> Result<(), String> {
     state.request_chat_cancel(crate::global_chat::CANCEL_KEY);
+    state.global_chat.abort_ask();
     Ok(())
+}
+
+#[tauri::command]
+pub fn global_chat_answer_ask(
+    state: State<'_, AppState>,
+    answers: Vec<String>,
+) -> Result<(), String> {
+    state.global_chat.answer_ask(answers)
 }
 
 #[tauri::command]
