@@ -24,11 +24,21 @@ const route = useRoute();
 const keyOk = ref(false);
 const mcpOk = ref(false);
 const mcpEndpoint = ref("");
-const chatOpen = useLocalStorage("novework.chatOpen", true);
+const chatOpen = useLocalStorage("novework.chatOpen", false);
+const FAB = 48;
+const fabPos = useLocalStorage("novework.chatFab", { x: -1, y: -1 });
+const chatMode = useLocalStorage<"dock" | "float">("novework.chatMode", "float");
 const MIN_CHAT_W = 260;
+const MIN_CHAT_H = 280;
 const MIN_MAIN_W = 280;
 const NAV_W = 64;
-const chatW = ref(352);
+const chatW = useLocalStorage("novework.chatW", 352);
+const floatRect = useLocalStorage("novework.chatFloat", {
+  x: -1,
+  y: 48,
+  w: 400,
+  h: 560,
+});
 const { t } = useI18n();
 useUiTheme();
 let mcpTimer: number | undefined;
@@ -71,6 +81,9 @@ async function syncWindowTitle() {
 }
 
 onMounted(() => {
+  clampFloat();
+  clampFab();
+  window.addEventListener("resize", onWinResize);
   void refreshKey();
   void refreshMcp();
   void syncWindowTitle();
@@ -86,6 +99,7 @@ watch(
   },
 );
 onUnmounted(() => {
+  window.removeEventListener("resize", onWinResize);
   if (mcpTimer) window.clearInterval(mcpTimer);
   unsubChatOpen?.();
   unsubChatOpen = null;
@@ -110,13 +124,96 @@ function navClass(path: string) {
   ];
 }
 
-function chatBtnClass() {
-  return [
-    "flex w-full flex-col items-center gap-0.5 rounded-md px-1 py-2 text-[11px] leading-tight transition-colors",
-    chatOpen.value
-      ? "bg-accent text-accent-foreground"
-      : "text-muted-foreground hover:bg-muted hover:text-foreground",
-  ];
+function onWinResize() {
+  clampFloat();
+  clampFab();
+}
+
+function clampFab() {
+  const p = fabPos.value ?? { x: -1, y: -1 };
+  let x = Number(p.x);
+  let y = Number(p.y);
+  if (!Number.isFinite(x) || x < 0) x = window.innerWidth - FAB - 16;
+  if (!Number.isFinite(y) || y < 0) y = window.innerHeight - FAB - 16;
+  x = Math.min(Math.max(8, x), Math.max(8, window.innerWidth - FAB - 8));
+  y = Math.min(Math.max(8, y), Math.max(8, window.innerHeight - FAB - 8));
+  if (p.x !== x || p.y !== y) fabPos.value = { x, y };
+}
+
+let fabSkipClick = false;
+
+function startFab(ev: MouseEvent) {
+  if (ev.button !== 0) return;
+  ev.preventDefault();
+  const sx = ev.clientX;
+  const sy = ev.clientY;
+  const ox = fabPos.value.x;
+  const oy = fabPos.value.y;
+  let dragged = false;
+  const onMove = (e: MouseEvent) => {
+    if (Math.abs(e.clientX - sx) + Math.abs(e.clientY - sy) > 4) dragged = true;
+    if (!dragged) return;
+    fabPos.value = { x: ox + e.clientX - sx, y: oy + e.clientY - sy };
+    clampFab();
+  };
+  const onUp = () => {
+    window.removeEventListener("mousemove", onMove);
+    window.removeEventListener("mouseup", onUp);
+    if (dragged) fabSkipClick = true;
+    else chatOpen.value = true;
+  };
+  window.addEventListener("mousemove", onMove);
+  window.addEventListener("mouseup", onUp);
+}
+
+function onFabClick() {
+  if (fabSkipClick) {
+    fabSkipClick = false;
+    return;
+  }
+  chatOpen.value = true;
+}
+
+function clampFloat() {
+  const r = floatRect.value ?? { x: -1, y: 48, w: 400, h: 560 };
+  const maxW = Math.max(MIN_CHAT_W, window.innerWidth - 16);
+  const maxH = Math.max(MIN_CHAT_H, window.innerHeight - 16);
+  const w = Math.min(Math.max(Number(r.w) || 400, MIN_CHAT_W), maxW);
+  const h = Math.min(Math.max(Number(r.h) || 560, MIN_CHAT_H), maxH);
+  let x = Number(r.x);
+  let y = Number(r.y);
+  if (!Number.isFinite(x) || x < 0) x = Math.max(8, window.innerWidth - w - 16);
+  if (!Number.isFinite(y) || y < 0) y = 48;
+  x = Math.min(Math.max(8, x), Math.max(8, window.innerWidth - 80));
+  y = Math.min(Math.max(8, y), Math.max(8, window.innerHeight - 48));
+  if (r.x !== x || r.y !== y || r.w !== w || r.h !== h) {
+    floatRect.value = { x, y, w, h };
+  }
+}
+
+function toFloat() {
+  if (floatRect.value.x < 0) {
+    const w = chatW.value;
+    const h = Math.round(Math.min(window.innerHeight * 0.72, window.innerHeight - 56));
+    floatRect.value = {
+      x: Math.max(8, window.innerWidth - w - 16),
+      y: 48,
+      w,
+      h,
+    };
+  }
+  chatMode.value = "float";
+  clampFloat();
+}
+
+function toDock() {
+  chatW.value = Math.max(MIN_CHAT_W, floatRect.value.w || chatW.value);
+  chatMode.value = "dock";
+}
+
+function toggleChatMode() {
+  if (chatMode.value === "float") toDock();
+  else toFloat();
 }
 
 function startResizeChat(ev: MouseEvent) {
@@ -126,6 +223,51 @@ function startResizeChat(ev: MouseEvent) {
   const onMove = (e: MouseEvent) => {
     const max = Math.max(MIN_CHAT_W, window.innerWidth - NAV_W - MIN_MAIN_W);
     chatW.value = Math.min(Math.max(startW - (e.clientX - startX), MIN_CHAT_W), max);
+  };
+  const onUp = () => {
+    window.removeEventListener("mousemove", onMove);
+    window.removeEventListener("mouseup", onUp);
+  };
+  window.addEventListener("mousemove", onMove);
+  window.addEventListener("mouseup", onUp);
+}
+
+function startMoveFloat(ev: MouseEvent) {
+  ev.preventDefault();
+  const sx = ev.clientX;
+  const sy = ev.clientY;
+  const ox = floatRect.value.x;
+  const oy = floatRect.value.y;
+  const onMove = (e: MouseEvent) => {
+    floatRect.value = {
+      ...floatRect.value,
+      x: ox + e.clientX - sx,
+      y: oy + e.clientY - sy,
+    };
+    clampFloat();
+  };
+  const onUp = () => {
+    window.removeEventListener("mousemove", onMove);
+    window.removeEventListener("mouseup", onUp);
+  };
+  window.addEventListener("mousemove", onMove);
+  window.addEventListener("mouseup", onUp);
+}
+
+function startResizeFloat(ev: MouseEvent) {
+  ev.preventDefault();
+  ev.stopPropagation();
+  const sx = ev.clientX;
+  const sy = ev.clientY;
+  const ow = floatRect.value.w;
+  const oh = floatRect.value.h;
+  const onMove = (e: MouseEvent) => {
+    floatRect.value = {
+      ...floatRect.value,
+      w: ow + e.clientX - sx,
+      h: oh + e.clientY - sy,
+    };
+    clampFloat();
   };
   const onUp = () => {
     window.removeEventListener("mousemove", onMove);
@@ -162,10 +304,6 @@ function startResizeChat(ev: MouseEvent) {
           <ChartColumnStacked class="h-4 w-4" />
           <span>{{ t("nav.stats") }}</span>
         </RouterLink>
-        <button type="button" :class="chatBtnClass()" :title="t('nav.chat')" @click="chatOpen = !chatOpen">
-          <MessageSquare class="h-4 w-4" />
-          <span>{{ t("nav.chat") }}</span>
-        </button>
         <RouterLink :to="'/settings'" :class="navClass('/settings')" :title="t('nav.settings')">
           <Settings class="h-4 w-4" />
           <span>{{ t("nav.settings") }}</span>
@@ -193,13 +331,65 @@ function startResizeChat(ev: MouseEvent) {
     <main class="min-h-0 min-w-0 flex-1 overflow-hidden">
       <RouterView />
     </main>
-    <div v-if="chatOpen" class="flex h-full shrink-0" :style="{ width: `${chatW}px` }">
+    <Teleport to="body">
+      <button
+        v-if="!chatOpen"
+        type="button"
+        class="fixed z-[80] flex cursor-grab items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg hover:opacity-90 active:cursor-grabbing"
+        :style="{
+          left: `${fabPos.x}px`,
+          top: `${fabPos.y}px`,
+          width: `${FAB}px`,
+          height: `${FAB}px`,
+        }"
+        :title="t('globalChat.open')"
+        :aria-label="t('globalChat.open')"
+        @mousedown="startFab"
+        @click="onFabClick"
+      >
+        <MessageSquare class="h-5 w-5" />
+      </button>
+    </Teleport>
+    <Teleport to="body" :disabled="chatMode !== 'float'">
+    <div
+      v-if="chatOpen"
+      class="flex"
+      :class="
+        chatMode === 'float'
+          ? 'fixed z-[80] flex-col overflow-hidden rounded-lg border bg-background shadow-xl'
+          : 'h-full shrink-0'
+      "
+      :style="
+        chatMode === 'float'
+          ? {
+              left: `${floatRect.x}px`,
+              top: `${floatRect.y}px`,
+              width: `${floatRect.w}px`,
+              height: `${floatRect.h}px`,
+            }
+          : { width: `${chatW}px` }
+      "
+    >
       <div
+        v-if="chatMode === 'dock'"
         class="w-1 shrink-0 cursor-col-resize bg-border hover:bg-primary/40"
         :title="t('workspace.resize')"
         @mousedown="startResizeChat"
       />
-      <GlobalChatPanel class="min-w-0 flex-1" @close="chatOpen = false" />
+      <GlobalChatPanel
+        class="min-h-0 min-w-0 flex-1"
+        :mode="chatMode"
+        @close="chatOpen = false"
+        @toggle-mode="toggleChatMode"
+        @move="startMoveFloat"
+      />
+      <div
+        v-if="chatMode === 'float'"
+        class="absolute bottom-0 right-0 h-3.5 w-3.5 cursor-nwse-resize"
+        :title="t('workspace.resize')"
+        @mousedown="startResizeFloat"
+      />
     </div>
+    </Teleport>
   </div>
 </template>

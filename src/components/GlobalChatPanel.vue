@@ -7,9 +7,11 @@ import {
   Maximize2,
   MessageSquare,
   Minimize2,
-  PanelRightClose,
+  PanelRight,
   Square,
+  SquareArrowOutUpRight,
   Trash2,
+  X,
 } from "@lucide/vue";
 import { api, type GlobalChatMessage, type SkillPreviewItem } from "@/lib/api";
 import { useI18n } from "@/i18n";
@@ -18,7 +20,17 @@ import { choiceReply, joinChosen, parseChatChoices, type ChatChoices } from "@/l
 import { createChatRunProgress, type ChatRunProgress } from "@/lib/chatRunProgress";
 import { subscribeGlobalChatSend } from "@/lib/globalChatBridge";
 
-const emit = defineEmits<{ close: [] }>();
+const props = withDefaults(
+  defineProps<{ mode?: "dock" | "float" }>(),
+  { mode: "dock" },
+);
+const emit = defineEmits<{ close: []; toggleMode: []; move: [MouseEvent] }>();
+
+function onHeaderDown(e: MouseEvent) {
+  if (props.mode !== "float") return;
+  if ((e.target as HTMLElement | null)?.closest("button")) return;
+  emit("move", e);
+}
 
 const { t } = useI18n();
 const route = useRoute();
@@ -436,14 +448,29 @@ onUnmounted(() => {
 
 <template>
   <aside
-    class="flex h-full min-w-0 w-full flex-col border-l bg-background"
+    class="flex h-full min-w-0 w-full flex-col bg-background"
+    :class="props.mode === 'float' ? '' : 'border-l'"
     :aria-label="headerTitle"
   >
-    <header class="flex min-w-0 shrink-0 items-center gap-2 border-b px-3 py-2.5">
+    <header
+      class="flex min-w-0 shrink-0 items-center gap-2 border-b px-3 py-2.5"
+      :class="props.mode === 'float' ? 'cursor-move' : ''"
+      @mousedown="onHeaderDown"
+    >
       <MessageSquare class="h-4 w-4 shrink-0 text-primary" />
       <h2 class="min-w-0 flex-1 truncate text-sm font-semibold" :title="headerTitle">
         {{ headerTitle }}
       </h2>
+      <button
+        type="button"
+        class="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+        :title="props.mode === 'float' ? t('globalChat.dock') : t('globalChat.float')"
+        :aria-label="props.mode === 'float' ? t('globalChat.dock') : t('globalChat.float')"
+        @click="emit('toggleMode')"
+      >
+        <PanelRight v-if="props.mode === 'float'" class="h-4 w-4" />
+        <SquareArrowOutUpRight v-else class="h-4 w-4" />
+      </button>
       <button
         type="button"
         class="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -459,7 +486,7 @@ onUnmounted(() => {
         :title="t('globalChat.hide')"
         @click="emit('close')"
       >
-        <PanelRightClose class="h-4 w-4" />
+        <X class="h-4 w-4" />
       </button>
     </header>
 
