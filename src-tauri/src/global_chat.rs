@@ -45,6 +45,7 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 use uuid::Uuid;
 
@@ -78,9 +79,16 @@ pub struct GlobalChatRuntime {
     slots: Arc<ParkingMutex<HashMap<String, ChatSlot>>>,
     busy: AtomicBool,
     memory: Arc<ChatMem>,
+    ask: ParkingMutex<Option<AskWait>>,
 }
 
 type ChatMem = CompactingMemory<SlotMemory, TokenWindowMemory, TemplateCompactor>;
+
+struct AskWait {
+    options: Vec<String>,
+    multi: bool,
+    tx: Option<tokio::sync::oneshot::Sender<String>>,
+}
 
 struct ChatSlot {
     messages: Vec<GlobalChatMessage>,
@@ -168,6 +176,7 @@ impl GlobalChatRuntime {
             slots,
             busy: AtomicBool::new(false),
             memory,
+            ask: ParkingMutex::new(None),
         }
     }
 
@@ -188,6 +197,64 @@ impl GlobalChatRuntime {
         let key = scope_key(novel_id);
         self.slots.lock().insert(key.clone(), new_slot());
         self.memory.forget(&key);
+        self.abort_ask();
+    }
+
+    fn begin_ask(
+        &self,
+        options: Vec<String>,
+        multi: bool,
+    ) -> Result<tokio::sync::oneshot::Receiver<String>, String> {
+        let mut g = self.ask.lock();
+        if g.is_some() {
+            return Err("已有未回答的提问".into());
+        }
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        *g = Some(AskWait {
+            options,
+            multi,
+            tx: Some(tx),
+        });
+        Ok(rx)
+    }
+
+    pub fn answer_ask(&self, answers: Vec<String>) -> Result<(), String> {
+        let mut g = self.ask.lock();
+        let Some(mut wait) = g.take() else {
+            return Err("当前没有待回答的提问".into());
+        };
+        let mut picked: Vec<String> = Vec::new();
+        for a in answers {
+            let a = a.trim();
+            if a.is_empty() {
+                continue;
+            }
+            if !wait.options.iter().any(|o| o == a) {
+                *g = Some(wait);
+                return Err("无效选项".into());
+            }
+            if !picked.iter().any(|p| p == a) {
+                picked.push(a.to_string());
+            }
+        }
+        if picked.is_empty() {
+            *g = Some(wait);
+            return Err("请选择一项".into());
+        }
+        if !wait.multi && picked.len() != 1 {
+            *g = Some(wait);
+            return Err("请只选一项".into());
+        }
+        let text = picked.join("、");
+        let Some(tx) = wait.tx.take() else {
+            return Err("提问已失效".into());
+        };
+        let _ = tx.send(text);
+        Ok(())
+    }
+
+    pub fn abort_ask(&self) {
+        let _ = self.ask.lock().take();
     }
 }
 
@@ -449,13 +516,13 @@ fn chat_tool_allowlist(
 fn intent_tool_rule(intent: &str) -> &'static str {
     match intent {
         "write" => {
-            "\n本轮只开放写章工具。读一次 get_chapter_write_context，细纲空则 generate_detailed_outline，再 set_chapter_content 一次后立刻用一句话结束。禁止反复 get/set 同一章。"
+            "\n本轮只开放写章工具与 ask_user。读一次 get_chapter_write_context，细纲空则 generate_detailed_outline，再 set_chapter_content 一次后立刻用一句话结束。禁止反复 get/set 同一章。"
         }
         "outline" | "cards-outline" => {
-            "\n本轮只开放细纲工具：generate_detailed_outline / regenerate_detailed_outline_item / update_chapter_outline / get_selected_card。禁止调用 get_chapter_write_context、set_chapter_content、get_chapter_content。细纲完成后用一句话结束，不要写正文。"
+            "\n本轮只开放细纲工具与 ask_user：generate_detailed_outline / regenerate_detailed_outline_item / update_chapter_outline / get_selected_card。禁止调用 get_chapter_write_context、set_chapter_content、get_chapter_content。细纲完成后用一句话结束，不要写正文。"
         }
         "cards" => {
-            "\n本轮只开放改卡工具。禁止调用 get_chapter_write_context、set_chapter_content、get_tree、get_novel_info。"
+            "\n本轮只开放改卡工具与 ask_user。禁止调用 get_chapter_write_context、set_chapter_content、get_tree、get_novel_info。"
         }
         _ => "",
     }
@@ -464,8 +531,8 @@ fn intent_tool_rule(intent: &str) -> &'static str {
 fn system_instruction(novel_id: &str, novel_title: &str) -> String {
     let plan_and_ask = "\
 回答简洁，操作完成后用中文简要说明结果。默认直接做完，不要每次结尾问「要不要继续 / 是否继续 / 下一步吗」。\
-仅当缺关键信息或有互斥路径、不选就无法下一步时才提问一次：是否题只问一句；单选列出 1. 2. 3.；多选写明「可多选」并用 1. 2. 3. 列出。\
-用户答「是/否」针对上一问：同意则马上用工具落地，并连续做完其余可自主步骤；禁止重复已做过的检索/提炼，也禁止再问同一句或同义确认（含「要不要开始做任务」「是否继续下一项」）。\n\
+仅当缺关键信息或有互斥路径、不选就无法下一步时才调用 ask_user（question + options；多选设 multi=true）。禁止只在正文里列 1. 2. 3. 当提问。\
+用户选定后立刻用工具落地，并连续做完其余可自主步骤；禁止再问同一句或同义确认。\n\
 【大需求 → 任务列表】用户一次给出多项目标、多章写作、长文多段指令，或明显需要 ≥3 个独立 MCP 动作时：\
 先拆成编号任务列表（格式「1. …（待办）」；进行中/已完成改括号状态；**禁止**用 `- [ ]` 勾选行），\
 再按顺序逐项执行。任务列表是执行计划，默认直接开做，不要先问用户「是否按此执行」。\
@@ -893,6 +960,23 @@ impl VectorStoreIndexDyn for ChapterMemoryIndex {
     }
 }
 
+fn emit_ask(
+    app: &Arc<Mutex<Option<AppHandle>>>,
+    question: Option<&str>,
+    options: &[String],
+    multi: bool,
+) {
+    let Some(h) = app.lock().ok().and_then(|g| g.clone()) else {
+        return;
+    };
+    let payload = if let Some(q) = question {
+        json!({ "open": true, "question": q, "options": options, "multi": multi })
+    } else {
+        json!({ "open": false })
+    };
+    let _ = h.emit("global-chat-ask", payload);
+}
+
 fn emit_progress(app: &Arc<Mutex<Option<AppHandle>>>, step: &str) {
     let guard = app.lock().unwrap();
     if let Some(h) = guard.as_ref() {
@@ -1007,6 +1091,93 @@ fn mcp_portable_tool(peer: Peer<RoleClient>, t: rmcp::model::Tool) -> PortableDy
             }
         })
     })
+}
+
+fn parse_ask_args(args: &Value) -> Result<(String, Vec<String>, bool), String> {
+    let question = args
+        .get("question")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim();
+    if question.is_empty() {
+        return Err("question 不能为空".into());
+    }
+    let mut options: Vec<String> = args
+        .get("options")
+        .and_then(|v| v.as_array())
+        .map(|a| {
+            a.iter()
+                .filter_map(|x| x.as_str().map(|s| s.trim().to_string()))
+                .filter(|s| !s.is_empty())
+                .collect()
+        })
+        .unwrap_or_default();
+    options.truncate(8);
+    if options.len() < 2 {
+        options = vec!["是".into(), "否".into()];
+    }
+    let multi = args.get("multi").and_then(|v| v.as_bool()).unwrap_or(false);
+    Ok((question.to_string(), options, multi))
+}
+
+fn ask_user_tool(
+    runtime: Arc<GlobalChatRuntime>,
+    app: Arc<Mutex<Option<AppHandle>>>,
+    cancel: Arc<AtomicBool>,
+) -> PortableDynamicTool {
+    PortableDynamicTool::new(
+        "ask_user",
+        "向用户提问并等待选择。仅当缺关键信息或路径互斥、不选就无法继续时调用。options 为 2–8 个短选项；多选设 multi=true。禁止用来问要不要继续。",
+        json!({
+            "type": "object",
+            "properties": {
+                "question": { "type": "string", "description": "要问用户的一句问题" },
+                "options": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "可点选项，2–8 个；省略则为是/否"
+                },
+                "multi": { "type": "boolean", "description": "是否可多选" }
+            },
+            "required": ["question"]
+        }),
+        move |args| {
+            let runtime = runtime.clone();
+            let app = app.clone();
+            let cancel = cancel.clone();
+            Box::pin(async move {
+                let (question, options, multi) = parse_ask_args(&args)
+                    .map_err(|e| ToolExecutionError::new(ToolErrorKind::Other, e))?;
+                let rx = runtime
+                    .begin_ask(options.clone(), multi)
+                    .map_err(|e| ToolExecutionError::new(ToolErrorKind::Other, e))?;
+                emit_ask(&app, Some(&question), &options, multi);
+                emit_progress(&app, "ask_user");
+                let out = tokio::select! {
+                    _ = async {
+                        while !cancel.load(Ordering::SeqCst) {
+                            tokio::time::sleep(Duration::from_millis(40)).await;
+                        }
+                    } => {
+                        runtime.abort_ask();
+                        emit_ask(&app, None, &[], false);
+                        Err(ToolExecutionError::new(ToolErrorKind::Other, "用户已取消".to_string()))
+                    }
+                    r = rx => match r {
+                        Ok(answer) => {
+                            emit_ask(&app, None, &[], false);
+                            Ok(ToolOutput::json(json!({ "answer": answer })))
+                        }
+                        Err(_) => {
+                            emit_ask(&app, None, &[], false);
+                            Err(ToolExecutionError::new(ToolErrorKind::Other, "提问已取消".to_string()))
+                        }
+                    }
+                };
+                out
+            })
+        },
+    )
 }
 
 struct RetryUnknownTool;
@@ -1278,6 +1449,7 @@ pub async fn send(
         return Err("全局 Chat 正在回复中".into());
     }
     let _busy = BusyGuard(&runtime.busy);
+    runtime.abort_ask();
     let _run = crate::ai_log::begin_run();
 
     let content = input.content.trim().to_string();
@@ -1374,6 +1546,7 @@ pub async fn send(
         }
         tools.push(mcp_portable_tool(peer.clone(), t));
     }
+    tools.push(ask_user_tool(runtime.clone(), app.clone(), cancel.clone()));
 
     let base = openai_compat_base(&ep.base_url);
     let max_turns = if cache_intent == "write" { 8 } else { 20 };
@@ -1599,7 +1772,7 @@ mod tests {
         let unbound = system_instruction("", "");
         let bound = system_instruction("n1", "测试书");
         for s in [&unbound, &bound] {
-            assert!(s.contains("get_chapter_write_context"), "{s}");
+            assert!(s.contains("ask_user"), "{s}");
             assert!(s.contains("ai_guidance"), "{s}");
             assert!(!s.contains('①'), "{s}");
             assert!(!s.contains("include_root"), "{s}");
@@ -1908,5 +2081,33 @@ mod tests {
         }
         .unwrap();
         assert_eq!(body, "已写入第3章，约 9 字");
+    }
+
+    #[test]
+    fn parse_ask_args_defaults_yes_no() {
+        let (q, opts, multi) = parse_ask_args(&json!({"question":"覆盖本章？"})).unwrap();
+        assert_eq!(q, "覆盖本章？");
+        assert_eq!(opts, vec!["是".to_string(), "否".to_string()]);
+        assert!(!multi);
+    }
+
+    #[test]
+    fn parse_ask_args_keeps_options() {
+        let (_, opts, multi) = parse_ask_args(&json!({
+            "question": "怎么写？",
+            "options": ["预生成", "精修", ""],
+            "multi": true
+        }))
+        .unwrap();
+        assert_eq!(opts, vec!["预生成".to_string(), "精修".to_string()]);
+        assert!(multi);
+    }
+
+    #[test]
+    fn answer_ask_rejects_unknown_option() {
+        let rt = GlobalChatRuntime::new();
+        let _rx = rt.begin_ask(vec!["预生成".into(), "精修".into()], false).unwrap();
+        assert!(rt.answer_ask(vec!["删书".into()]).is_err());
+        assert!(rt.answer_ask(vec!["预生成".into()]).is_ok());
     }
 }

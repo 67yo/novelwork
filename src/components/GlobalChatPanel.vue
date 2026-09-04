@@ -37,11 +37,14 @@ const lastUserMsgId = ref("");
 const lastUserTokens = ref<{ n: number; confirmed: boolean } | null>(null);
 const inflightText = ref("");
 const aborting = ref(false);
+const pendingAsk = ref<{ question: string; options: string[]; multi: boolean } | null>(null);
+const answeringAsk = ref(false);
 const { model, options, load: loadModel, persist: persistModel } = usePersistedChatModel("chat_model");
 
 let run: ChatRunProgress | null = null;
 let unlistenProgress: UnlistenFn | null = null;
 let unlistenTokens: UnlistenFn | null = null;
+let unlistenAsk: UnlistenFn | null = null;
 let unsubBridge: (() => void) | null = null;
 
 function formatStepMs(ms: number): string {
@@ -53,6 +56,7 @@ function formatStepMs(ms: number): string {
 }
 
 function stepLabel(step: string): string {
+  if (step === "ask_user") return t("globalChat.stepAsk");
   if (step.startsWith("tool:")) return t("globalChat.stepTool", { name: step.slice(5) });
   if (step === "connecting") return t("globalChat.stepConnecting");
   if (step === "thinking") return t("globalChat.stepThinking");
@@ -214,6 +218,11 @@ async function send() {
 }
 
 const lastChoices = computed((): ChatChoices | null => {
+  const ask = pendingAsk.value;
+  if (ask) {
+    const options = ask.options.length >= 2 ? ask.options : [t("globalChat.choiceYes"), t("globalChat.choiceNo")];
+    return { kind: "list", multi: ask.multi, options };
+  }
   const last = messages.value.at(-1);
   if (!last || last.role !== "assistant" || sending.value) return null;
   return parseChatChoices(last.content);
@@ -235,13 +244,32 @@ watch(
   },
 );
 
+watch(pendingAsk, () => {
+  multiPicked.value = [];
+  answeringAsk.value = false;
+});
+
 function toggleMulti(label: string) {
   const i = multiPicked.value.indexOf(label);
   if (i >= 0) multiPicked.value.splice(i, 1);
   else multiPicked.value.push(label);
 }
 
-function sendChoice(label: string) {
+async function sendChoice(label: string) {
+  if (pendingAsk.value) {
+    if (answeringAsk.value) return;
+    const labels = pendingAsk.value.multi ? [...multiPicked.value] : [label];
+    if (!labels.length) return;
+    answeringAsk.value = true;
+    try {
+      await api.globalChatAnswerAsk(labels);
+      pendingAsk.value = null;
+    } catch (e) {
+      answeringAsk.value = false;
+      error.value = e instanceof Error ? e.message : String(e);
+    }
+    return;
+  }
   const last = messages.value.at(-1);
   const c = lastChoices.value;
   if (last?.role === "assistant" && c) {
@@ -286,6 +314,8 @@ function onComposerKeydown(e: KeyboardEvent) {
 
 async function stop() {
   aborting.value = true;
+  pendingAsk.value = null;
+  answeringAsk.value = false;
   const text = inflightText.value;
   if (text) draft.value = text;
   const last = messages.value.at(-1);
@@ -364,6 +394,27 @@ onMounted(() => {
   }).then((fn) => {
     unlistenTokens = fn;
   }).catch(() => {});
+  void listen<{
+    open?: boolean;
+    question?: string;
+    options?: string[];
+    multi?: boolean;
+  }>("global-chat-ask", (ev) => {
+    const p = ev.payload;
+    if (!p || p.open === false) {
+      pendingAsk.value = null;
+      return;
+    }
+    if (p.question) {
+      pendingAsk.value = {
+        question: p.question,
+        options: p.options ?? [],
+        multi: !!p.multi,
+      };
+    }
+  }).then((fn) => {
+    unlistenAsk = fn;
+  }).catch(() => {});
 });
 
 watch(
@@ -378,6 +429,7 @@ onUnmounted(() => {
   unsubBridge = null;
   unlistenProgress?.();
   unlistenTokens?.();
+  unlistenAsk?.();
   stopRun();
 });
 </script>
@@ -447,7 +499,7 @@ onUnmounted(() => {
           }}
         </p>
         <div
-          v-if="i === messages.length - 1 && lastChoices && !sending"
+          v-if="i === messages.length - 1 && lastChoices && !pendingAsk && !sending"
           class="mt-2 flex flex-wrap gap-1.5"
         >
           <template v-if="lastChoices.multi">
@@ -467,7 +519,7 @@ onUnmounted(() => {
             <button
               type="button"
               class="min-h-8 rounded-md bg-primary px-2.5 py-1 text-xs text-primary-foreground disabled:opacity-40"
-              :disabled="!multiPicked.length"
+              :disabled="!multiPicked.length || answeringAsk"
               @click="sendChoice(joinChosen(multiPicked))"
             >
               {{ t("globalChat.choiceConfirm") }}
@@ -496,9 +548,48 @@ onUnmounted(() => {
         >
           {{ line }}
         </p>
-        <p v-if="!pendingLines.length" class="text-xs text-muted-foreground">
+        <p v-if="!pendingLines.length && !pendingAsk" class="text-xs text-muted-foreground">
           {{ t("globalChat.sending") }}
         </p>
+        <template v-if="pendingAsk && lastChoices">
+          <p class="whitespace-pre-wrap text-sm leading-relaxed">{{ pendingAsk.question }}</p>
+          <div class="mt-2 flex flex-wrap gap-1.5">
+            <template v-if="lastChoices.multi">
+              <label
+                v-for="label in lastChoiceLabels"
+                :key="label"
+                class="flex min-h-8 cursor-pointer items-center gap-1.5 rounded-md border bg-background px-2 py-1 text-xs"
+              >
+                <input
+                  type="checkbox"
+                  class="h-3.5 w-3.5"
+                  :checked="multiPicked.includes(label)"
+                  @change="toggleMulti(label)"
+                />
+                {{ label }}
+              </label>
+              <button
+                type="button"
+                class="min-h-8 rounded-md bg-primary px-2.5 py-1 text-xs text-primary-foreground disabled:opacity-40"
+                :disabled="!multiPicked.length || answeringAsk"
+                @click="sendChoice(joinChosen(multiPicked))"
+              >
+                {{ t("globalChat.choiceConfirm") }}
+              </button>
+            </template>
+            <button
+              v-else
+              v-for="label in lastChoiceLabels"
+              :key="label"
+              type="button"
+              class="min-h-8 rounded-md border bg-background px-2.5 py-1 text-xs hover:bg-primary hover:text-primary-foreground disabled:opacity-40"
+              :disabled="answeringAsk"
+              @click="sendChoice(label)"
+            >
+              {{ label }}
+            </button>
+          </div>
+        </template>
       </div>
       <p v-if="error" class="rounded-md bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
         {{ error }}

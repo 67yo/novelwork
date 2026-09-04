@@ -60,6 +60,7 @@ import {
   syncLegacyFields,
 } from "@/lib/characterCard";
 import { useI18n } from "@/i18n";
+import { paperSchemeStyle, usePaperScheme } from "@/lib/paperScheme";
 import type { CoreLawsData, WorldAxiom } from "@/lib/coreLaws";
 import { isAxiomSlot, normalizeAxiom } from "@/lib/coreLaws";
 import {
@@ -139,6 +140,7 @@ import {
   Pause,
   Play,
   Plus,
+  Search,
   RefreshCw,
   Share2,
   Sparkles,
@@ -230,6 +232,7 @@ import {
 
 const props = defineProps<{ id: string }>();
 const { t, locale } = useI18n();
+const { scheme: paperScheme } = usePaperScheme();
 const workspaceTab = useLocalStorage<WorkspaceTabId>("novework.workspaceTab", "book");
 const reteCanvas = ref<{
   fitView: (opts?: { nodes?: string[] }) => void | Promise<void>;
@@ -5438,7 +5441,7 @@ function startResizeChatH(ev: MouseEvent) {
       <div
         v-if="showBodyDock"
         class="chapter-body-dock flex min-h-0 min-w-0 flex-col overflow-hidden"
-        style="grid-area: chat"
+        :style="{ gridArea: 'chat', ...paperSchemeStyle(paperScheme) }"
         :class="chatDock === 'right' ? 'border-l' : 'border-t'"
       >
         <div class="chapter-body-dock-bar flex shrink-0 flex-wrap items-center justify-between gap-2 border-b px-3 py-2">
@@ -5532,6 +5535,17 @@ function startResizeChatH(ev: MouseEvent) {
                 <option :value="2">2×</option>
                 <option :value="3">3×</option>
               </select>
+              <Button
+                size="sm"
+                variant="outline"
+                class="chapter-body-tool-btn px-2"
+                :disabled="!bodyEditing || bodyView !== 'edit'"
+                :title="t('workspace.findBody')"
+                :aria-label="t('workspace.findBody')"
+                @click="bodyEditor?.openFind()"
+              >
+                <Search class="h-3.5 w-3.5" />
+              </Button>
               <Button
                 size="sm"
                 variant="outline"
@@ -6500,16 +6514,10 @@ function startResizeChatH(ev: MouseEvent) {
   --cb-muted: #737373;
   --cb-border: #d4d4d4;
   --cb-wash: rgba(0, 0, 0, 0.06);
+  --cb-panel: #fafafa;
   background-color: var(--cb-paper);
   border-color: var(--cb-border);
   color: var(--cb-ink);
-}
-:global(.dark) .chapter-body-dock {
-  --cb-paper: #111111;
-  --cb-ink: #f5f5f5;
-  --cb-muted: #a3a3a3;
-  --cb-border: #404040;
-  --cb-wash: rgba(255, 255, 255, 0.08);
 }
 .chapter-body-dock-bar {
   border-color: var(--cb-border);
@@ -6568,14 +6576,6 @@ function startResizeChatH(ev: MouseEvent) {
 .chapter-body-diff .body-diff-add {
   background: #bbf7d0;
   color: #14532d;
-}
-:global(.dark) .chapter-body-diff .body-diff-del {
-  background: rgba(127, 29, 29, 0.45);
-  color: #fecaca;
-}
-:global(.dark) .chapter-body-diff .body-diff-add {
-  background: rgba(20, 83, 45, 0.45);
-  color: #bbf7d0;
 }
 .chapter-body-dock-pos button.is-on {
   background-color: var(--cb-ink);

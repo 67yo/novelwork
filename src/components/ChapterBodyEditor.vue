@@ -2,6 +2,7 @@
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { autocompletion, type CompletionContext } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
+import { openSearchPanel, search, searchKeymap } from "@codemirror/search";
 import {
   Compartment,
   EditorSelection,
@@ -19,6 +20,7 @@ import {
   type BlockInfo,
   type ViewUpdate,
 } from "@codemirror/view";
+import { useI18n } from "@/i18n";
 import { replaceBodyLineSpan } from "../lib/chapterParagraphs";
 import { clauseOffsets, reliableClickCount, resetClickCount } from "../lib/chapterMouseSelect";
 
@@ -49,13 +51,27 @@ const emit = defineEmits<{
   rewrite: [index: number];
 }>();
 
+const { t, locale } = useI18n();
 const hostEl = ref<HTMLElement | null>(null);
 
 let view: EditorView | null = null;
 const editComp = new Compartment();
 const phComp = new Compartment();
 const nounComp = new Compartment();
+const phraseComp = new Compartment();
 let nounsLive: string[] = [];
+
+function cmPhrases() {
+  return EditorState.phrases.of({
+    Find: t("workspace.findBody"),
+    next: t("workspace.findNext"),
+    previous: t("workspace.findPrev"),
+    Replace: t("workspace.replacePh"),
+    replace: t("workspace.replaceBody"),
+    "replace all": t("workspace.replaceAll"),
+    close: t("workspace.findClose"),
+  });
+}
 let rewriteLabelLive = "";
 let rewriteDisabledLive = false;
 
@@ -173,33 +189,67 @@ const paperTheme = EditorView.theme({
     border: "none",
     borderRadius: "4px",
     background: "transparent",
-    color: "#111111",
+    color: "var(--cb-ink)",
     opacity: "0",
     cursor: "pointer",
   },
   ".cm-para-rewrite-btn.is-hot, .cm-para-rewrite-btn:hover": {
     opacity: "1",
-    background: "rgba(0, 0, 0, 0.08)",
+    background: "var(--cb-wash)",
   },
   ".cm-content": {
-    color: "#111111",
-    caretColor: "#111111",
+    color: "var(--cb-ink)",
+    caretColor: "var(--cb-ink)",
     fontSize: "16px",
     lineHeight: `${LINE}px`,
     padding: "8px 28px 72px 16px",
     minHeight: "100%",
     overflowWrap: "anywhere",
-    borderLeft: "1px solid #d4d4d4",
-    backgroundImage: `repeating-linear-gradient(to bottom, transparent 0, transparent ${LINE - 1}px, #d4d4d4 ${LINE - 1}px, #d4d4d4 ${LINE}px)`,
+    borderLeft: "1px solid var(--cb-border)",
+    backgroundImage: `repeating-linear-gradient(to bottom, transparent 0, transparent ${LINE - 1}px, var(--cb-border) ${LINE - 1}px, var(--cb-border) ${LINE}px)`,
     backgroundPosition: "0 8px",
   },
   ".cm-line": { padding: "0" },
-  ".cm-cursor, .cm-dropCursor": { borderLeftColor: "#111111" },
-  ".cm-selectionBackground": { background: "rgba(0, 0, 0, 0.12)" },
-  "&.cm-focused .cm-selectionBackground": { background: "rgba(0, 0, 0, 0.18)" },
+  ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--cb-ink)" },
+  ".cm-selectionBackground": { background: "color-mix(in srgb, var(--cb-ink) 14%, transparent)" },
+  "&.cm-focused .cm-selectionBackground": { background: "color-mix(in srgb, var(--cb-ink) 20%, transparent)" },
   ".cm-tooltip-autocomplete": {
     fontFamily: "ui-sans-serif, system-ui, sans-serif",
     fontSize: "13px",
+  },
+  ".cm-searchMatch": { backgroundColor: "rgba(234, 179, 8, 0.35)" },
+  ".cm-searchMatch-selected": { backgroundColor: "rgba(234, 88, 12, 0.45)" },
+  ".cm-panels": {
+    backgroundColor: "var(--cb-panel)",
+    color: "var(--cb-ink)",
+    borderBottom: "1px solid var(--cb-border)",
+    fontFamily: "ui-sans-serif, system-ui, sans-serif",
+  },
+  ".cm-panel.cm-search": {
+    padding: "6px 28px 6px 8px",
+  },
+  ".cm-panel.cm-search input[name=search], .cm-panel.cm-search input[name=replace]": {
+    minWidth: "8rem",
+    height: "28px",
+    padding: "0 8px",
+    border: "1px solid var(--cb-border)",
+    borderRadius: "6px",
+    fontSize: "12px",
+    background: "var(--cb-paper)",
+    color: "var(--cb-ink)",
+  },
+  ".cm-panel.cm-search .cm-button": {
+    height: "28px",
+    padding: "0 8px",
+    border: "1px solid var(--cb-border)",
+    borderRadius: "6px",
+    background: "var(--cb-paper)",
+    color: "var(--cb-ink)",
+    fontSize: "12px",
+    cursor: "pointer",
+  },
+  ".cm-panel.cm-search [name=select], .cm-panel.cm-search label": {
+    display: "none",
   },
 });
 
@@ -293,7 +343,9 @@ function mountEditor() {
       doc: props.modelValue,
       extensions: [
         history(),
-        keymap.of([...defaultKeymap, ...historyKeymap]),
+        search({ top: true, literal: true }),
+        phraseComp.of(cmPhrases()),
+        keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap]),
         EditorView.lineWrapping,
         drawSelection(),
         EditorView.mouseSelectionStyle.of(paperMouseSelection),
@@ -374,6 +426,15 @@ watch(
   },
 );
 
+watch(locale, () => {
+  view?.dispatch({ effects: phraseComp.reconfigure(cmPhrases()) });
+});
+
+function openFind() {
+  if (!view) return;
+  openSearchPanel(view);
+}
+
 function getCursor(): number {
   return view?.state.selection.main.head ?? 0;
 }
@@ -428,7 +489,7 @@ function scrollToTop() {
   view.scrollDOM.scrollLeft = 0;
 }
 
-defineExpose({ getCursor, setSelection, replaceLineAndSelect, focus, scrollToTop });
+defineExpose({ getCursor, setSelection, replaceLineAndSelect, focus, scrollToTop, openFind });
 </script>
 
 <template>
@@ -441,38 +502,9 @@ defineExpose({ getCursor, setSelection, replaceLineAndSelect, focus, scrollToTop
 
 <style scoped>
 .chapter-paper-sheet {
-  background-color: #ffffff;
-}
-:global(.dark) .chapter-paper-sheet {
-  background-color: #111111;
+  background-color: var(--cb-paper, #ffffff);
 }
 :deep(.cm-editor) {
   height: 100%;
-}
-:global(.dark) .chapter-paper :deep(.cm-content) {
-  color: #f5f5f5;
-  caret-color: #f5f5f5;
-  border-left-color: #404040;
-  background-image: repeating-linear-gradient(
-    to bottom,
-    transparent 0,
-    transparent 31px,
-    #404040 31px,
-    #404040 32px
-  );
-  background-position: 0 8px;
-}
-:global(.dark) .chapter-paper :deep(.cm-cursor) {
-  border-left-color: #f5f5f5;
-}
-:global(.dark) .chapter-paper :deep(.cm-para-rewrite-btn) {
-  color: #f5f5f5;
-}
-:global(.dark) .chapter-paper :deep(.cm-para-rewrite-btn.is-hot),
-:global(.dark) .chapter-paper :deep(.cm-para-rewrite-btn:hover) {
-  background: rgba(255, 255, 255, 0.12);
-}
-:global(.dark) .chapter-paper :deep(.cm-selectionBackground) {
-  background: rgba(255, 255, 255, 0.18);
 }
 </style>

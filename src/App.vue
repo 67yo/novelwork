@@ -17,6 +17,7 @@ import {
 } from "@lucide/vue";
 import GlobalChatPanel from "@/components/GlobalChatPanel.vue";
 import { subscribeGlobalChatOpen } from "@/lib/globalChatBridge";
+import { useUiTheme } from "@/lib/uiTheme";
 
 const BASE_TITLE = "Novel Work";
 const route = useRoute();
@@ -29,6 +30,7 @@ const MIN_MAIN_W = 280;
 const NAV_W = 64;
 const chatW = ref(352);
 const { t } = useI18n();
+useUiTheme();
 let mcpTimer: number | undefined;
 let unsubChatOpen: (() => void) | null = null;
 
@@ -137,7 +139,7 @@ function startResizeChat(ev: MouseEvent) {
 <template>
   <div class="flex h-screen overflow-hidden">
     <aside
-      class="z-50 flex w-16 shrink-0 flex-col border-r bg-[linear-gradient(180deg,oklch(0.97_0.02_155),oklch(0.99_0.01_85))]"
+      class="app-nav z-50 flex w-16 shrink-0 flex-col border-r"
     >
       <RouterLink
         to="/novels"

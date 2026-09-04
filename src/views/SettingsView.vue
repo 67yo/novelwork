@@ -13,7 +13,21 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Eye, EyeOff } from "@lucide/vue";
-import { LOCALE_OPTIONS, setLocalePreference, useI18n, type LocalePreference } from "@/i18n";
+import {
+  LOCALE_OPTIONS,
+  setLocalePreference,
+  useI18n,
+  type LocalePreference,
+  type MessageKey,
+} from "@/i18n";
+import {
+  PAPER_SCHEME_DARK,
+  PAPER_SCHEME_LIGHT,
+  paperSchemeVars,
+  usePaperScheme,
+  type PaperSchemeId,
+} from "@/lib/paperScheme";
+import { UI_THEME_PREFS, useUiTheme, type UiThemePref } from "@/lib/uiTheme";
 
 type DraftProvider = {
   id: string;
@@ -28,7 +42,17 @@ type DraftProvider = {
 };
 
 const { t } = useI18n();
+const { scheme: paperScheme, setScheme: setPaperScheme } = usePaperScheme();
+const { pref: uiTheme, setPref: setUiTheme } = useUiTheme();
 const uiLocale = ref<LocalePreference>("system");
+
+function paperLabel(id: PaperSchemeId): MessageKey {
+  return `settings.paper.${id}`;
+}
+
+function themeLabel(id: UiThemePref): MessageKey {
+  return `settings.theme.${id}`;
+}
 const mcpPort = ref(17832);
 const mcpEnabled = ref(true);
 const mcpLan = ref(false);
@@ -447,6 +471,8 @@ const activeSection = ref("language");
 
 const settingsSections = computed(() => [
   { id: "language", label: t("settings.language") },
+  { id: "theme", label: t("settings.theme") },
+  { id: "paper", label: t("settings.paper") },
   { id: "ai-log", label: t("settings.aiLog") },
   { id: "skills", label: t("settings.skills") },
   { id: "compat", label: t("settings.compatTitle") },
@@ -516,6 +542,91 @@ function scrollToSection(id: string) {
         >
           <option v-for="opt in LOCALE_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
         </select>
+      </CardContent>
+    </Card>
+
+    <Card id="settings-theme" class="scroll-mt-4">
+      <CardHeader>
+        <CardTitle>{{ t("settings.theme") }}</CardTitle>
+        <p class="text-sm text-muted-foreground">{{ t("settings.themeHint") }}</p>
+      </CardHeader>
+      <CardContent>
+        <div class="grid grid-cols-3 gap-2">
+          <button
+            v-for="id in UI_THEME_PREFS"
+            :key="id"
+            type="button"
+            class="rounded-md border px-3 py-2 text-sm transition-colors"
+            :class="
+              uiTheme === id
+                ? 'border-foreground bg-muted'
+                : 'border-input hover:bg-muted/50'
+            "
+            :aria-pressed="uiTheme === id"
+            @click="setUiTheme(id)"
+          >
+            {{ t(themeLabel(id)) }}
+          </button>
+        </div>
+      </CardContent>
+    </Card>
+
+    <Card id="settings-paper" class="scroll-mt-4">
+      <CardHeader>
+        <CardTitle>{{ t("settings.paper") }}</CardTitle>
+        <p class="text-sm text-muted-foreground">{{ t("settings.paperHint") }}</p>
+      </CardHeader>
+      <CardContent class="space-y-3">
+        <p class="text-xs text-muted-foreground">{{ t("settings.paperLight") }}</p>
+        <div class="grid grid-cols-2 gap-2">
+          <button
+            v-for="id in PAPER_SCHEME_LIGHT"
+            :key="id"
+            type="button"
+            class="flex items-center gap-2 rounded-md border px-3 py-2 text-left text-sm transition-colors"
+            :class="
+              paperScheme === id
+                ? 'border-foreground bg-muted'
+                : 'border-input hover:bg-muted/50'
+            "
+            :aria-pressed="paperScheme === id"
+            @click="setPaperScheme(id)"
+          >
+            <span
+              class="h-7 w-7 shrink-0 rounded-sm border"
+              :style="{
+                backgroundColor: paperSchemeVars(id).paper,
+                borderColor: paperSchemeVars(id).border,
+              }"
+            />
+            {{ t(paperLabel(id)) }}
+          </button>
+        </div>
+        <p class="text-xs text-muted-foreground">{{ t("settings.paperDark") }}</p>
+        <div class="grid grid-cols-2 gap-2">
+          <button
+            v-for="id in PAPER_SCHEME_DARK"
+            :key="id"
+            type="button"
+            class="flex items-center gap-2 rounded-md border px-3 py-2 text-left text-sm transition-colors"
+            :class="
+              paperScheme === id
+                ? 'border-foreground bg-muted'
+                : 'border-input hover:bg-muted/50'
+            "
+            :aria-pressed="paperScheme === id"
+            @click="setPaperScheme(id)"
+          >
+            <span
+              class="h-7 w-7 shrink-0 rounded-sm border"
+              :style="{
+                backgroundColor: paperSchemeVars(id).paper,
+                borderColor: paperSchemeVars(id).border,
+              }"
+            />
+            {{ t(paperLabel(id)) }}
+          </button>
+        </div>
       </CardContent>
     </Card>
 

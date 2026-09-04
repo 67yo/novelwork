@@ -8670,7 +8670,16 @@ pub fn global_chat_clear(state: State<'_, AppState>, novel_id: Option<String>) -
 #[tauri::command]
 pub fn global_chat_cancel(state: State<'_, AppState>) -> Result<(), String> {
     state.request_chat_cancel(crate::global_chat::CANCEL_KEY);
+    state.global_chat.abort_ask();
     Ok(())
+}
+
+#[tauri::command]
+pub fn global_chat_answer_ask(
+    state: State<'_, AppState>,
+    answers: Vec<String>,
+) -> Result<(), String> {
+    state.global_chat.answer_ask(answers)
 }
 
 #[tauri::command]

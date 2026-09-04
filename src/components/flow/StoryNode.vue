@@ -102,20 +102,20 @@ const kindIcon = computed((): { icon: Component; class: string } | null => {
 const shellClass = computed(() => {
   switch (kind.value) {
     case "novel":
-      return "border-primary/40 bg-[oklch(0.92_0.04_155)]";
+      return "border-primary/40 bg-[oklch(0.92_0.04_155)] dark:bg-[oklch(0.3_0.04_155)]";
     case "volume":
-      return "border-violet-700/35 bg-[oklch(0.96_0.03_300)] min-w-[180px]";
+      return "border-violet-700/35 bg-[oklch(0.96_0.03_300)] dark:bg-[oklch(0.3_0.04_300)] min-w-[180px]";
     case "character":
-      return "border-amber-700/30 bg-[oklch(0.97_0.02_85)] min-w-[160px]";
+      return "border-amber-700/30 bg-[oklch(0.97_0.02_85)] dark:bg-[oklch(0.3_0.03_85)] min-w-[160px]";
     case "side_plot":
-      return "border-sky-700/30 bg-[oklch(0.95_0.03_220)]";
+      return "border-sky-700/30 bg-[oklch(0.95_0.03_220)] dark:bg-[oklch(0.3_0.04_220)]";
     case "knowledge":
-      if (isRaceCard.value) return "border-rose-700/35 bg-[oklch(0.97_0.03_25)] min-w-[160px]";
-      if (isFactionCard.value) return "border-indigo-700/35 bg-[oklch(0.96_0.03_280)] min-w-[160px]";
-      if (isReligionCard.value) return "border-orange-700/35 bg-[oklch(0.97_0.04_55)] min-w-[160px]";
-      if (isMajorEventCard.value) return "border-amber-800/35 bg-[oklch(0.97_0.04_75)] min-w-[160px]";
+      if (isRaceCard.value) return "border-rose-700/35 bg-[oklch(0.97_0.03_25)] dark:bg-[oklch(0.3_0.04_25)] min-w-[160px]";
+      if (isFactionCard.value) return "border-indigo-700/35 bg-[oklch(0.96_0.03_280)] dark:bg-[oklch(0.3_0.04_280)] min-w-[160px]";
+      if (isReligionCard.value) return "border-orange-700/35 bg-[oklch(0.97_0.04_55)] dark:bg-[oklch(0.3_0.04_55)] min-w-[160px]";
+      if (isMajorEventCard.value) return "border-amber-800/35 bg-[oklch(0.97_0.04_75)] dark:bg-[oklch(0.3_0.04_75)] min-w-[160px]";
       if (worldviewVisual.value) return worldviewVisual.value.shell;
-      return "border-teal-700/30 bg-[oklch(0.96_0.03_175)] min-w-[160px]";
+      return "border-teal-700/30 bg-[oklch(0.96_0.03_175)] dark:bg-[oklch(0.3_0.04_175)] min-w-[160px]";
     case "chapter":
       return "border-border bg-card min-w-[180px]";
     default:

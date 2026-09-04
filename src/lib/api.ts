@@ -793,4 +793,6 @@ export const api = {
   globalChatClear: (novelId?: string | null) =>
     invoke<void>("global_chat_clear", { novelId: novelId ?? null }),
   globalChatCancel: () => invoke<void>("global_chat_cancel"),
+  globalChatAnswerAsk: (answers: string[]) =>
+    invoke<void>("global_chat_answer_ask", { answers }),
 };
