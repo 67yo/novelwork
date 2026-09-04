@@ -4,6 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { RouterLink, RouterView, useRoute } from "vue-router";
 import { useLocalStorage } from "@vueuse/core";
 import { api } from "@/lib/api";
+import { CHAT_FAB_SIZE, clampFabOffsets, type ChatFabPos } from "@/lib/chatFab";
 import { setLocalePreference, useI18n, type LocalePreference } from "@/i18n";
 import {
   BookOpen,
@@ -31,8 +32,10 @@ const novelsTo = computed(() =>
   lastNovelId.value ? `/novels/${lastNovelId.value}` : "/novels",
 );
 const chatOpen = useLocalStorage("novework.chatOpen", false);
-const FAB = 48;
-const fabPos = useLocalStorage("novework.chatFab", { x: -1, y: -1 });
+const fabPos = useLocalStorage<ChatFabPos>("novework.chatFab", { right: 16, bottom: 16 });
+const winW = ref(typeof window !== "undefined" ? window.innerWidth : 1280);
+const winH = ref(typeof window !== "undefined" ? window.innerHeight : 800);
+const fabStyle = computed(() => clampFabOffsets(fabPos.value, winW.value, winH.value));
 const chatMode = useLocalStorage<"dock" | "float">("novework.chatMode", "float");
 const MIN_CHAT_W = 260;
 const MIN_CHAT_H = 280;
@@ -103,8 +106,9 @@ async function syncWindowTitle() {
 }
 
 onMounted(() => {
+  winW.value = window.innerWidth;
+  winH.value = window.innerHeight;
   clampFloat();
-  clampFab();
   window.addEventListener("resize", onWinResize);
   const bootId = route.params.id;
   if (route.name === "workspace" && typeof bootId === "string" && bootId) {
@@ -118,6 +122,14 @@ onMounted(() => {
     chatOpen.value = true;
   });
 });
+watch(
+  fabPos,
+  (p) => {
+    if (p != null && Number.isFinite(p.right) && Number.isFinite(p.bottom)) return;
+    fabPos.value = clampFabOffsets(p, winW.value, winH.value);
+  },
+  { immediate: true },
+);
 watch(
   () => route.path,
   () => {
@@ -154,19 +166,9 @@ function navClass(path: string) {
 }
 
 function onWinResize() {
+  winW.value = window.innerWidth;
+  winH.value = window.innerHeight;
   clampFloat();
-  clampFab();
-}
-
-function clampFab() {
-  const p = fabPos.value ?? { x: -1, y: -1 };
-  let x = Number(p.x);
-  let y = Number(p.y);
-  if (!Number.isFinite(x) || x < 0) x = window.innerWidth - FAB - 16;
-  if (!Number.isFinite(y) || y < 0) y = window.innerHeight - FAB - 16;
-  x = Math.min(Math.max(8, x), Math.max(8, window.innerWidth - FAB - 8));
-  y = Math.min(Math.max(8, y), Math.max(8, window.innerHeight - FAB - 8));
-  if (p.x !== x || p.y !== y) fabPos.value = { x, y };
 }
 
 let fabSkipClick = false;
@@ -176,14 +178,19 @@ function startFab(ev: MouseEvent) {
   ev.preventDefault();
   const sx = ev.clientX;
   const sy = ev.clientY;
-  const ox = fabPos.value.x;
-  const oy = fabPos.value.y;
+  const origin = clampFabOffsets(fabPos.value, window.innerWidth, window.innerHeight);
   let dragged = false;
   const onMove = (e: MouseEvent) => {
     if (Math.abs(e.clientX - sx) + Math.abs(e.clientY - sy) > 4) dragged = true;
     if (!dragged) return;
-    fabPos.value = { x: ox + e.clientX - sx, y: oy + e.clientY - sy };
-    clampFab();
+    fabPos.value = clampFabOffsets(
+      {
+        right: origin.right - (e.clientX - sx),
+        bottom: origin.bottom - (e.clientY - sy),
+      },
+      window.innerWidth,
+      window.innerHeight,
+    );
   };
   const onUp = () => {
     window.removeEventListener("mousemove", onMove);
@@ -370,10 +377,10 @@ function startResizeFloat(ev: MouseEvent) {
         type="button"
         class="fixed z-[80] flex cursor-grab items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg hover:opacity-90 active:cursor-grabbing"
         :style="{
-          left: `${fabPos.x}px`,
-          top: `${fabPos.y}px`,
-          width: `${FAB}px`,
-          height: `${FAB}px`,
+          right: `${fabStyle.right}px`,
+          bottom: `${fabStyle.bottom}px`,
+          width: `${CHAT_FAB_SIZE}px`,
+          height: `${CHAT_FAB_SIZE}px`,
         }"
         :title="t('globalChat.open')"
         :aria-label="t('globalChat.open')"

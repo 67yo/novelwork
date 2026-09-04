@@ -593,12 +593,13 @@ function scrollToSection(id: string) {
             @click="setPaperScheme(id)"
           >
             <span
-              class="h-7 w-7 shrink-0 rounded-sm border"
+              class="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm border text-[11px] font-medium leading-none"
               :style="{
                 backgroundColor: paperSchemeVars(id).paper,
                 borderColor: paperSchemeVars(id).border,
+                color: paperSchemeVars(id).ink,
               }"
-            />
+            >A</span>
             {{ t(paperLabel(id)) }}
           </button>
         </div>
@@ -618,12 +619,13 @@ function scrollToSection(id: string) {
             @click="setPaperScheme(id)"
           >
             <span
-              class="h-7 w-7 shrink-0 rounded-sm border"
+              class="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm border text-[11px] font-medium leading-none"
               :style="{
                 backgroundColor: paperSchemeVars(id).paper,
                 borderColor: paperSchemeVars(id).border,
+                color: paperSchemeVars(id).ink,
               }"
-            />
+            >A</span>
             {{ t(paperLabel(id)) }}
           </button>
         </div>

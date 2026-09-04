@@ -33,8 +33,8 @@ const SCHEMES: Record<PaperSchemeId, PaperSchemeVars> = {
   },
   green: {
     paper: "#eef6e6",
-    ink: "#1e2e18",
-    muted: "#6b7d62",
+    ink: "#141814",
+    muted: "#455440",
     border: "#c5d6b4",
     wash: "rgba(40, 70, 20, 0.08)",
     panel: "#e4efd8",
