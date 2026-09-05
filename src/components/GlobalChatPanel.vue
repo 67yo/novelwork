@@ -18,6 +18,7 @@ import { useI18n } from "@/i18n";
 import { usePersistedChatModel } from "@/lib/chatModel";
 import { choiceReply, joinChosen, parseChatChoices, type ChatChoices } from "@/lib/chatChoices";
 import { createChatRunProgress, type ChatRunProgress } from "@/lib/chatRunProgress";
+import { formatTokenAmount, readMessageTokens } from "@/lib/chatTokens";
 import { subscribeGlobalChatSend } from "@/lib/globalChatBridge";
 
 const props = withDefaults(
@@ -45,8 +46,7 @@ const chatSkills = ref<SkillPreviewItem[]>([]);
 const slashActive = ref(0);
 const slashHide = ref(false);
 const pendingLines = ref<string[]>([]);
-const lastUserMsgId = ref("");
-const lastUserTokens = ref<{ n: number; confirmed: boolean } | null>(null);
+const usageById = ref<Record<string, { prompt: number; completion: number }>>({});
 const inflightText = ref("");
 const aborting = ref(false);
 const pendingAsk = ref<{ question: string; options: string[]; multi: boolean } | null>(null);
@@ -76,17 +76,46 @@ function stepLabel(step: string): string {
   return step;
 }
 
+function tokenLine(prompt: number, completion: number, confirmed: boolean): string {
+  return t(confirmed ? "globalChat.tokenLine" : "globalChat.tokenLineEst", {
+    prompt: formatTokenAmount(prompt),
+    completion: formatTokenAmount(completion),
+    total: formatTokenAmount(prompt + completion),
+  });
+}
+
+function stampUsage(id: string, prompt: number, completion: number) {
+  if (!id || (prompt <= 0 && completion <= 0)) return;
+  usageById.value = { ...usageById.value, [id]: { prompt, completion } };
+}
+
+function stampLastAssistant(used: { prompt: number; completion: number } | undefined) {
+  if (!used || (used.prompt <= 0 && used.completion <= 0)) return;
+  const last = [...messages.value].reverse().find((m) => m.role === "assistant");
+  if (!last) return;
+  stampUsage(last.id, used.prompt, used.completion);
+}
+
+function usageLine(m: GlobalChatMessage): string | null {
+  if (m.role !== "assistant") return null;
+  const saved = usageById.value[m.id];
+  const fromMsg = readMessageTokens(m);
+  const prompt = saved?.prompt || fromMsg.prompt;
+  const completion = saved?.completion || fromMsg.completion;
+  if (prompt <= 0 && completion <= 0) return null;
+  return tokenLine(prompt, completion, true);
+}
+
+function harvestUsage(list: GlobalChatMessage[]) {
+  for (const m of list) {
+    if (m.role !== "assistant") continue;
+    const u = readMessageTokens(m);
+    if (u.prompt > 0 || u.completion > 0) stampUsage(m.id, u.prompt, u.completion);
+  }
+}
+
 function applyTokens(prompt: number, completion: number, confirmed: boolean) {
   run?.onTokens(prompt, completion, confirmed);
-  if (prompt <= 0) return;
-  if (confirmed) {
-    lastUserTokens.value = {
-      n: lastUserTokens.value?.confirmed ? lastUserTokens.value.n + prompt : prompt,
-      confirmed: true,
-    };
-  } else if (!lastUserTokens.value?.confirmed) {
-    lastUserTokens.value = { n: prompt, confirmed: false };
-  }
 }
 
 function stopRun() {
@@ -156,6 +185,7 @@ const headerTitle = computed(() => boundTitle.value.trim() || t("globalChat.titl
 async function refresh() {
   try {
     messages.value = await api.globalChatList(novelId.value);
+    harvestUsage(messages.value);
   } catch {
     messages.value = [];
   }
@@ -179,17 +209,13 @@ async function sendText(text: string) {
     content: trimmed,
     created_at: new Date().toISOString(),
   };
-  lastUserMsgId.value = optimistic.id;
   inflightText.value = trimmed;
-  lastUserTokens.value = { n: Math.max(1, Math.floor(trimmed.length / 4)), confirmed: false };
   messages.value = [...messages.value, optimistic];
   stopRun();
   run = createChatRunProgress({
     initialLabel: t("globalChat.stepConnecting"),
     formatMs: formatStepMs,
-    formatPrompt: (n, confirmed) =>
-      t(confirmed ? "workspace.taskPromptTokens" : "workspace.taskPromptTokensEst", { n }),
-    formatCompletion: (n) => t("workspace.taskCompletionTokens", { n }),
+    formatUsage: (p, c, confirmed) => tokenLine(p, c, confirmed),
     formatTotal: (time) => t("workspace.taskTotalTime", { t: time }),
     onLines: (lines) => {
       pendingLines.value = lines;
@@ -206,9 +232,8 @@ async function sendText(text: string) {
       model: model.value,
     });
     messages.value = next;
-    const lastUser = [...next].reverse().find((m) => m.role === "user");
-    lastUserMsgId.value = lastUser?.id ?? "";
-    if (!lastUser || lastUser.content !== trimmed) lastUserTokens.value = null;
+    harvestUsage(next);
+    stampLastAssistant(run?.usage());
     await scrollBottom();
   } catch (e) {
     if (!aborting.value) {
@@ -216,9 +241,11 @@ async function sendText(text: string) {
     }
     await refresh();
   } finally {
+    stampLastAssistant(run?.usage());
     inflightText.value = "";
     stopRun();
     sending.value = false;
+    await scrollBottom();
   }
 }
 
@@ -333,9 +360,6 @@ async function stop() {
   const last = messages.value.at(-1);
   if (last?.role === "user" && last.content === text) {
     messages.value = messages.value.slice(0, -1);
-    const prev = [...messages.value].reverse().find((m) => m.role === "user");
-    lastUserMsgId.value = prev?.id ?? "";
-    lastUserTokens.value = null;
   }
   try {
     await api.globalChatCancel();
@@ -348,9 +372,8 @@ async function clear() {
   try {
     await api.globalChatClear(novelId.value);
     messages.value = [];
+    usageById.value = {};
     error.value = "";
-    lastUserMsgId.value = "";
-    lastUserTokens.value = null;
     stopRun();
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
@@ -361,8 +384,6 @@ watch(
   novelId,
   async (id) => {
     boundTitle.value = "";
-    lastUserMsgId.value = "";
-    lastUserTokens.value = null;
     if (id) {
       try {
         const n = await api.getNovel(id);
@@ -513,17 +534,10 @@ onUnmounted(() => {
       >
         <div class="min-w-0 max-w-full whitespace-pre-wrap break-normal [overflow-wrap:anywhere]">{{ m.content }}</div>
         <p
-          v-if="m.id === lastUserMsgId && lastUserTokens"
-          class="mt-1 text-[11px] leading-4 opacity-75"
+          v-if="usageLine(m)"
+          class="mt-1.5 border-t border-border/40 pt-1 text-[11px] leading-4 tabular-nums text-muted-foreground"
         >
-          {{
-            t(
-              lastUserTokens.confirmed
-                ? "workspace.taskPromptTokens"
-                : "workspace.taskPromptTokensEst",
-              { n: lastUserTokens.n },
-            )
-          }}
+          {{ usageLine(m) }}
         </p>
         <div
           v-if="i === messages.length - 1 && lastChoices && !pendingAsk && !sending"

@@ -3,6 +3,7 @@
 export type ChatRunProgress = {
   advance: (key: string, label: string) => void;
   onTokens: (prompt: number, completion: number, confirmed: boolean) => void;
+  usage: () => { prompt: number; completion: number };
   /** Close the open step, stop the ticker, return a stats block (may be empty). */
   finish: () => string;
   dispose: () => void;
@@ -11,8 +12,7 @@ export type ChatRunProgress = {
 export function createChatRunProgress(opts: {
   initialLabel: string;
   formatMs: (ms: number) => string;
-  formatPrompt: (n: number, confirmed: boolean) => string;
-  formatCompletion: (n: number) => string;
+  formatUsage: (prompt: number, completion: number, confirmed: boolean) => string;
   formatTotal: (t: string) => string;
   onLines: (lines: string[]) => void;
 }): ChatRunProgress {
@@ -38,11 +38,7 @@ export function createChatRunProgress(opts: {
     const prompt = promptSum + (promptEst ?? 0);
     if (prompt > 0 || completionSum > 0) {
       const confirmed = promptEst == null && promptSum > 0;
-      let tok = opts.formatPrompt(prompt, confirmed);
-      if (completionSum > 0) {
-        tok += ` · ${opts.formatCompletion(completionSum)}`;
-      }
-      lines.push(tok);
+      lines.push(opts.formatUsage(prompt, completionSum, confirmed));
     }
     opts.onLines(lines);
   };
@@ -96,14 +92,15 @@ export function createChatRunProgress(opts: {
     const lines = steps.map((s) => `• ${s.label}  ${opts.formatMs(s.ms)}`);
     lines.push(opts.formatTotal(opts.formatMs(total)));
     if (promptSum > 0 || completionSum > 0) {
-      let tok = opts.formatPrompt(promptSum, true);
-      if (completionSum > 0) {
-        tok += ` · ${opts.formatCompletion(completionSum)}`;
-      }
-      lines.push(tok);
+      lines.push(opts.formatUsage(promptSum, completionSum, true));
     }
     return lines.join("\n");
   };
+
+  const usage = () => ({
+    prompt: promptSum + (promptEst ?? 0),
+    completion: completionSum,
+  });
 
   const dispose = () => {
     if (tick) {
@@ -113,7 +110,7 @@ export function createChatRunProgress(opts: {
     closed = true;
   };
 
-  return { advance, onTokens, finish, dispose };
+  return { advance, onTokens, usage, finish, dispose };
 }
 
 export function appendChatRunStats(content: string, stats: string): string {

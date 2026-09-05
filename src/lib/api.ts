@@ -275,6 +275,10 @@ export type GlobalChatMessage = {
   role: string;
   content: string;
   created_at: string;
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  promptTokens?: number;
+  completionTokens?: number;
 };
 
 export type GenerateResult = {

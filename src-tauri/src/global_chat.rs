@@ -57,6 +57,24 @@ pub struct GlobalChatMessage {
     pub role: String,
     pub content: String,
     pub created_at: String,
+    #[serde(
+        default,
+        rename = "promptTokens",
+        alias = "prompt_tokens",
+        skip_serializing_if = "is_zero_u32"
+    )]
+    pub prompt_tokens: u32,
+    #[serde(
+        default,
+        rename = "completionTokens",
+        alias = "completion_tokens",
+        skip_serializing_if = "is_zero_u32"
+    )]
+    pub completion_tokens: u32,
+}
+
+fn is_zero_u32(n: &u32) -> bool {
+    *n == 0
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -1041,12 +1059,21 @@ fn record_chat_usage(db: &Db, model: &str, novel_id: &str, prompt: u32, completi
     );
 }
 
-fn push_msg(runtime: &GlobalChatRuntime, scope: &str, role: &str, content: String) -> GlobalChatMessage {
+fn push_msg(
+    runtime: &GlobalChatRuntime,
+    scope: &str,
+    role: &str,
+    content: String,
+    prompt_tokens: u32,
+    completion_tokens: u32,
+) -> GlobalChatMessage {
     let msg = GlobalChatMessage {
         id: Uuid::new_v4().to_string(),
         role: role.into(),
         content,
         created_at: Utc::now().to_rfc3339(),
+        prompt_tokens,
+        completion_tokens,
     };
     let mut slots = runtime.slots.lock();
     let slot = slots.entry(scope.to_string()).or_insert_with(new_slot);
@@ -1486,7 +1513,7 @@ pub async fn send(
         db.get_novel(&novel_id).ok().flatten().map(|n| n.title).unwrap_or_default()
     };
 
-    push_msg(&runtime, &scope, "user", content.clone());
+    push_msg(&runtime, &scope, "user", content.clone(), 0, 0);
     let _unsend = UnsendOnCancel {
         runtime: runtime.clone(),
         scope: scope.clone(),
@@ -1708,6 +1735,7 @@ pub async fn send(
 
     let (p, c) = usage_to_record(out.prompt_tokens, out.completion_tokens, est_prompt, out.reply.len());
     record_chat_usage(&db, &model_name, &novel_id, p, c);
+    emit_tokens(&app, p, c, true);
     crate::ai_log::write(
         "chat.done",
         json!({
@@ -1716,7 +1744,7 @@ pub async fn send(
             "completion_tokens": c,
         }),
     );
-    push_msg(&runtime, &scope, "assistant", out.reply);
+    push_msg(&runtime, &scope, "assistant", out.reply, p, c);
     Ok(list_scope(&runtime, &novel_id))
 }
 
@@ -1932,8 +1960,8 @@ mod tests {
     #[test]
     fn slots_are_isolated() {
         let r = GlobalChatRuntime::new();
-        push_msg(&r, &scope_key(Some("n1")), "user", "a".into());
-        push_msg(&r, &scope_key(Some("n2")), "user", "b".into());
+        push_msg(&r, &scope_key(Some("n1")), "user", "a".into(), 0, 0);
+        push_msg(&r, &scope_key(Some("n2")), "user", "b".into(), 0, 0);
         assert_eq!(r.list(Some("n1"))[0].content, "a");
         assert_eq!(r.list(Some("n2"))[0].content, "b");
         assert!(r.list(None).is_empty());
@@ -1946,13 +1974,15 @@ mod tests {
     fn pop_last_user_only_drops_trailing_user() {
         let r = GlobalChatRuntime::new();
         let s = scope_key(Some("n1"));
-        push_msg(&r, &s, "user", "keep".into());
-        push_msg(&r, &s, "assistant", "ok".into());
-        push_msg(&r, &s, "user", "abort".into());
+        push_msg(&r, &s, "user", "keep".into(), 0, 0);
+        push_msg(&r, &s, "assistant", "ok".into(), 12, 4);
+        push_msg(&r, &s, "user", "abort".into(), 0, 0);
         pop_last_user(&r, &s);
         let msgs = r.list(Some("n1"));
         assert_eq!(msgs.len(), 2);
         assert_eq!(msgs[1].content, "ok");
+        assert_eq!(msgs[1].prompt_tokens, 12);
+        assert_eq!(msgs[1].completion_tokens, 4);
         pop_last_user(&r, &s);
         assert_eq!(r.list(Some("n1")).len(), 2);
     }
