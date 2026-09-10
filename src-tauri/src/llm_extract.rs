@@ -25,6 +25,53 @@ pub struct ChapterMemoryExtract {
     /// 要点（人物/行为/结果）
     #[serde(default)]
     pub facts: Vec<String>,
+    /// 本章已向读者交代、后文勿再解说的观点/设定
+    #[serde(default)]
+    pub revealed: Vec<String>,
+}
+
+fn fact_chunk(t: &str) -> Option<String> {
+    let t = t.trim();
+    if t.chars().count() < 4 {
+        return None;
+    }
+    Some(if t.starts_with('-') {
+        t.to_string()
+    } else {
+        format!("- {t}")
+    })
+}
+
+fn revealed_chunk(t: &str) -> Option<String> {
+    let t = t.trim();
+    if t.chars().count() < 4 {
+        return None;
+    }
+    let body = t.trim_start_matches(['-', '*', '•', ' ']).trim();
+    let lower = body.to_ascii_lowercase();
+    if body.contains("无新交代")
+        || body.contains("無新交代")
+        || lower.contains("no new reveal")
+        || lower.contains("no core memory")
+    {
+        return None;
+    }
+    if body.starts_with("已交代")
+        || body.starts_with("既出")
+        || lower.starts_with("already shown")
+        || lower.starts_with("already-told")
+        || lower.starts_with("revealed:")
+        || lower.starts_with("bereits gezeigt")
+        || lower.starts_with("déjà dit")
+        || lower.starts_with("deja dit")
+    {
+        return Some(if t.starts_with('-') {
+            t.to_string()
+        } else {
+            format!("- {body}")
+        });
+    }
+    Some(format!("- 已交代：{body}"))
 }
 
 impl ChapterMemoryExtract {
@@ -35,15 +82,14 @@ impl ChapterMemoryExtract {
             out.push(format!("【整体情节】\n{plot}"));
         }
         for f in self.facts {
-            let t = f.trim();
-            if t.chars().count() < 4 {
-                continue;
+            if let Some(c) = fact_chunk(&f) {
+                out.push(c);
             }
-            out.push(if t.starts_with('-') {
-                t.to_string()
-            } else {
-                format!("- {t}")
-            });
+        }
+        for r in self.revealed {
+            if let Some(c) = revealed_chunk(&r) {
+                out.push(c);
+            }
         }
         out
     }
@@ -63,6 +109,12 @@ pub struct OutlineItemExtract {
 pub struct OutlinesExtract {
     #[serde(default)]
     pub outlines: Vec<OutlineItemExtract>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct DetailedOutlineExtract {
+    #[serde(default)]
+    pub detailed_outline: Vec<String>,
 }
 
 fn openai_compat_base(base: &str) -> String {
@@ -184,10 +236,12 @@ mod tests {
         let c = ChapterMemoryExtract {
             plot: "甲在雾港发现旧地图。".into(),
             facts: vec!["人物：甲｜行为：发现地图".into(), "x".into()],
+            revealed: vec!["旧地图能指向沉船".into()],
         }
         .into_chunks();
         assert!(c[0].contains("整体情节") && c[0].contains("旧地图"));
         assert!(c.iter().any(|x| x.contains("甲") && x.starts_with('-')));
-        assert_eq!(c.len(), 2);
+        assert!(c.iter().any(|x| x.contains("已交代") && x.contains("沉船")));
+        assert_eq!(c.len(), 3);
     }
 }

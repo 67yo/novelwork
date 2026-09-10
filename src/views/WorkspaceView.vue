@@ -150,7 +150,7 @@ import {
   X,
 } from "@lucide/vue";
 import { renderChapterMd, stripChapterMeta } from "@/lib/md";
-import { diffLines, type DiffHunk } from "@/lib/linediff";
+import { applyDiffPick, diffLines, groupDiffHunks } from "@/lib/linediff";
 import {
   bodySuggestContext,
   insertBodySuggestion,
@@ -268,10 +268,15 @@ const bodyAutosaved = ref(false);
 const bodyView = ref<"edit" | "diff">("edit");
 const bodyDiffBefore = ref("");
 const bodyDiffAfter = ref("");
-const bodyDiffHunks = computed((): DiffHunk[] => {
+/** 点击生成/精修时的正文，避免多次 set 把「更新前」冲成新稿 */
+const bodyDiffOrigin = ref<{ nodeId: string; before: string } | null>(null);
+let contentChangePending: { nodeId: string; before: string } | null = null;
+let contentChangeFlush: ReturnType<typeof setTimeout> | null = null;
+const bodyDiffHunks = computed(() => {
   if (!bodyDiffBefore.value && !bodyDiffAfter.value) return [];
   return diffLines(bodyDiffBefore.value, bodyDiffAfter.value);
 });
+const bodyDiffBlocks = computed(() => groupDiffHunks(bodyDiffHunks.value));
 const bodyDiffReady = computed(() => bodyDiffHunks.value.some((h) => h.type !== "eq"));
 let chapterContentGen = 0;
 /** idle | loading（下模型/推理）| playing */
@@ -790,6 +795,36 @@ function clearBodyDiff() {
   bodyView.value = "edit";
   bodyDiffBefore.value = "";
   bodyDiffAfter.value = "";
+  bodyDiffOrigin.value = null;
+}
+
+function pickBodyDiff(index: number, side: "old" | "new") {
+  const { before, after } = applyDiffPick(bodyDiffBlocks.value, index, side);
+  bodyDiffBefore.value = before;
+  bodyDiffAfter.value = after;
+  bodyDraft.value = after;
+  if (!diffLines(before, after).some((h) => h.type !== "eq")) {
+    clearBodyDiff();
+  }
+  void persistChapterBody();
+}
+
+function queueChatChapterBody(nodeId: string, beforeRaw: string) {
+  const incoming = stripChapterMeta(beforeRaw);
+  const origin =
+    bodyDiffOrigin.value?.nodeId === nodeId
+      ? bodyDiffOrigin.value.before
+      : incoming;
+  if (!contentChangePending || contentChangePending.nodeId !== nodeId) {
+    contentChangePending = { nodeId, before: origin };
+  }
+  if (contentChangeFlush != null) clearTimeout(contentChangeFlush);
+  contentChangeFlush = setTimeout(() => {
+    const p = contentChangePending;
+    contentChangePending = null;
+    contentChangeFlush = null;
+    if (p) void applyChatChapterBody(p.nodeId, p.before);
+  }, 100);
 }
 
 async function applyChatChapterBody(nodeId: string, beforeRaw: string) {
@@ -808,7 +843,11 @@ async function applyChatChapterBody(nodeId: string, beforeRaw: string) {
   if (!n || n.kind !== "chapter") return;
   const afterRaw = await api.getChapter(props.id, nodeId);
   if (gen !== chapterContentGen) return;
-  const before = stripChapterMeta(beforeRaw);
+  const before = stripChapterMeta(
+    bodyDiffOrigin.value?.nodeId === nodeId
+      ? bodyDiffOrigin.value.before
+      : beforeRaw,
+  );
   const after = stripChapterMeta(afterRaw);
   if (selected.value?.id !== nodeId) {
     await selectNode(n);
@@ -820,9 +859,10 @@ async function applyChatChapterBody(nodeId: string, beforeRaw: string) {
     bodyAutosaved.value = false;
   }
   workspaceTab.value = "manuscript";
+  if (before === after) return;
   bodyDiffBefore.value = before;
   bodyDiffAfter.value = after;
-  bodyView.value = diffLines(before, after).some((h) => h.type !== "eq") ? "diff" : "edit";
+  bodyView.value = "diff";
 }
 
 const bodyLines = computed(() => splitBodyLines(bodyDraft.value));
@@ -848,7 +888,10 @@ const bodyNouns = computed(() => {
 });
 
 async function persistChapterBody() {
-  if (!selected.value || selected.value.kind !== "chapter" || bodySaveBusy.value) return;
+  if (!selected.value || selected.value.kind !== "chapter") return;
+  while (bodySaveBusy.value) {
+    await new Promise((r) => setTimeout(r, 20));
+  }
   const nodeId = selected.value.id;
   const draft = bodyDraft.value;
   if (draft === lastSavedBody) return;
@@ -1182,7 +1225,7 @@ onMounted(async () => {
     before?: string;
   }>("chapter-content-changed", (ev) => {
     if (ev.payload.novelId !== props.id) return;
-    void applyChatChapterBody(ev.payload.nodeId, ev.payload.before ?? "");
+    void queueChatChapterBody(ev.payload.nodeId, ev.payload.before ?? "");
   });
   unlistenChapterTts = await listen<{ status: string }>("chapter-tts-status", (ev) => {
     if (ev.payload.status === "playing") {
@@ -1220,6 +1263,11 @@ onUnmounted(() => {
   unlistenChapterTtsDownload = null;
   unlistenChapterTtsChunk?.();
   unlistenChapterTtsChunk = null;
+  if (contentChangeFlush != null) {
+    clearTimeout(contentChangeFlush);
+    contentChangeFlush = null;
+  }
+  contentChangePending = null;
   stopChapterTick();
   void stopChapterTts();
   // Only clear if still this novel — late clear must not wipe the next workspace.
@@ -2306,6 +2354,25 @@ const selectedIsStoryRulesBlock = computed(
   () =>
     selected.value?.kind === "knowledge" &&
     !!storyRulesBlockSlotOf(selected.value),
+);
+const selectedIsPlainKnowledge = computed(
+  () =>
+    selectedIsKnowledge.value &&
+    !selectedIsCoreLaws.value &&
+    !selectedIsWorldAxiom.value &&
+    !selectedIsKeyLocation.value &&
+    !selectedIsSocialPower.value &&
+    !selectedIsWorldRace.value &&
+    !selectedIsMajorFaction.value &&
+    !selectedIsSpatiotemporal.value &&
+    !selectedIsExistence.value &&
+    !selectedIsInfoFlow.value &&
+    !selectedIsHistoryCulture.value &&
+    !selectedIsWorldReligion.value &&
+    !selectedIsMajorEvent.value &&
+    !selectedIsStoryRules.value &&
+    !selectedIsStoryRulesBlock.value &&
+    !selectedIsWritePrompts.value,
 );
 const selectedStoryRulesBlockSlot = computed((): StoryRulesBlockSlot | null => {
   if (!selected.value || !selectedIsStoryRulesBlock.value) return null;
@@ -3519,11 +3586,22 @@ function selectedChapterNumber(): number | null {
   return i >= 0 ? i + 1 : null;
 }
 
-function sendChapterChat(
+async function sendChapterChat(
   kind: "outline" | "generate" | "refine",
 ) {
   const n = selectedChapterNumber();
   if (n == null) return;
+  if (
+    (kind === "generate" || kind === "refine") &&
+    selected.value?.kind === "chapter"
+  ) {
+    scheduleBodyAutosave.cancel();
+    await persistChapterBody();
+    bodyDiffOrigin.value = {
+      nodeId: selected.value.id,
+      before: stripChapterMeta(bodyDraft.value),
+    };
+  }
   const text =
     kind === "outline"
       ? chatCmdGenerateOutline(n)
@@ -4169,7 +4247,7 @@ function startResizeChatH(ev: MouseEvent) {
           :class="
             selectedIsChapter || selectedIsNovel || selectedIsVolume
               ? 'overflow-y-auto'
-              : selected?.kind === 'side_plot'
+              : selected?.kind === 'side_plot' || selectedIsPlainKnowledge
                 ? 'flex flex-col overflow-hidden'
                 : 'overflow-auto'
           "
@@ -4424,8 +4502,8 @@ function startResizeChatH(ev: MouseEvent) {
               </div>
             </div>
           </div>
-          <div v-else-if="selectedIsKnowledge" class="space-y-4 text-sm">
-            <div>
+          <div v-else-if="selectedIsKnowledge" class="flex min-h-0 flex-1 flex-col space-y-4 text-sm">
+            <div class="shrink-0">
               <div class="mb-1 flex items-start justify-between gap-2">
                 <div class="min-w-0 flex-1">
                   <WorldviewFanTitle v-if="selectedWorldviewFanSlot" :slot="selectedWorldviewFanSlot" />
@@ -4452,18 +4530,19 @@ function startResizeChatH(ev: MouseEvent) {
                 @change="persistSelectedKnowledge"
               />
             </div>
-            <p class="text-[11px] text-muted-foreground">{{ t("workspace.knowledgeHint") }}</p>
-            <div class="space-y-1">
-              <label class="block text-xs text-muted-foreground">{{ t("workspace.knowledgeFeatures") }}</label>
-              <Textarea
-                :model-value="knowledgeDraft.extracted"
-                rows="10"
-                class="min-h-[10rem] text-sm"
-                :placeholder="t('workspace.knowledgeFeaturesPh')"
-                @update:model-value="(v) => { const k = ensureKnowledgePayload(); if (k) k.extracted = String(v); }"
-                @change="persistSelectedKnowledge"
-              />
-              <p class="text-[11px] text-muted-foreground">
+            <p class="shrink-0 text-[11px] text-muted-foreground">{{ t("workspace.knowledgeHint") }}</p>
+            <div class="flex min-h-0 flex-1 flex-col space-y-1">
+              <label class="block shrink-0 text-xs text-muted-foreground">{{ t("workspace.knowledgeFeatures") }}</label>
+              <div class="relative min-h-0 flex-1">
+                <Textarea
+                  :model-value="knowledgeDraft.extracted"
+                  class="absolute inset-0 resize-none overflow-y-auto text-sm"
+                  :placeholder="t('workspace.knowledgeFeaturesPh')"
+                  @update:model-value="(v) => { const k = ensureKnowledgePayload(); if (k) k.extracted = String(v); }"
+                  @change="persistSelectedKnowledge"
+                />
+              </div>
+              <p class="shrink-0 text-[11px] text-muted-foreground">
                 {{
                   t("workspace.knowledgeFeaturesHint", {
                     n: (knowledgeDraft.extracted || "").length,
@@ -5643,18 +5722,37 @@ function startResizeChatH(ev: MouseEvent) {
             >
               <p class="chapter-body-dock-muted mb-2 text-[11px]">{{ t("workspace.refineDiffHint") }}</p>
               <div class="font-sans text-sm leading-relaxed">
-                <div
-                  v-for="(h, i) in bodyDiffHunks"
-                  :key="i"
-                  class="whitespace-pre-wrap px-1"
-                  :class="
-                    h.type === 'del'
-                      ? 'body-diff-del'
-                      : h.type === 'add'
-                        ? 'body-diff-add'
-                        : ''
-                  "
-                >{{ h.text || "\u00a0" }}</div>
+                <template v-for="(b, i) in bodyDiffBlocks" :key="i">
+                  <div
+                    v-if="b.type === 'eq'"
+                    class="whitespace-pre-wrap px-1"
+                  >{{ b.lines.join("\n") || "\u00a0" }}</div>
+                  <div
+                    v-else
+                    class="body-diff-conflict mb-2 overflow-hidden rounded-md border"
+                  >
+                    <div class="body-diff-conflict-bar flex flex-wrap items-center gap-1 px-1.5 py-1">
+                      <button
+                        type="button"
+                        class="rounded px-1.5 py-0.5 text-[11px]"
+                        :disabled="bodySaveBusy"
+                        @click="pickBodyDiff(i, 'old')"
+                      >{{ t("workspace.refineDiffKeepBefore") }}</button>
+                      <button
+                        type="button"
+                        class="rounded px-1.5 py-0.5 text-[11px]"
+                        :disabled="bodySaveBusy"
+                        @click="pickBodyDiff(i, 'new')"
+                      >{{ t("workspace.refineDiffKeepAfter") }}</button>
+                    </div>
+                    <div
+                      class="body-diff-del whitespace-pre-wrap px-1"
+                    >{{ b.oldLines.length ? b.oldLines.join("\n") : t("workspace.refineDiffEmpty") }}</div>
+                    <div
+                      class="body-diff-add whitespace-pre-wrap px-1"
+                    >{{ b.newLines.length ? b.newLines.join("\n") : t("workspace.refineDiffEmpty") }}</div>
+                  </div>
+                </template>
               </div>
             </div>
             <ChapterBodyEditor
@@ -6585,6 +6683,20 @@ function startResizeChatH(ev: MouseEvent) {
 .chapter-body-diff .body-diff-add {
   background: #bbf7d0;
   color: #14532d;
+}
+.chapter-body-diff .body-diff-conflict {
+  border-color: var(--cb-border);
+}
+.chapter-body-diff .body-diff-conflict-bar {
+  background-color: var(--cb-wash);
+  color: var(--cb-muted);
+}
+.chapter-body-diff .body-diff-conflict-bar button:hover:not(:disabled) {
+  color: var(--cb-ink);
+  background-color: var(--cb-paper);
+}
+.chapter-body-diff .body-diff-conflict-bar button:disabled {
+  opacity: 0.5;
 }
 .chapter-body-dock-pos button.is-on {
   background-color: var(--cb-ink);

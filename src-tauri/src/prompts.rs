@@ -703,13 +703,15 @@ pub fn extract_chapter_memory_system(loc: PromptLocale) -> String {
         "你是小说章节记忆抽取器。只输出结构化记忆，不要复述全文，不要写创作建议。\n\
          严格按用户给出的「抽取注意事项」决定抽取范围与格式；注意事项被删减的部分可不做；用户补充的要求须遵守。\n\
          若提供「其他章节记忆」：仅供对照（去重、衔接、避免与既定事实冲突）；本章记忆仍只写本章正文确凿信息，禁止把其他章内容原样抄进本章记忆。\n\
-         若注意事项为空：仅用短列表写出本章确凿要点（人物/行为/结果），无则写 `- （无核心记忆）`。"
+         底线：另记本章已向读者交代的观点/设定/判断（标「已交代」，供后文禁止再解说）；只写本章新交代的，对照章已有项勿抄入；无则省略。\n\
+         若注意事项为空：仅用短列表写出本章确凿要点（人物/行为/结果）与已交代项，无则写 `- （无核心记忆）`。"
             .to_string()
     } else {
         "You extract structured chapter memory. No full paraphrase, no writing advice.\n\
          Follow the user’s extraction notes for scope and format; omit anything they removed; honor anything they added.\n\
          If other chapters’ memory is provided: use only for cross-check (dedupe, continuity); write facts from THIS chapter’s body only — do not copy other chapters into this memory.\n\
-         If notes are empty: output a short bullet list of solid facts only, or `- (no core memory)`."
+         Baseline: also record viewpoints/lore/judgments this chapter already told the reader (mark as already-shown so later chapters do not re-explain); only new reveals from THIS chapter; omit if none.\n\
+         If notes are empty: output a short bullet list of solid facts and already-shown items, or `- (no core memory)`."
             .to_string()
     };
     format!("{body}\n{}", loc.language_rule())
@@ -1769,8 +1771,9 @@ pub fn generate_detailed_outline_system(
              1）细纲每条是一个可落地的场景/节拍（谁、做什么、结果或转折），按时间顺序；\n\
              2）覆盖简纲全部关键点；宁可合并，禁止另起无关主线或推翻简纲；\n\
              3）结合已链接人物/剧情/知识卡，使细纲可写、可验收；\n\
-             4）本章正文目标 {wmin}–{wmax} 字。细纲必须 {beats_lo}–{beats_hi} 条（不得更多）：每条对应约 {words_per} 字正文的一个场面。条数过多是超字主因；过碎则合并。\n\
-             5）只输出 JSON：{{\"detailed_outline\":[\"…\",\"…\"]}}，不要 Markdown 围栏或其它字段。"
+             4）细纲不得与知识卡、世界观、故事规则、功能选项冲突。专名、力量体系、规则、人物能力与红线以卡为准，禁止发明相反设定；\n\
+             5）本章正文目标 {wmin}–{wmax} 字。细纲必须 {beats_lo}–{beats_hi} 条（不得更多）：每条对应约 {words_per} 字正文的一个场面。条数过多是超字主因；过碎则合并。\n\
+             6）只输出 JSON：{{\"detailed_outline\":[\"…\",\"…\"]}}。数组元素必须是字符串（禁止对象）；每条一两句，不要小作文、不要 Markdown 围栏或其它字段。"
         )
     } else {
         format!(
@@ -1779,11 +1782,49 @@ pub fn generate_detailed_outline_system(
              1) Each item is a landable scene/beat (who, does what, result/turn), in order;\n\
              2) Cover every key beat of the brief; merge rather than over-split; do not invent a conflicting arc;\n\
              3) Honor linked characters/plots/knowledge so beats are writable and checkable;\n\
-             4) Body target {wmin}–{wmax} chars. Use {beats_lo}–{beats_hi} beats (no more): each expands to about {words_per} characters. Too many beats is the main cause of overshoot.\n\
-             5) Output JSON only: {{\"detailed_outline\":[\"…\",\"…\"]}} — no markdown fences or extra fields."
+             4) Do not contradict knowledge cards, worldview, story rules, or story tags. Names, power systems, rules, abilities, and red lines come from the cards — never invent the opposite;\n\
+             5) Body target {wmin}–{wmax} chars. Use {beats_lo}–{beats_hi} beats (no more): each expands to about {words_per} characters. Too many beats is the main cause of overshoot.\n\
+             6) Output JSON only: {{\"detailed_outline\":[\"…\",\"…\"]}}. Items must be strings (no objects); one or two sentences each — no essays, fences, or extra fields."
         )
     };
     format!("{body}\n{}", loc.language_rule())
+}
+
+pub fn repair_detailed_outline_json_system(loc: PromptLocale) -> String {
+    if loc.is_zh() {
+        format!(
+            "你是 JSON 格式修复器。用户会给出一次不规范的细纲输出。\n\
+             唯一任务：提取场景节拍，输出标准 JSON（不要其它文字）。\n\
+             形状：{{\"detailed_outline\":[\"节拍1\",\"节拍2\"]}}\n\
+             规则：顶层键只能是 detailed_outline；元素必须是字符串（对象则把要点拼成一句）。\n\
+             {}",
+            loc.language_rule()
+        )
+    } else {
+        format!(
+            "You are a JSON repairer. The user provides a non-conforming detailed-outline reply.\n\
+             Task: extract scene beats into ONE JSON object only (no other text).\n\
+             Shape: {{\"detailed_outline\":[\"beat 1\",\"beat 2\"]}}\n\
+             Rules: top-level key detailed_outline only; items must be strings (flatten objects into one sentence).\n\
+             {}",
+            loc.language_rule()
+        )
+    }
+}
+
+pub fn repair_detailed_outline_json_user(loc: PromptLocale, raw: &str) -> String {
+    let snip: String = raw.chars().take(12000).collect();
+    if loc.is_zh() {
+        format!(
+            "请把下面内容改写成唯一合法 JSON：{{\"detailed_outline\":[\"…\"]}}。\n\n\
+             ——原文——\n{snip}"
+        )
+    } else {
+        format!(
+            "Rewrite the text below as the only valid JSON {{\"detailed_outline\":[\"…\"]}}.\n\n\
+             ——raw——\n{snip}"
+        )
+    }
 }
 
 pub fn generate_detailed_outline_user(
@@ -1809,13 +1850,13 @@ pub fn generate_detailed_outline_user(
         format!(
             "{root_ref}\n\n{notes}{chapter_info}\n\n{cards}\n\n\
              篇幅：目标 {wmin}–{wmax} 字 → 细纲 {beats_lo}–{beats_hi} 条，每条扩写约 {words_per} 字。\n\
-             请根据本章简纲（及链接卡）输出细纲 JSON：{{\"detailed_outline\":[\"…\"]}}"
+             请根据本章简纲（及链接卡）输出细纲 JSON：{{\"detailed_outline\":[\"…\"]}}。场面须符合世界观/故事规则/功能选项。"
         )
     } else {
         format!(
             "{root_ref}\n\n{notes}{chapter_info}\n\n{cards}\n\n\
              Length: target {wmin}–{wmax} → {beats_lo}–{beats_hi} beats, ~{words_per} chars each.\n\
-             From the brief outline (and linked cards), output detailed outline JSON: {{\"detailed_outline\":[\"…\"]}}"
+             From the brief outline (and linked cards), output detailed outline JSON: {{\"detailed_outline\":[\"…\"]}}. Scenes must obey worldview / story rules / story tags."
         )
     }
 }
@@ -1827,15 +1868,17 @@ pub fn regenerate_detailed_outline_item_system(loc: PromptLocale) -> String {
          规则：\n\
          1）输出须与前后相邻细纲条衔接，不推翻简纲主线，不另起无关支线；\n\
          2）本条仍是可落地的场景要点（谁、做什么、结果或转折），长度与相邻条相近；\n\
-         3）只改指定下标那一条；不要输出整份细纲列表；\n\
-         4）只输出 JSON：{\"item\":\"…\"}，不要 Markdown 围栏或其它字段。"
+         3）不得与知识卡、世界观、故事规则、功能选项冲突；专名、力量、规则、人物能力以卡为准；\n\
+         4）只改指定下标那一条；不要输出整份细纲列表；\n\
+         5）只输出 JSON：{\"item\":\"…\"}，不要 Markdown 围栏或其它字段。"
     } else {
         "You are Novel Work’s detailed-outline engine. Rewrite **one** beat of the chapter detailed outline.\n\
          Rules:\n\
          1) Keep continuity with neighboring beats; do not overturn the brief outline or invent a side arc;\n\
          2) One landable scene beat (who, does what, result/turn), similar length to neighbors;\n\
-         3) Rewrite only the indexed item — do not return the full list;\n\
-         4) Output JSON only: {\"item\":\"…\"} — no markdown fences or extra fields."
+         3) Do not contradict knowledge cards, worldview, story rules, or story tags; names, power, rules, and abilities come from the cards;\n\
+         4) Rewrite only the indexed item — do not return the full list;\n\
+         5) Output JSON only: {\"item\":\"…\"} — no markdown fences or extra fields."
     };
     format!("{body}\n{}", loc.language_rule())
 }

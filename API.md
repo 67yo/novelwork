@@ -864,7 +864,7 @@ MCP 条目另含：`formatted`（写作注入 Markdown，与 `character_fmt` 同
 
 ### 5.6b `generate_detailed_outline`
 
-由本章 **简纲**（`outline`）进化 **细纲**（`detailed_outline`）并写回树。条数按每章 `word_count_min/max` 估算（约 320 字/场面），避免条数过多导致正文超字。正文生成前若细纲为空会自动调用等价逻辑；本工具可强制重写。
+由本章 **简纲**（`outline`）进化 **细纲**（`detailed_outline`）并写回树。条数按每章 `word_count_min/max` 估算（约 320 字/场面），避免条数过多导致正文超字。材料由服务端组装：简介 + 功能选项 + 人物 + 剧情要点 + **世界观/故事规则（与写章同级）**；细纲不得与之冲突。正文生成前若细纲为空会自动调用等价逻辑；本工具可强制重写。
 
 **请求**
 
@@ -882,7 +882,7 @@ MCP 条目另含：`formatted`（写作注入 Markdown，与 `character_fmt` 同
 
 ### 5.6c `regenerate_detailed_outline_item`
 
-AI 重写本章细纲中的**一条**（0-based `index`），保留其余条目并写回树。工作台左栏每条旁的「AI 重写」同源。
+AI 重写本章细纲中的**一条**（0-based `index`），保留其余条目并写回树。工作台左栏每条旁的「AI 重写」同源。须遵守已链接世界观 / 故事规则 / 功能选项。
 
 **请求**
 

@@ -215,8 +215,11 @@ pub fn split_memory_text(text: &str) -> Vec<String> {
                 || lower.contains("overall plot")
                 || lower.contains("[overall");
             let facts_hdr = trimmed.contains("要点")
+                || trimmed.contains("已交代")
                 || lower.contains("[facts")
-                || lower.contains("facts]");
+                || lower.contains("facts]")
+                || lower.contains("already shown")
+                || lower.contains("[revealed");
             if plot_hdr && !facts_hdr {
                 if in_plot {
                     flush_plot(&mut plot_buf, &mut out);
@@ -436,11 +439,12 @@ mod tests {
 
     #[test]
     fn splits_plot_and_facts() {
-        let t = "【整体情节】\n甲在雾港发现旧地图，与乙约定三日后出海寻人。\n中途遭遇阻拦但脱险。\n【要点】\n- 人物：甲｜行为：发现地图｜目标：寻人\n- 人物：乙｜承诺：三日后见";
+        let t = "【整体情节】\n甲在雾港发现旧地图，与乙约定三日后出海寻人。\n中途遭遇阻拦但脱险。\n【要点】\n- 人物：甲｜行为：发现地图｜目标：寻人\n- 人物：乙｜承诺：三日后见\n【已交代】\n- 已交代：旧地图能指向沉船";
         let c = split_memory_text(t);
         assert!(c.iter().any(|x| x.contains("整体情节") && x.contains("旧地图")), "{c:?}");
         assert!(c.iter().any(|x| x.contains("甲") && x.contains("寻人")), "{c:?}");
-        assert!(c.len() >= 3, "{c:?}");
+        assert!(c.iter().any(|x| x.contains("已交代") && x.contains("沉船")), "{c:?}");
+        assert!(c.len() >= 4, "{c:?}");
     }
 
     #[test]

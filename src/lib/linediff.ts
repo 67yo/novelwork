@@ -1,5 +1,55 @@
 export type DiffHunk = { type: "eq" | "del" | "add"; text: string };
 
+export type DiffBlock =
+  | { type: "eq"; lines: string[] }
+  | { type: "conflict"; oldLines: string[]; newLines: string[] };
+
+/** Collapse line hunks into unchanged runs vs old/new paragraph pairs. */
+export function groupDiffHunks(hunks: DiffHunk[]): DiffBlock[] {
+  const out: DiffBlock[] = [];
+  for (const h of hunks) {
+    const last = out[out.length - 1];
+    if (h.type === "eq") {
+      if (last?.type === "eq") last.lines.push(h.text);
+      else out.push({ type: "eq", lines: [h.text] });
+    } else if (h.type === "del") {
+      if (last?.type === "conflict") last.oldLines.push(h.text);
+      else out.push({ type: "conflict", oldLines: [h.text], newLines: [] });
+    } else if (last?.type === "conflict") {
+      last.newLines.push(h.text);
+    } else {
+      out.push({ type: "conflict", oldLines: [], newLines: [h.text] });
+    }
+  }
+  return out;
+}
+
+/** Keep old or new text for one conflict; that region becomes equal on both sides. */
+export function applyDiffPick(
+  blocks: DiffBlock[],
+  index: number,
+  side: "old" | "new",
+): { before: string; after: string } {
+  const beforeLines: string[] = [];
+  const afterLines: string[] = [];
+  blocks.forEach((b, i) => {
+    if (b.type === "eq") {
+      beforeLines.push(...b.lines);
+      afterLines.push(...b.lines);
+      return;
+    }
+    if (i === index) {
+      const chosen = side === "old" ? b.oldLines : b.newLines;
+      beforeLines.push(...chosen);
+      afterLines.push(...chosen);
+    } else {
+      beforeLines.push(...b.oldLines);
+      afterLines.push(...b.newLines);
+    }
+  });
+  return { before: beforeLines.join("\n"), after: afterLines.join("\n") };
+}
+
 /** Line-level LCS diff. Fine for chapter-sized texts (hundreds of lines). */
 export function diffLines(oldText: string, newText: string): DiffHunk[] {
   const a = oldText.split("\n");

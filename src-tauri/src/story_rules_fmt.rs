@@ -5,6 +5,8 @@ use crate::models::{
 };
 
 const STORY_RULES_SLOT: &str = "story_rules";
+/// 写作/细纲注入：总卡或单块扇卡。
+pub const STORY_RULES_INJECT_CAP: usize = 3500;
 
 pub fn knowledge_slot(n: &TreeNode) -> &str {
     n.knowledge

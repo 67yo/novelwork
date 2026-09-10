@@ -513,7 +513,7 @@ fn tool_defs() -> Vec<Tool> {
         ),
         tool(
             "generate_detailed_outline",
-            "Evolve chapter detailed_outline from brief outline. Assembles materials server-side — do not get_tree/get_novel_info first. Beat count follows per-chapter word target. Writes tree. Call before writing body if detailed_outline is empty.",
+            "Evolve chapter detailed_outline from brief outline. Assembles synopsis, story tags, characters, plot beats, and full worldview/story-rules server-side — do not get_tree/get_novel_info first. Beats must not contradict those cards. Beat count follows per-chapter word target. Writes tree. Call before writing body if detailed_outline is empty.",
             json!({
                 "type":"object",
                 "properties":{
@@ -526,7 +526,7 @@ fn tool_defs() -> Vec<Tool> {
         ),
         tool(
             "regenerate_detailed_outline_item",
-            "AI-rewrite one beat of chapter detailed_outline by 0-based index. Keeps other beats; writes tree.",
+            "AI-rewrite one beat of chapter detailed_outline by 0-based index. Must not contradict worldview/story-rules. Keeps other beats; writes tree.",
             json!({
                 "type":"object",
                 "properties":{
@@ -2769,7 +2769,7 @@ async fn mcp_generate_detailed_outline(ctx: &McpCtx, args: Value) -> Result<Stri
     Ok(serde_json::to_string_pretty(&json!({
         "node_id": node_id,
         "detailed_outline": items,
-        "ai_guidance": "细纲已写入。条数已按本章字数目标控制；写正文按条均分篇幅、瞄准中位，禁止把一条扩成半章。手改用 update_chapter_outline；单条重写用 regenerate_detailed_outline_item。材料已由本工具组装，不要再 get_tree。",
+        "ai_guidance": "细纲已写入。条数已按本章字数目标控制；写正文按条均分篇幅、瞄准中位，禁止把一条扩成半章。场面须符合世界观/故事规则/功能选项。手改用 update_chapter_outline；单条重写用 regenerate_detailed_outline_item。材料已由本工具组装，不要再 get_tree。",
         "ok": true,
         "label": "细纲",
     }))
@@ -2817,7 +2817,7 @@ async fn mcp_regenerate_detailed_outline_item(ctx: &McpCtx, args: Value) -> Resu
         "index": index,
         "item": item,
         "detailed_outline": list,
-        "ai_guidance": "已重写 detailed_outline[index]。可用 update_chapter_outline 调整顺序或全文；写正文按整份细纲扩充。",
+        "ai_guidance": "已重写 detailed_outline[index]。场面须符合世界观/故事规则。可用 update_chapter_outline 调整顺序或全文；写正文按整份细纲扩充。",
         "ok": true,
         "label": "细纲",
     }))

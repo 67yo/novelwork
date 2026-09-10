@@ -211,6 +211,52 @@ pub fn knowledge_card_inject_body(tree: &NovelTree, n: &TreeNode) -> String {
     n.outline.trim().to_string()
 }
 
+/// 单卡注入上限：世界观/故事规则保持完整，普通知识卡 500。
+pub fn knowledge_card_inject_cap(n: &TreeNode) -> usize {
+    if is_core_laws_card(n) {
+        CORE_LAWS_INJECT_CAP
+    } else if crate::spatiotemporal_fmt::is_spatiotemporal_card(n) {
+        crate::spatiotemporal_fmt::SPATIOTEMPORAL_INJECT_CAP
+    } else if crate::social_power_fmt::is_social_power_card(n) {
+        crate::social_power_fmt::SOCIAL_POWER_INJECT_CAP
+    } else if crate::existence_fmt::is_existence_card(n) {
+        crate::existence_fmt::EXISTENCE_INJECT_CAP
+    } else if crate::info_flow_fmt::is_info_flow_card(n) {
+        crate::info_flow_fmt::INFO_FLOW_INJECT_CAP
+    } else if crate::history_culture_fmt::is_history_culture_card(n) {
+        crate::history_culture_fmt::HISTORY_CULTURE_INJECT_CAP
+    } else if crate::story_rules_fmt::is_story_rules_card(n)
+        || crate::story_rules_fmt::is_story_rules_fan_card(n)
+    {
+        crate::story_rules_fmt::STORY_RULES_INJECT_CAP
+    } else {
+        crate::kb_context::KNOWLEDGE_CARD_EXTRACT_CAP
+    }
+}
+
+/// 注入排序：结构化世界观 → 故事规则 → 普通卡。
+pub fn knowledge_card_inject_priority(n: &TreeNode) -> u8 {
+    if is_core_laws_card(n) {
+        0
+    } else if crate::spatiotemporal_fmt::is_spatiotemporal_card(n) {
+        1
+    } else if crate::social_power_fmt::is_social_power_card(n) {
+        2
+    } else if crate::existence_fmt::is_existence_card(n) {
+        3
+    } else if crate::info_flow_fmt::is_info_flow_card(n) {
+        4
+    } else if crate::history_culture_fmt::is_history_culture_card(n) {
+        5
+    } else if crate::story_rules_fmt::is_story_rules_card(n)
+        || crate::story_rules_fmt::is_story_rules_fan_card(n)
+    {
+        6
+    } else {
+        7
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -313,5 +359,27 @@ mod tests {
         assert!(body.contains("借力必还"));
         assert!(body.contains("严禁无代价成神"));
         assert!(!body.contains("stale"));
+    }
+
+    #[test]
+    fn story_rules_and_core_laws_keep_full_inject_cap() {
+        let core = kn("core", CORE_LAWS_SLOT, None, None);
+        let sr = kn("sr", "story_rules", None, None);
+        let fan = kn("fan", "sr_constraint_redlines", None, None);
+        let ordinary = kn("plain", "", None, None);
+        assert_eq!(knowledge_card_inject_cap(&core), CORE_LAWS_INJECT_CAP);
+        assert_eq!(
+            knowledge_card_inject_cap(&sr),
+            crate::story_rules_fmt::STORY_RULES_INJECT_CAP
+        );
+        assert_eq!(
+            knowledge_card_inject_cap(&fan),
+            crate::story_rules_fmt::STORY_RULES_INJECT_CAP
+        );
+        assert_eq!(
+            knowledge_card_inject_cap(&ordinary),
+            crate::kb_context::KNOWLEDGE_CARD_EXTRACT_CAP
+        );
+        assert!(knowledge_card_inject_priority(&sr) < knowledge_card_inject_priority(&ordinary));
     }
 }

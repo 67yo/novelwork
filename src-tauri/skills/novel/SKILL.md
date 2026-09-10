@@ -15,7 +15,7 @@ trigger: true
 写/改某一章 → `get_chapter_write_context`（本会话已有根则 `include_root=false`，同卷已有则 `include_volume=false`；沿用当前 session）。遵守返回的 `ai_guidance`。不要叠 `get_novel_info`+`get_chapter_info`。细纲空则先 `generate_detailed_outline`（条数跟每章字数走）。只读正文 → `get_chapter_content`。落盘 → `set_chapter_content`（`in_band` 为真则不要再为字数改）。
 分镜头 / MiniMax 视频：`split_chapter_shots` / `generate_shot_comfy_prompts` 只返回材料（`saved: false`），再 `set_chapter_shots` 覆盖。提交 → `submit_chapter_shots_comfyui`。只读 → `get_chapter_shots`。
 章节记忆 → `get_chapter_memory` / `list_chapter_memory`；手动改 → `set_chapter_memory`；按正文抽取 → `regenerate_chapter_memory`。
-改章标题/简纲/细纲 → `update_chapter_outline`。整份细纲 → `generate_detailed_outline`（材料由工具组装，不要先 `get_tree`/`get_novel_info`）；单条 → `regenerate_detailed_outline_item`。
+改章标题/简纲/细纲 → `update_chapter_outline`。整份细纲 → `generate_detailed_outline`（材料由工具组装，须遵守世界观/故事规则/功能选项，不要先 `get_tree`/`get_novel_info`）；单条 → `regenerate_detailed_outline_item`。
 补分卷 → `add_volume`（结构化 `volume`，勿写 `outline`）。读/改 → `get_volume` / `upsert_volume`。
 补章节卡 → `add_chapter`。
 全树/找节点 id → `get_tree`（多数情况不必：`node_id` 可直接传「第N章」/标题）。画布整列 → `layout_tree`。

@@ -2243,48 +2243,11 @@ fn root_linked_plots_and_knowledge(tree: &NovelTree, loc: PromptLocale) -> Strin
             } else {
                 body
             };
-            let is_core = crate::core_laws_fmt::is_core_laws_card(n);
-            let is_st = crate::spatiotemporal_fmt::is_spatiotemporal_card(n);
-            let is_sp = crate::social_power_fmt::is_social_power_card(n);
-            let is_ex = crate::existence_fmt::is_existence_card(n);
-            let is_if = crate::info_flow_fmt::is_info_flow_card(n);
-            let is_hc = crate::history_culture_fmt::is_history_culture_card(n);
-            let per = if is_core {
+            let per = crate::core_laws_fmt::knowledge_card_inject_cap(n);
+            if per > crate::kb_context::KNOWLEDGE_CARD_EXTRACT_CAP {
                 inject_bumps += 1;
-                crate::core_laws_fmt::CORE_LAWS_INJECT_CAP
-            } else if is_st {
-                inject_bumps += 1;
-                crate::spatiotemporal_fmt::SPATIOTEMPORAL_INJECT_CAP
-            } else if is_sp {
-                inject_bumps += 1;
-                crate::social_power_fmt::SOCIAL_POWER_INJECT_CAP
-            } else if is_ex {
-                inject_bumps += 1;
-                crate::existence_fmt::EXISTENCE_INJECT_CAP
-            } else if is_if {
-                inject_bumps += 1;
-                crate::info_flow_fmt::INFO_FLOW_INJECT_CAP
-            } else if is_hc {
-                inject_bumps += 1;
-                crate::history_culture_fmt::HISTORY_CULTURE_INJECT_CAP
-            } else {
-                crate::kb_context::KNOWLEDGE_CARD_EXTRACT_CAP
-            };
-            let pri = if is_core {
-                0
-            } else if is_st {
-                1
-            } else if is_sp {
-                2
-            } else if is_ex {
-                3
-            } else if is_if {
-                4
-            } else if is_hc {
-                5
-            } else {
-                6
-            };
+            }
+            let pri = crate::core_laws_fmt::knowledge_card_inject_priority(n);
             kn_rows.push((pri, n.label.clone(), body, per));
         }
     }
@@ -2703,22 +2666,207 @@ fn parse_json_string_array(s: &str) -> Option<Vec<String>> {
     }
 }
 
+fn json_value_to_beat(v: &serde_json::Value) -> Option<String> {
+    match v {
+        serde_json::Value::String(s) => {
+            let t = s.trim();
+            if t.is_empty() {
+                None
+            } else {
+                Some(t.to_string())
+            }
+        }
+        serde_json::Value::Number(n) => Some(n.to_string()),
+        serde_json::Value::Object(map) => {
+            let parts: Vec<String> = ["who", "does", "what", "result", "turn", "谁", "做", "结果"]
+                .iter()
+                .filter_map(|k| {
+                    map.get(*k)
+                        .and_then(|x| x.as_str())
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty())
+                        .map(|s| s.to_string())
+                })
+                .collect();
+            if parts.len() >= 2 {
+                return Some(parts.join("；"));
+            }
+            const KEYS: &[&str] = &[
+                "item",
+                "beat",
+                "text",
+                "scene",
+                "content",
+                "outline",
+                "细纲",
+                "内容",
+                "要点",
+                "what",
+                "desc",
+                "description",
+                "summary",
+            ];
+            for k in KEYS {
+                if let Some(s) = map
+                    .get(*k)
+                    .and_then(|x| x.as_str())
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                {
+                    return Some(s.to_string());
+                }
+            }
+            if parts.len() == 1 {
+                return Some(parts[0].clone());
+            }
+            let strs: Vec<String> = map
+                .values()
+                .filter_map(|x| x.as_str())
+                .map(str::trim)
+                .filter(|s| !s.is_empty() && s.chars().count() >= 4)
+                .map(|s| s.to_string())
+                .collect();
+            if strs.is_empty() {
+                None
+            } else {
+                Some(strs.join("；"))
+            }
+        }
+        _ => None,
+    }
+}
+
+fn beats_from_json_map(slice: &str) -> Option<Vec<String>> {
+    let v = serde_json::from_str::<serde_json::Value>(&strip_trailing_commas(slice)).ok()?;
+    let obj = v.as_object()?;
+    let mut numbered: Vec<(u32, String)> = Vec::new();
+    let mut rest: Vec<String> = Vec::new();
+    for (k, val) in obj {
+        let Some(beat) = json_value_to_beat(val) else {
+            continue;
+        };
+        if let Ok(n) = k.parse::<u32>() {
+            numbered.push((n, beat));
+        } else {
+            rest.push(beat);
+        }
+    }
+    numbered.sort_by_key(|p| p.0);
+    let mut items: Vec<String> = numbered.into_iter().map(|p| p.1).collect();
+    items.extend(rest);
+    if items.is_empty() {
+        None
+    } else {
+        Some(items)
+    }
+}
+
+fn collect_beats_from_array_body(rest: &str) -> Vec<String> {
+    let chars: Vec<char> = rest.chars().collect();
+    let mut i = 0;
+    if chars.first() == Some(&'[') {
+        i = 1;
+    }
+    let mut out = Vec::new();
+    while i < chars.len() {
+        while i < chars.len() && (chars[i].is_whitespace() || chars[i] == ',') {
+            i += 1;
+        }
+        if i >= chars.len() || chars[i] == ']' {
+            break;
+        }
+        if chars[i] == '"' {
+            let mut j = i + 1;
+            let mut escape = false;
+            let mut closed = false;
+            while j < chars.len() {
+                if escape {
+                    escape = false;
+                    j += 1;
+                    continue;
+                }
+                if chars[j] == '\\' {
+                    escape = true;
+                    j += 1;
+                    continue;
+                }
+                if chars[j] == '"' {
+                    closed = true;
+                    break;
+                }
+                j += 1;
+            }
+            if !closed {
+                break;
+            }
+            let slice: String = chars[i..=j].iter().collect();
+            if let Ok(s) = serde_json::from_str::<String>(&slice) {
+                let t = s.trim().to_string();
+                if !t.is_empty() {
+                    out.push(t);
+                }
+            }
+            i = j + 1;
+            continue;
+        }
+        if chars[i] == '{' {
+            match find_matching_pair(&chars, i, '{', '}') {
+                Some(end) => {
+                    let slice: String = chars[i..=end].iter().collect();
+                    if let Ok(v) = serde_json::from_str::<serde_json::Value>(&slice) {
+                        if let Some(b) = json_value_to_beat(&v) {
+                            out.push(b);
+                        }
+                    }
+                    i = end + 1;
+                }
+                None => break,
+            }
+            continue;
+        }
+        i += 1;
+    }
+    out
+}
+
 /// GLM etc. often emit `"detailed_outline": [ … ]` without wrapping `{…}`.
 fn extract_named_string_array(text: &str, keys: &[&str]) -> Option<Vec<String>> {
     let s = normalize_llm_json_text(text);
     for key in keys {
         let needle = format!("\"{key}\"");
         let Some(i) = s.find(&needle) else { continue };
-        let rest = s[i + needle.len()..].trim_start().trim_start_matches(':').trim_start();
+        let rest = s[i + needle.len()..]
+            .trim_start()
+            .trim_start_matches(':')
+            .trim_start();
         let chars: Vec<char> = rest.chars().collect();
+        if chars.first() == Some(&'{') {
+            if let Some(end) = find_matching_pair(&chars, 0, '{', '}') {
+                let slice: String = chars[..=end].iter().collect();
+                if let Some(items) = beats_from_json_map(&slice) {
+                    return Some(items);
+                }
+            }
+            continue;
+        }
         if chars.first() != Some(&'[') {
             continue;
         }
-        let Some(end) = find_matching_pair(&chars, 0, '[', ']') else {
-            continue;
-        };
-        let slice: String = chars[..=end].iter().collect();
-        if let Some(items) = parse_json_string_array(&slice) {
+        if let Some(end) = find_matching_pair(&chars, 0, '[', ']') {
+            let slice: String = chars[..=end].iter().collect();
+            if let Some(items) = parse_json_string_array(&slice) {
+                return Some(items);
+            }
+            let soft = strip_trailing_commas(slice.trim());
+            if let Ok(arr) = serde_json::from_str::<Vec<serde_json::Value>>(&soft) {
+                let items: Vec<String> = arr.iter().filter_map(json_value_to_beat).collect();
+                if !items.is_empty() {
+                    return Some(items);
+                }
+            }
+        }
+        let items = collect_beats_from_array_body(rest);
+        if items.len() >= 2 {
             return Some(items);
         }
     }
@@ -3929,7 +4077,7 @@ fn chapter_context(
             };
             if let Some(c) = &n.character {
                 let cap = if slim {
-                    400
+                    1200
                 } else {
                     crate::character_fmt::CHARACTER_INJECT_CAP
                 };
@@ -4094,55 +4242,13 @@ fn chapter_context(
             } else {
                 body
             };
-            let is_core = crate::core_laws_fmt::is_core_laws_card(n);
-            let is_st = crate::spatiotemporal_fmt::is_spatiotemporal_card(n);
-            let is_sp = crate::social_power_fmt::is_social_power_card(n);
-            let is_ex = crate::existence_fmt::is_existence_card(n);
-            let is_if = crate::info_flow_fmt::is_info_flow_card(n);
-            let is_hc = crate::history_culture_fmt::is_history_culture_card(n);
-            let per = if is_core {
+            // 细纲 slim 只砍人物/剧情正文，勿把世界观/故事规则压回 500
+            let per = crate::core_laws_fmt::knowledge_card_inject_cap(n);
+            if per > crate::kb_context::KNOWLEDGE_CARD_EXTRACT_CAP {
                 inject_bumps += 1;
-                crate::core_laws_fmt::CORE_LAWS_INJECT_CAP
-            } else if is_st {
-                inject_bumps += 1;
-                crate::spatiotemporal_fmt::SPATIOTEMPORAL_INJECT_CAP
-            } else if is_sp {
-                inject_bumps += 1;
-                crate::social_power_fmt::SOCIAL_POWER_INJECT_CAP
-            } else if is_ex {
-                inject_bumps += 1;
-                crate::existence_fmt::EXISTENCE_INJECT_CAP
-            } else if is_if {
-                inject_bumps += 1;
-                crate::info_flow_fmt::INFO_FLOW_INJECT_CAP
-            } else if is_hc {
-                inject_bumps += 1;
-                crate::history_culture_fmt::HISTORY_CULTURE_INJECT_CAP
-            } else {
-                crate::kb_context::KNOWLEDGE_CARD_EXTRACT_CAP
-            };
-            let pri = if is_core {
-                0
-            } else if is_st {
-                1
-            } else if is_sp {
-                2
-            } else if is_ex {
-                3
-            } else if is_if {
-                4
-            } else if is_hc {
-                5
-            } else {
-                6
-            };
+            }
+            let pri = crate::core_laws_fmt::knowledge_card_inject_priority(n);
             kn_rows.push((pri, n.label.clone(), body, per));
-        }
-    }
-    if slim {
-        inject_bumps = 0;
-        for row in &mut kn_rows {
-            row.3 = crate::kb_context::KNOWLEDGE_CARD_EXTRACT_CAP;
         }
     }
     kn_rows.sort_by_key(|r| r.0);
@@ -4288,13 +4394,14 @@ fn root_generate_reference(tree: &NovelTree, synopsis: &str, loc: PromptLocale) 
     }
 }
 
-/// 细纲：只要简介/总纲，不重复灌根人物全文（人物已在 chapter_context slim 里）。
-fn root_brief_for_outline(tree: &NovelTree, synopsis: &str, loc: PromptLocale) -> String {
+/// 细纲：简介 + 功能选项 + 总纲；人物在 chapter_context。
+fn root_brief_for_outline(tree: &NovelTree, novel: &NovelProject, loc: PromptLocale) -> String {
     let root = tree
         .nodes
         .iter()
         .find(|n| matches!(n.kind, NodeKind::Novel));
     let root_outline = root.map(|n| n.outline.as_str()).unwrap_or("");
+    let synopsis = novel.synopsis.as_str();
     let syn = if synopsis.trim().is_empty() {
         if loc.is_zh() {
             "（暂无简介）"
@@ -4304,6 +4411,7 @@ fn root_brief_for_outline(tree: &NovelTree, synopsis: &str, loc: PromptLocale) -
     } else {
         synopsis
     };
+    let feat = crate::novel_features::format_novel_features_block(&novel.features);
     let extra = if root_outline.trim().is_empty() || root_outline.trim() == synopsis.trim()
     {
         String::new()
@@ -4313,9 +4421,9 @@ fn root_brief_for_outline(tree: &NovelTree, synopsis: &str, loc: PromptLocale) -
         format!("Root notes:\n{root_outline}\n")
     };
     if loc.is_zh() {
-        format!("【全书故事简介】\n{syn}\n{extra}")
+        format!("【全书故事简介】\n{syn}\n{feat}\n{extra}")
     } else {
-        format!("[Novel synopsis]\n{syn}\n{extra}")
+        format!("[Novel synopsis]\n{syn}\n{feat}\n{extra}")
     }
 }
 
@@ -5053,7 +5161,7 @@ pub(crate) async fn generate_detailed_outline_inner(
             user_notes,
         ],
     );
-    let root_ref = root_brief_for_outline(&tree, &novel.synopsis, loc);
+    let root_ref = root_brief_for_outline(&tree, &novel, loc);
     let (chapter_info, cards) = chapter_context(&tree, novel_id, node_id, loc, true);
     let (wmin, wmax) = root_chapter_word_target(&tree, &novel);
     let (beats_lo, beats_hi, words_per) = detailed_outline_pace(wmin, wmax);
@@ -5081,17 +5189,21 @@ pub(crate) async fn generate_detailed_outline_inner(
         &user,
         Some(&model_name),
         Some(novel_id),
-        cancel,
+        cancel.clone(),
         true,
     )
     .await?;
-    let items = parse_detailed_outline_list(&reply).ok_or_else(|| {
-        if loc.is_zh() {
-            "细纲解析失败，请重试".to_string()
-        } else {
-            "Failed to parse detailed outline".to_string()
-        }
-    })?;
+    let items = parse_detailed_outline_list_or_repair(
+        app,
+        db,
+        &settings,
+        &model_name,
+        novel_id,
+        loc,
+        cancel,
+        &reply,
+    )
+    .await?;
     if items.is_empty() {
         return Err(if loc.is_zh() {
             "细纲为空".into()
@@ -5178,7 +5290,7 @@ pub(crate) async fn regenerate_detailed_outline_item_inner(
             items.get(index).map(|s| s.as_str()).unwrap_or(""),
         ],
     );
-    let root_ref = root_brief_for_outline(&tree, &novel.synopsis, loc);
+    let root_ref = root_brief_for_outline(&tree, &novel, loc);
     let (chapter_info, cards) = chapter_context(&tree, novel_id, node_id, loc, true);
     let neighbors = items
         .iter()
@@ -5263,27 +5375,24 @@ fn parse_detailed_outline_item(reply: &str) -> Option<String> {
 }
 
 fn parse_detailed_outline_list(reply: &str) -> Option<Vec<String>> {
-    let keys = ["detailed_outline", "细纲", "items"];
+    let keys = ["detailed_outline", "细纲", "items", "beats", "scenes"];
     for obj in extract_json_objects(reply) {
-        let Some(arr) = keys.iter().find_map(|k| obj.get(*k)) else {
+        let Some(field) = keys.iter().find_map(|k| obj.get(*k)) else {
             continue;
         };
-        if let Some(list) = arr.as_array() {
-            let items: Vec<String> = list
-                .iter()
-                .filter_map(|v| {
-                    v.as_str()
-                        .map(|s| s.trim().to_string())
-                        .or_else(|| v.as_i64().map(|n| n.to_string()))
-                })
-                .filter(|s| !s.is_empty())
-                .collect();
+        if let Some(list) = field.as_array() {
+            let items: Vec<String> = list.iter().filter_map(json_value_to_beat).collect();
             if !items.is_empty() {
                 return Some(items);
             }
         }
-        if let Some(s) = arr.as_str() {
+        if let Some(s) = field.as_str() {
             if let Some(items) = parse_json_string_array(s) {
+                return Some(items);
+            }
+        }
+        if field.is_object() {
+            if let Some(items) = beats_from_json_map(&field.to_string()) {
                 return Some(items);
             }
         }
@@ -5305,6 +5414,75 @@ fn parse_detailed_outline_list(reply: &str) -> Option<Vec<String>> {
     } else {
         None
     }
+}
+
+async fn parse_detailed_outline_list_or_repair(
+    app: Option<&tauri::AppHandle>,
+    db: &Db,
+    settings: &AppSettings,
+    model: &str,
+    novel_id: &str,
+    loc: PromptLocale,
+    cancel: Option<Arc<AtomicBool>>,
+    reply: &str,
+) -> Result<Vec<String>, String> {
+    if reply.trim().is_empty() {
+        return Err(if loc.is_zh() {
+            "模型未返回细纲".into()
+        } else {
+            "Model returned an empty detailed outline".into()
+        });
+    }
+    if let Some(items) = parse_detailed_outline_list(reply) {
+        if !items.is_empty() {
+            return Ok(items);
+        }
+    }
+    if settings.resolve_compat(model).is_some_and(|ep| ep.is_ready()) {
+        if let Ok(ex) = crate::llm_extract::extract::<crate::llm_extract::DetailedOutlineExtract>(
+            settings,
+            model,
+            &prompts::repair_detailed_outline_json_system(loc),
+            reply,
+        )
+        .await
+        {
+            let items: Vec<String> = ex
+                .detailed_outline
+                .into_iter()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+            if !items.is_empty() {
+                return Ok(items);
+            }
+        }
+    }
+    let (fixed, _) = llm_complete_ex(
+        app,
+        db,
+        settings,
+        &prompts::repair_detailed_outline_json_system(loc),
+        &prompts::repair_detailed_outline_json_user(loc, reply),
+        Some(model),
+        Some(novel_id),
+        cancel,
+        true,
+    )
+    .await?;
+    if let Some(items) = parse_detailed_outline_list(&fixed) {
+        if !items.is_empty() {
+            return Ok(items);
+        }
+    }
+    let snip: String = reply.chars().take(280).collect();
+    Err(if loc.is_zh() {
+        format!("细纲解析失败，结构树未改动。请重试。\n\n模型原文摘录：\n{snip}")
+    } else {
+        format!(
+            "Failed to parse detailed outline; tree unchanged. Please retry.\n\nModel snippet:\n{snip}"
+        )
+    })
 }
 
 #[cfg(test)]
@@ -5349,6 +5527,86 @@ mod detailed_outline_parse_tests {
     fn parses_json_item() {
         let r = parse_detailed_outline_item(r#"{"item":"码头遇雨，旧识拦路"}"#).unwrap();
         assert_eq!(r, "码头遇雨，旧识拦路");
+    }
+
+    #[test]
+    fn parses_array_of_objects() {
+        let raw = r#"{"detailed_outline":[{"scene":"开场上船，夜雾压港"},{"who":"旧识","what":"拦路","result":"改道"}]}"#;
+        let r = parse_detailed_outline_list(raw).unwrap();
+        assert_eq!(r[0], "开场上船，夜雾压港");
+        assert!(r[1].contains("旧识") && r[1].contains("拦路"));
+    }
+
+    #[test]
+    fn parses_truncated_string_array() {
+        let raw = r#"{"detailed_outline":["开场上船，夜雾压港","旧识现身拦路","被迫改道内"#;
+        let r = parse_detailed_outline_list(raw).unwrap();
+        assert_eq!(r, vec!["开场上船，夜雾压港", "旧识现身拦路"]);
+    }
+
+    #[test]
+    fn parses_numbered_object_map() {
+        let raw = r#"{"detailed_outline":{"1":"开场上船，夜雾压港","2":"旧识现身拦路"}}"#;
+        let r = parse_detailed_outline_list(raw).unwrap();
+        assert_eq!(r, vec!["开场上船，夜雾压港", "旧识现身拦路"]);
+    }
+}
+
+#[cfg(test)]
+mod detailed_outline_materials_tests {
+    use super::chapter_context;
+    use crate::models::{
+        CoreLawsPayload, KnowledgeCardPayload, NodeKind, NodePosition, NovelTree, TreeNode,
+    };
+    use crate::prompts::PromptLocale;
+
+    fn node(id: &str, kind: NodeKind) -> TreeNode {
+        TreeNode {
+            id: id.into(),
+            kind,
+            label: id.into(),
+            outline: String::new(),
+            detailed_outline: vec![],
+            character: None,
+            knowledge: None,
+            side_plot: None,
+            volume: None,
+            linked_character_ids: vec![],
+            linked_side_plot_ids: vec![],
+            linked_knowledge_ids: vec![],
+            position: NodePosition { x: 0.0, y: 0.0 },
+            word_count: 0,
+            word_count_min: 0,
+            word_count_max: 0,
+            chapter_count: 0,
+        }
+    }
+
+    #[test]
+    fn slim_outline_keeps_worldview_tail_past_500() {
+        const MARKER: &str = "SLIM_MUST_KEEP_NO_PRICELESS_GOD";
+        let mut root = node("root", NodeKind::Novel);
+        root.linked_knowledge_ids = vec!["core".into()];
+        let ch = node("ch1", NodeKind::Chapter);
+        let mut core = node("core", NodeKind::Knowledge);
+        core.knowledge = Some(KnowledgeCardPayload {
+            slot: "wv_core_laws".into(),
+            core_laws: Some(CoreLawsPayload {
+                premise: format!("{}{MARKER}", "甲".repeat(600)),
+                ..Default::default()
+            }),
+            ..Default::default()
+        });
+        let tree = NovelTree {
+            novel_id: "n".into(),
+            nodes: vec![root, ch, core],
+            edges: vec![],
+        };
+        let (_info, cards) = chapter_context(&tree, "n", "ch1", PromptLocale::ZhCn, true);
+        assert!(
+            cards.contains(MARKER),
+            "slim outline context must keep worldview past the 500-char ordinary cap: {cards}"
+        );
     }
 }
 
