@@ -129,6 +129,7 @@ import {
   ChevronUp,
   Copy,
   GitBranch,
+  Hash,
   Layers,
   LayoutGrid,
   Library,
@@ -150,6 +151,7 @@ import {
   X,
 } from "@lucide/vue";
 import { renderChapterMd, stripChapterMeta } from "@/lib/md";
+import { chapterSpan, countWords } from "@/lib/chapterWordStats";
 import { applyDiffPick, diffLines, groupDiffHunks } from "@/lib/linediff";
 import {
   bodySuggestContext,
@@ -330,6 +332,18 @@ const allMemoryError = ref("");
 const allMemorySelectedId = ref("");
 const allMemoryBody = ref("");
 const allMemoryBodyBusy = ref(false);
+const wordStatsOpen = ref(false);
+const wordStatsMode = ref<"all" | "range">("all");
+const wordStatsFrom = ref(1);
+const wordStatsTo = ref(1);
+const wordStatsBusy = ref(false);
+const wordStatsError = ref("");
+const wordStatsResult = ref<{
+  from: number;
+  to: number;
+  total: number;
+  items: { label: string; words: number }[];
+} | null>(null);
 /** null itemIndex = 清除整章记忆 */
 const pendingMemoryDelete = ref<{
   nodeId: string;
@@ -868,14 +882,9 @@ async function applyChatChapterBody(nodeId: string, beforeRaw: string) {
 const bodyLines = computed(() => splitBodyLines(bodyDraft.value));
 
 /** 与后端 count_words 一致：去掉空白后的字符数。 */
-const bodyWordCount = computed(() => {
-  const text = stripChapterMeta(bodyEditing.value ? bodyDraft.value : chapterMd.value);
-  let n = 0;
-  for (const c of text) {
-    if (!/\s/u.test(c)) n += 1;
-  }
-  return n;
-});
+const bodyWordCount = computed(() =>
+  countWords(stripChapterMeta(bodyEditing.value ? bodyDraft.value : chapterMd.value)),
+);
 
 const bodyNouns = computed(() => {
   const names: string[] = [];
@@ -1045,6 +1054,7 @@ const CHAPTER_STEPS: Record<string, MessageKey> = {
   writing: "workspace.taskStepWriting",
   refining: "workspace.taskStepRefining",
   check_beats: "workspace.taskStepCheckBeats",
+  check_lore: "workspace.taskStepCheckLore",
   repair_land: "workspace.taskStepRepairLand",
   repair_beats: "workspace.taskStepCheckBeats",
   repair_length: "workspace.taskStepRepairLength",
@@ -2445,6 +2455,65 @@ const manuscriptRows = computed((): ManuscriptRow[] => {
   }
   return rows;
 });
+
+function openWordStats() {
+  const n = manuscriptRows.value.filter((r) => r.kind === "chapter").length;
+  wordStatsOpen.value = true;
+  wordStatsMode.value = "all";
+  wordStatsFrom.value = 1;
+  wordStatsTo.value = Math.max(1, n);
+  wordStatsResult.value = null;
+  wordStatsError.value = "";
+}
+
+function closeWordStats() {
+  if (wordStatsBusy.value) return;
+  wordStatsOpen.value = false;
+}
+
+async function runWordStats() {
+  if (wordStatsBusy.value) return;
+  const chapters = manuscriptRows.value.filter((r) => r.kind === "chapter");
+  if (!chapters.length) {
+    wordStatsError.value = t("workspace.wordStatsEmpty");
+    wordStatsResult.value = null;
+    return;
+  }
+  wordStatsBusy.value = true;
+  wordStatsError.value = "";
+  wordStatsResult.value = null;
+  try {
+    await persistChapterBody();
+    const [lo, hi] =
+      wordStatsMode.value === "all"
+        ? chapterSpan(chapters.length, null, null)
+        : chapterSpan(chapters.length, Number(wordStatsFrom.value), Number(wordStatsTo.value));
+    const slice = chapters.slice(lo, hi);
+    const items: { label: string; words: number }[] = [];
+    let total = 0;
+    for (const row of slice) {
+      let words = 0;
+      try {
+        const body = await api.getChapter(props.id, row.id);
+        words = countWords(stripChapterMeta(body));
+      } catch {
+        words = 0;
+      }
+      items.push({ label: row.label, words });
+      total += words;
+    }
+    wordStatsResult.value = {
+      from: lo + 1,
+      to: hi,
+      total,
+      items,
+    };
+  } catch (e) {
+    wordStatsError.value = String(e);
+  } finally {
+    wordStatsBusy.value = false;
+  }
+}
 
 const coreLawsAxiomLinks = computed(() => {
   if (!tree.value || !selected.value || !selectedIsCoreLaws.value) return [];
@@ -5268,6 +5337,18 @@ function startResizeChatH(ev: MouseEvent) {
               size="sm"
               variant="outline"
               class="h-7 w-7 px-0"
+              :disabled="!tree || wordStatsBusy"
+              :title="t('workspace.wordStats')"
+              :aria-label="t('workspace.wordStats')"
+              @click="openWordStats"
+            >
+              <Loader2 v-if="wordStatsBusy" class="h-3.5 w-3.5 animate-spin" />
+              <Hash v-else class="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              class="h-7 w-7 px-0"
               :disabled="!tree || allMemoryBusy"
               :title="t('workspace.allChapterMemory')"
               @click="openAllChapterMemory"
@@ -6462,6 +6543,92 @@ function startResizeChatH(ev: MouseEvent) {
           </Button>
           <Button variant="destructive" :disabled="deletingMemory" @click="confirmPendingMemoryDelete">
             {{ deletingMemory ? t("workspace.deletingMemory") : t("workspace.deleteMemoryTitle") }}
+          </Button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 章节总字数 -->
+    <div
+      v-if="wordStatsOpen"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
+      @click.self="closeWordStats"
+      @keydown.escape="closeWordStats"
+    >
+      <div
+        class="flex max-h-[min(85vh,32rem)] w-full max-w-md flex-col rounded-lg border bg-background p-5 shadow-lg"
+        role="dialog"
+        aria-modal="true"
+        :aria-label="t('workspace.wordStats')"
+      >
+        <div class="flex items-start justify-between gap-2">
+          <div class="min-w-0">
+            <h2 class="text-base font-semibold">{{ t("workspace.wordStats") }}</h2>
+            <p class="mt-1 text-xs text-muted-foreground">{{ t("workspace.wordStatsHint") }}</p>
+          </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            class="shrink-0 px-2"
+            :disabled="wordStatsBusy"
+            :aria-label="t('workspace.memoryClose')"
+            @click="closeWordStats"
+          >
+            <X class="h-4 w-4" />
+          </Button>
+        </div>
+        <div class="mt-4 space-y-3">
+          <label class="flex items-center gap-2 text-sm">
+            <input v-model="wordStatsMode" type="radio" value="all" class="h-4 w-4" :disabled="wordStatsBusy" />
+            {{ t("workspace.wordStatsAll") }}
+          </label>
+          <label class="flex flex-wrap items-center gap-2 text-sm">
+            <input v-model="wordStatsMode" type="radio" value="range" class="h-4 w-4" :disabled="wordStatsBusy" />
+            {{ t("workspace.wordStatsRange") }}
+            <span class="text-muted-foreground">{{ t("workspace.wordStatsFrom") }}</span>
+            <Input
+              v-model.number="wordStatsFrom"
+              type="number"
+              min="1"
+              class="h-8 w-16"
+              :disabled="wordStatsBusy || wordStatsMode !== 'range'"
+            />
+            <span class="text-muted-foreground">{{ t("workspace.wordStatsTo") }}</span>
+            <Input
+              v-model.number="wordStatsTo"
+              type="number"
+              min="1"
+              class="h-8 w-16"
+              :disabled="wordStatsBusy || wordStatsMode !== 'range'"
+            />
+            <span class="text-muted-foreground">{{ t("workspace.wordStatsChapter") }}</span>
+          </label>
+        </div>
+        <p v-if="wordStatsError" class="mt-3 text-xs text-destructive">{{ wordStatsError }}</p>
+        <div v-if="wordStatsResult" class="mt-3 min-h-0 flex-1 space-y-2 overflow-hidden">
+          <p class="text-sm font-medium tabular-nums">
+            {{
+              t("workspace.wordStatsTotal", {
+                n: wordStatsResult.items.length,
+                words: wordStatsResult.total.toLocaleString(),
+              })
+            }}
+          </p>
+          <ul class="max-h-40 overflow-y-auto rounded-md border bg-muted/30 p-2 text-xs">
+            <li v-for="(row, i) in wordStatsResult.items" :key="i" class="flex justify-between gap-2 py-0.5">
+              <span class="min-w-0 truncate">{{ row.label }}</span>
+              <span class="shrink-0 tabular-nums text-muted-foreground">
+                {{ t("workspace.wordStatsItem", { n: row.words.toLocaleString() }) }}
+              </span>
+            </li>
+          </ul>
+        </div>
+        <div class="mt-5 flex justify-end gap-2">
+          <Button variant="outline" :disabled="wordStatsBusy" @click="closeWordStats">
+            {{ t("novels.cancel") }}
+          </Button>
+          <Button :disabled="wordStatsBusy" @click="runWordStats">
+            {{ wordStatsBusy ? t("workspace.wordStatsRunning") : t("workspace.wordStatsRun") }}
           </Button>
         </div>
       </div>

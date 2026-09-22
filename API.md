@@ -953,11 +953,12 @@ AI 重写本章细纲中的**一条**（0-based `index`），保留其余条目�
 1. **剧情**（`plots`）：根 / 分卷 / 本章分别按各自 order；不得混序或改写要点。  
 2. **人物**（`characters`）：`linked_characters` 为本节**必须出场**的人物；须符合结构化字段与 `formatted`；关系见 `character_relations`。  
 3. **知识卡**（`knowledge`）：`linked_knowledge` 为**本章直连**写作约束。根上世界观/故事规则不出现在本接口；写章用 `get_chapter_write_context`。  
-4. **叙事连贯**（`narrative_coherence`）：时间因果、人物一致、细节统一、段落衔接、逻辑自洽、节奏情绪、信息有效；禁止不合理、不连贯、前后冲突的叙述。  
-5. **禁止项**（`forbidden`）：逻辑冲突、矛盾事实、人设崩坏、擅自加设定、机械降神、硬切场景、说明文对话、重复注水、元叙述等。  
-6. **字数**（`length`）：瞄准 `word_count_min`/`max` 中位；±60 不是反复重写门槛。  
-7. **输出**（`output`）：只输出 Markdown 正文，不要清单/自我评价。  
-8. **正文用法**（`content_usage`）：写章用 `get_chapter_write_context`。本接口不含正文。
+4. **设定校对**（`lore`）：落盘前对照根层世界观六卡与故事规则；冲突则就地修订，无冲突勿改。  
+5. **叙事连贯**（`narrative_coherence`）：时间因果、人物一致、细节统一、段落衔接、逻辑自洽、节奏情绪、信息有效；禁止不合理、不连贯、前后冲突的叙述。  
+6. **禁止项**（`forbidden`）：逻辑冲突、矛盾事实、人设崩坏、擅自加设定、机械降神、硬切场景、说明文对话、重复注水、元叙述等。  
+7. **字数**（`length`）：瞄准 `word_count_min`/`max` 中位；±60 不是反复重写门槛。  
+8. **输出**（`output`）：只输出 Markdown 正文，不要清单/自我评价。  
+9. **正文用法**（`content_usage`）：写章用 `get_chapter_write_context`。本接口不含正文。
 
 **请求**
 
@@ -981,6 +982,7 @@ AI 重写本章细纲中的**一条**（0-based `index`），保留其余条目�
     "plots": "linked_plots 的 inherited_from 为 root|volume|chapter……",
     "characters": "linked_characters 为本章必须出场的人物；须符合 character 结构化字段与 formatted；见 character_relations……",
     "knowledge": "linked_knowledge 为本章写作硬约束……优先 extracted/formatted……",
+    "lore": "落盘前对照根层世界观六卡与故事规则……冲突则就地修订……",
     "narrative_coherence": "时间与因果、人物一致、细节统一、段落衔接……",
     "forbidden": "严禁前后逻辑冲突、人设崩坏、机械降神……",
     "length": "字数须符合 get_novel_info 的 word_count_min/max……",
@@ -1078,11 +1080,12 @@ AI 重写本章细纲中的**一条**（0-based `index`），保留其余条目�
 | `ai_guidance.plots` | 写章须严格按剧情卡顺序与内容 |
 | `ai_guidance.characters` | 关联人物必须出场，且遵守结构化字段 / `formatted` / `character_relations` |
 | `ai_guidance.knowledge` | 关联知识卡为写作手法/文风等硬约束（`extracted`/`formatted` 及结构化槽位字段） |
+| `ai_guidance.lore` | 落盘前对照根层世界观/故事规则；冲突则就地修订，无冲突勿改 |
 | `ai_guidance.narrative_coherence` | 叙事合理连贯：时间因果、人设一致、细节统一、段落衔接、逻辑自洽等 |
 | `ai_guidance.forbidden` | 禁止逻辑冲突、矛盾事实、人设崩坏、擅自加设定、机械降神、元叙述等 |
 | `ai_guidance.length` | 瞄准每章目标中位；`in_band` 后禁止再为篇幅重写 |
 | `ai_guidance.output` | 只输出 Markdown 正文 |
-| `ai_guidance.content_usage` | 本接口不含正文；生成须先有细纲（空则 `generate_detailed_outline`）；生成勿调 `get_chapter_content`；精修才另读旧稿 |
+| `ai_guidance.content_usage` | 本接口不含正文；生成须先有细纲（空则 `generate_detailed_outline`）；生成勿调 `get_chapter_content`；精修才另读旧稿；落盘前对照 `lore` |
 | `node` | 完整 `TreeNode`（含 `detailed_outline`） |
 | `volume` | 父分卷摘要：`id`/`label`/`volume`/`formatted`；无父卷为 `null` |
 | `linked_side_plot_ids` | 仅本章剧情 id（可排序；不含根继承） |

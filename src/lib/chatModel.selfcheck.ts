@@ -15,6 +15,7 @@ function emptySettings(over: Partial<SettingsView> = {}): SettingsView {
     chat_model: "deepseek-v4-flash",
     refine_model: "deepseek-reasoner",
     knowledge_model: "deepseek-v4-flash",
+    image_model: "",
     model_catalog: {
       deepseek: ["stale-deepseek"],
       gemini: ["gemini-pro"],

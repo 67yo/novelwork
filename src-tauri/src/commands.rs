@@ -200,6 +200,11 @@ fn llm_model(settings: &AppSettings) -> String {
     task_model(&settings.chat_model, &settings.default_model)
 }
 
+/// 文生图提示词：`image_model`，空则跟 Chat。
+fn image_prompt_model(settings: &AppSettings) -> String {
+    task_model(&settings.image_model, &llm_model(settings))
+}
+
 /// Chat 面板覆盖：非空则写入本轮 settings 对应字段，供下游 task_model 使用。
 fn apply_chat_model_override(target: &mut String, model: Option<&str>) {
     if let Some(m) = model.map(str::trim).filter(|s| !s.is_empty()) {
@@ -241,6 +246,7 @@ pub fn get_settings(state: State<'_, AppState>) -> Result<SettingsView, String> 
         chat_model: s.chat_model,
         refine_model: s.refine_model,
         knowledge_model: s.knowledge_model,
+        image_model: s.image_model,
         model_catalog: catalog,
         ui_locale: s.ui_locale,
         mcp_port: if s.mcp_port == 0 {
@@ -324,6 +330,10 @@ pub fn save_settings(
     set_model(&mut s.chat_model, input.chat_model);
     set_model(&mut s.refine_model, input.refine_model);
     set_model(&mut s.knowledge_model, input.knowledge_model);
+    // 空字符串表示跟随 Chat，与其它槽位「跳过空值」不同。
+    if let Some(m) = input.image_model {
+        s.image_model = m.trim().to_string();
+    }
     if let Some(loc) = input.ui_locale {
         let t = loc.trim();
         if !t.is_empty() {
@@ -5625,7 +5635,7 @@ pub async fn generate_chapter(
         state: &*state,
         key: novel_id.clone(),
     };
-    const TOTAL: u32 = 7;
+    const TOTAL: u32 = 8;
     let mut settings = state.db.get_settings().map_err(|e| e.to_string())?;
     // Chat 面板所选模型；非空时覆盖本轮 chat_model。
     apply_chat_model_override(&mut settings.chat_model, model.as_deref());
@@ -5777,7 +5787,23 @@ pub async fn generate_chapter(
         }
     }
 
-    emit_chapter_progress(&app, &novel_id, "saving", 7, TOTAL);
+    emit_chapter_progress(&app, &novel_id, "check_lore", 7, TOTAL);
+    let lore = lore_canon_text(&tree);
+    let lore_fixed = verify_lore_pass(
+        &app,
+        &state,
+        &settings,
+        &novel_id,
+        &model,
+        loc,
+        &lore,
+        &mut content,
+        used_mock,
+        cancel.clone(),
+    )
+    .await?;
+
+    emit_chapter_progress(&app, &novel_id, "saving", 8, TOTAL);
     let words = count_words(&content);
     content.push_str(&prompts::generate_footer(loc, &node_id, &model));
     fs::write(chapter_path(&novel_id, &node_id), &content).map_err(|e| e.to_string())?;
@@ -5786,6 +5812,9 @@ pub async fn generate_chapter(
     let _ = save_tree(tree);
     // 预生成不抽取章节记忆；记忆仅手动抽取。
     let mut message = prompts::generate_done_msg(loc, &model, words, used_mock, repaired_n);
+    if lore_fixed {
+        message.push_str(&prompts::lore_fixed_note(loc));
+    }
     if !word_count_ok(words, wmin, wmax) {
         message.push_str(&prompts::word_count_off_note(loc, words, wmin, wmax));
     }
@@ -5813,7 +5842,7 @@ pub async fn refine_chapter(
         state: &*state,
         key: novel_id.clone(),
     };
-    const TOTAL: u32 = 3;
+    const TOTAL: u32 = 5;
     let mut settings = state.db.get_settings().map_err(|e| e.to_string())?;
     // Chat 面板所选模型；非空时覆盖本轮 chat_model。
     apply_chat_model_override(&mut settings.chat_model, model.as_deref());
@@ -5920,7 +5949,7 @@ pub async fn refine_chapter(
     );
     emit_chapter_progress(&app, &novel_id, "refining", 3, TOTAL);
     // 字数只靠提示词约束，不再额外跑篇幅校准。
-    let (content, used_mock) = llm_complete(
+    let (mut content, used_mock) = llm_complete(
         Some(&app),
         &state,
         &settings,
@@ -5931,6 +5960,22 @@ pub async fn refine_chapter(
         Some(cancel.clone()),
     )
     .await?;
+    emit_chapter_progress(&app, &novel_id, "check_lore", 4, TOTAL);
+    let lore = lore_canon_text(&tree);
+    let lore_fixed = verify_lore_pass(
+        &app,
+        &state,
+        &settings,
+        &novel_id,
+        &refine_model,
+        loc,
+        &lore,
+        &mut content,
+        used_mock,
+        cancel.clone(),
+    )
+    .await?;
+    emit_chapter_progress(&app, &novel_id, "saving", 5, TOTAL);
     fs::write(chapter_path(&novel_id, &node_id), &content).map_err(|e| e.to_string())?;
     let words = count_words(&content);
     let mut tree = get_tree(novel_id.clone())?;
@@ -5939,6 +5984,9 @@ pub async fn refine_chapter(
     // 精修不再自动抽取记忆；请在记忆面板手动提取。
     let mut message =
         prompts::refine_done_msg(loc, &refine_model, linked_n, words, used_mock, full_body);
+    if lore_fixed {
+        message.push_str(&prompts::lore_fixed_note(loc));
+    }
     if !word_count_ok(words, wmin, wmax) {
         message.push_str(&prompts::word_count_off_note(loc, words, wmin, wmax));
     }
@@ -5962,6 +6010,131 @@ fn strip_outer_md_fence(s: &str) -> String {
         lines.pop();
     }
     lines.join("\n").trim().to_string()
+}
+
+/// ponytail: 设定校对一轮 LLM（判断+就地修订）；总长封顶以免章+设定撑爆上下文。升级：分卡评审若误漏增多。
+const LORE_VERIFY_TOTAL_CAP: usize = 12_000;
+
+fn lore_canon_text(tree: &NovelTree) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    for slot in WV_MAIN_SLOTS {
+        let Some(n) = knowledge_by_slot(tree, slot) else {
+            continue;
+        };
+        let body = crate::core_laws_fmt::knowledge_card_inject_body(tree, n);
+        let t = crate::kb_context::truncate_chars(
+            &body,
+            crate::core_laws_fmt::knowledge_card_inject_cap(n),
+        );
+        if t.trim().chars().count() < 12 {
+            continue;
+        }
+        let title = n.label.trim();
+        parts.push(if title.is_empty() {
+            t
+        } else {
+            format!("【{title}】\n{t}")
+        });
+    }
+    crate::kb_context::truncate_chars(&parts.join("\n\n"), LORE_VERIFY_TOTAL_CAP)
+}
+
+fn lore_verify_accepts_patch(original: &str, out: &str) -> Option<String> {
+    let t = strip_outer_md_fence(out);
+    let head = t.lines().next().unwrap_or("").trim();
+    let head_up = head.to_ascii_uppercase();
+    if head_up == "LORE_OK" || head_up.starts_with("LORE_OK") {
+        return None;
+    }
+    if t.trim().chars().count() > original.trim().chars().count() / 2 {
+        Some(t)
+    } else {
+        None
+    }
+}
+
+async fn verify_lore_pass(
+    app: &tauri::AppHandle,
+    state: &State<'_, AppState>,
+    settings: &AppSettings,
+    novel_id: &str,
+    model: &str,
+    loc: PromptLocale,
+    lore: &str,
+    content: &mut String,
+    used_mock: bool,
+    cancel: Arc<AtomicBool>,
+) -> Result<bool, String> {
+    if used_mock || lore.trim().chars().count() < 20 {
+        return Ok(false);
+    }
+    let sys = prompts::verify_lore_chapter_system(loc);
+    let user = prompts::verify_lore_chapter_user(loc, lore, content);
+    match llm_complete(
+        Some(app),
+        state,
+        settings,
+        &sys,
+        &user,
+        Some(model),
+        Some(novel_id),
+        Some(cancel),
+    )
+    .await
+    {
+        Ok((out, mock2)) => {
+            if mock2 {
+                return Ok(false);
+            }
+            if let Some(fixed) = lore_verify_accepts_patch(content, &out) {
+                *content = fixed;
+                return Ok(true);
+            }
+            Ok(false)
+        }
+        Err(e) if e == "cancelled" => Err(e),
+        Err(_) => Ok(false),
+    }
+}
+
+#[cfg(test)]
+mod lore_verify_tests {
+    use super::{lore_canon_text, lore_verify_accepts_patch};
+    use crate::models::NovelTree;
+
+    #[test]
+    fn lore_ok_keeps_original() {
+        let orig = "甲".repeat(80);
+        assert!(lore_verify_accepts_patch(&orig, "LORE_OK").is_none());
+        assert!(lore_verify_accepts_patch(&orig, "lore_ok\nextra").is_none());
+        assert!(lore_verify_accepts_patch(&orig, "```\nLORE_OK\n```").is_none());
+    }
+
+    #[test]
+    fn short_output_rejected() {
+        let orig = "甲".repeat(80);
+        assert!(lore_verify_accepts_patch(&orig, "太短").is_none());
+    }
+
+    #[test]
+    fn long_patch_accepted() {
+        let orig = "甲".repeat(80);
+        let patch = "乙".repeat(50);
+        assert_eq!(
+            lore_verify_accepts_patch(&orig, &patch).as_deref(),
+            Some(patch.as_str())
+        );
+    }
+
+    #[test]
+    fn empty_tree_has_no_lore() {
+        let tree = NovelTree {
+            novel_id: "n".into(),
+            nodes: vec![],
+            edges: vec![],
+        };
+        assert!(lore_canon_text(&tree).trim().is_empty());
+    }
 }
 
 /// 正文编辑区：按用户意见改写单段；模型同全局 Chat（`chat_model`）。
@@ -8596,7 +8769,7 @@ pub async fn generate_cover_prompt(
     };
 
     let settings = state.db.get_settings().map_err(|e| e.to_string())?;
-    let model = llm_model(&settings);
+    let model = image_prompt_model(&settings);
     let sys = prompts::cover_t2i_prompt_system();
     let user = prompts::cover_t2i_prompt_user(&novel.title, &synopsis, &root_outline, &characters);
     let (out, _) = llm_complete(
@@ -8658,7 +8831,7 @@ pub async fn generate_character_sheet_prompt(
     let card = n.character.clone().unwrap_or_default();
     let md = crate::character_fmt::format_character_full(&n.label, &card);
     let settings = state.db.get_settings().map_err(|e| e.to_string())?;
-    let model = llm_model(&settings);
+    let model = image_prompt_model(&settings);
     let sys = prompts::character_sheet_t2i_system();
     let user = prompts::character_sheet_t2i_user(&n.label, &md);
     match llm_complete(

@@ -28,6 +28,7 @@ import {
   type PaperSchemeId,
 } from "@/lib/paperScheme";
 import { UI_THEME_PREFS, useUiTheme, type UiThemePref } from "@/lib/uiTheme";
+import { modelSelectOptions } from "@/lib/chatModel";
 
 type DraftProvider = {
   id: string;
@@ -62,6 +63,7 @@ const aiLogBusy = ref(false);
 const comfyUrl = ref("http://127.0.0.1:8188");
 const comfyWorkflow = ref("");
 const comfyImageWorkflow = ref("");
+const imageModel = ref("");
 const comfyNode = ref("");
 const mcpStatus = ref<McpStatus | null>(null);
 const mcpBusy = ref(false);
@@ -171,6 +173,7 @@ async function load() {
   comfyUrl.value = s.comfyui_url || "http://127.0.0.1:8188";
   comfyWorkflow.value = s.comfyui_workflow || "";
   comfyImageWorkflow.value = s.comfyui_image_workflow || "";
+  imageModel.value = (s.image_model || "").trim();
   comfyNode.value = s.comfyui_prompt_node || "";
   setLocalePreference(uiLocale.value);
   void refreshMcpStatus();
@@ -437,6 +440,7 @@ async function save() {
       comfyui_workflow: comfyWorkflow.value,
       comfyui_prompt_node: comfyNode.value.trim(),
       comfyui_image_workflow: comfyImageWorkflow.value,
+      image_model: imageModel.value,
     });
     settings.value = s;
     setLocalePreference((s.ui_locale || "system") as LocalePreference);
@@ -466,6 +470,12 @@ function onLocaleChange() {
   setLocalePreference(uiLocale.value);
 }
 
+const imageModelOptions = computed(() =>
+  settings.value
+    ? modelSelectOptions(settings.value, imageModel.value, t("settings.deprecated"))
+    : [],
+);
+
 const scrollRoot = ref<HTMLElement | null>(null);
 const activeSection = ref("language");
 
@@ -474,6 +484,7 @@ const settingsSections = computed(() => [
   { id: "theme", label: t("settings.theme") },
   { id: "paper", label: t("settings.paper") },
   { id: "ai-log", label: t("settings.aiLog") },
+  { id: "comfy", label: t("settings.comfyTitle") },
   { id: "skills", label: t("settings.skills") },
   { id: "compat", label: t("settings.compatTitle") },
 ]);
@@ -719,6 +730,17 @@ function scrollToSection(id: string) {
             :placeholder="t('settings.comfyWorkflowPh')"
           />
           <p class="text-xs text-muted-foreground">{{ t("settings.comfyWorkflowHint") }}</p>
+        </div>
+        <div class="space-y-1">
+          <label class="text-xs text-muted-foreground">{{ t("settings.imageModel") }}</label>
+          <select
+            v-model="imageModel"
+            class="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+          >
+            <option value="">{{ t("settings.imageModelEmpty") }}</option>
+            <option v-for="m in imageModelOptions" :key="m.id" :value="m.id">{{ m.label }}</option>
+          </select>
+          <p class="text-xs text-muted-foreground">{{ t("settings.imageModelHint") }}</p>
         </div>
         <div class="space-y-1">
           <label class="text-xs text-muted-foreground">{{ t("settings.comfyImageWorkflow") }}</label>

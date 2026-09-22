@@ -68,6 +68,33 @@ fn chat_completions_url(base: &str) -> String {
     format!("{}/chat/completions", base.trim().trim_end_matches('/'))
 }
 
+fn merge_system_user(system: &str, user: &str) -> String {
+    let s = system.trim();
+    if s.is_empty() {
+        user.to_string()
+    } else {
+        format!("{s}\n\n{user}")
+    }
+}
+
+/// DashScope 多模态 / 文生图模型：首条必须是 `user`，且 `content` 必须是列表。
+fn chat_messages(protocol: &str, system: &str, user: &str) -> Value {
+    if protocol == crate::models::PROTOCOL_ALIYUN {
+        json!([{
+            "role": "user",
+            "content": [{
+                "type": "text",
+                "text": merge_system_user(system, user),
+            }],
+        }])
+    } else {
+        json!([
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ])
+    }
+}
+
 /// Kimi / Moonshot 部分模型（如 K2）只允许 temperature=1。
 fn chat_temperature_with_hint(model: &str, label: &str, base_url: &str, preferred: f32) -> f32 {
     let blob = format!("{model} {label} {base_url}").to_ascii_lowercase();
@@ -129,10 +156,7 @@ pub async fn complete(
     let url = chat_completions_url(ep.base_url);
     let mut body = json!({
         "model": api_model,
-        "messages": [
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
-        ],
+        "messages": chat_messages(ep.protocol, system, user),
         "temperature": chat_temperature_with_hint(
             &api_model,
             ep.label,
@@ -341,7 +365,27 @@ mod rig_bridge {
 
 #[cfg(test)]
 mod tests {
-    use super::{chat_completions_url, chat_temperature_with_hint};
+    use super::{chat_completions_url, chat_messages, chat_temperature_with_hint};
+    use crate::models::{PROTOCOL_ALIYUN, PROTOCOL_OPENAI};
+
+    #[test]
+    fn aliyun_messages_are_user_with_content_list() {
+        let m = chat_messages(PROTOCOL_ALIYUN, "sys", "hi");
+        assert_eq!(m.as_array().map(|a| a.len()), Some(1));
+        assert_eq!(m[0]["role"], "user");
+        assert!(m[0]["content"].is_array());
+        assert_eq!(m[0]["content"][0]["type"], "text");
+        assert_eq!(m[0]["content"][0]["text"], "sys\n\nhi");
+    }
+
+    #[test]
+    fn openai_messages_keep_system_string() {
+        let m = chat_messages(PROTOCOL_OPENAI, "sys", "hi");
+        assert_eq!(m[0]["role"], "system");
+        assert_eq!(m[0]["content"], "sys");
+        assert_eq!(m[1]["role"], "user");
+        assert_eq!(m[1]["content"], "hi");
+    }
 
     #[test]
     fn chat_url_uses_base_as_is() {

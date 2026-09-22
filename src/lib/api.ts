@@ -29,6 +29,7 @@ export type SettingsView = {
   chat_model: string;
   refine_model: string;
   knowledge_model: string;
+  image_model: string;
   model_catalog: ModelCatalog;
   ui_locale: string;
   mcp_port: number;
@@ -376,6 +377,7 @@ export const api = {
     chat_model?: string | null;
     refine_model?: string | null;
     knowledge_model?: string | null;
+    image_model?: string | null;
     ui_locale?: string | null;
     mcp_port?: number | null;
     mcp_enabled?: boolean | null;
@@ -404,6 +406,7 @@ export const api = {
         chatModel: input.chat_model ?? null,
         refineModel: input.refine_model ?? null,
         knowledgeModel: input.knowledge_model ?? null,
+        imageModel: input.image_model ?? null,
         uiLocale: input.ui_locale ?? null,
         mcpPort: input.mcp_port ?? null,
         mcpEnabled: input.mcp_enabled ?? null,

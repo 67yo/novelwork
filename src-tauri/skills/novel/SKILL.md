@@ -12,7 +12,7 @@ trigger: true
 ## 何时用哪个工具
 
 了解全书 → `get_novel_info`（含 `novel.features` + 根上人物/剧情/知识卡 + `volumes`）。不要一上来 `get_tree`。公共库不是小说设定源。
-写/改某一章 → `get_chapter_write_context`（本会话已有根则 `include_root=false`，同卷已有则 `include_volume=false`；沿用当前 session）。遵守返回的 `ai_guidance`。不要叠 `get_novel_info`+`get_chapter_info`。细纲空则先 `generate_detailed_outline`（条数跟每章字数走）。只读正文 → `get_chapter_content`。落盘 → `set_chapter_content`（`in_band` 为真则不要再为字数改）。
+写/改某一章 → `get_chapter_write_context`（本会话已有根则 `include_root=false`，同卷已有则 `include_volume=false`；沿用当前 session）。遵守返回的 `ai_guidance`。不要叠 `get_novel_info`+`get_chapter_info`。细纲空则先 `generate_detailed_outline`（条数跟每章字数走）。只读正文 → `get_chapter_content`。落盘 → `set_chapter_content`（`in_band` 为真则不要再为字数改）。落盘前对照根层世界观/故事规则：冲突则就地修订，无冲突勿改。
 分镜头 / MiniMax 视频：`split_chapter_shots` / `generate_shot_comfy_prompts` 只返回材料（`saved: false`），再 `set_chapter_shots` 覆盖。提交 → `submit_chapter_shots_comfyui`。只读 → `get_chapter_shots`。
 章节记忆 → `get_chapter_memory` / `list_chapter_memory`；手动改 → `set_chapter_memory`；按正文抽取 → `regenerate_chapter_memory`。
 改章标题/简纲/细纲 → `update_chapter_outline`。整份细纲 → `generate_detailed_outline`（材料由工具组装，须遵守世界观/故事规则/功能选项，不要先 `get_tree`/`get_novel_info`）；单条 → `regenerate_detailed_outline_item`。

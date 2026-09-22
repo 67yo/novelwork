@@ -321,6 +321,7 @@ impl Db {
             chat_model: get("chat_model", &d.chat_model),
             refine_model: get("refine_model", &d.refine_model),
             knowledge_model: get("knowledge_model", &d.knowledge_model),
+            image_model: get("image_model", &d.image_model),
             ui_locale: get("ui_locale", &d.ui_locale),
             mcp_port: get("mcp_port", &d.mcp_port.to_string())
                 .parse()
@@ -429,6 +430,7 @@ impl Db {
             ("chat_model", s.chat_model.clone()),
             ("refine_model", s.refine_model.clone()),
             ("knowledge_model", s.knowledge_model.clone()),
+            ("image_model", s.image_model.clone()),
             ("ui_locale", s.ui_locale.clone()),
             ("mcp_port", s.mcp_port.to_string()),
             (

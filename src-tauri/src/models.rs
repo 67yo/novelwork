@@ -199,6 +199,9 @@ pub struct AppSettings {
     pub chat_model: String,
     pub refine_model: String,
     pub knowledge_model: String,
+    /// 文生图提示词（封面 / 人物设定图）；空则跟 `chat_model`
+    #[serde(default)]
+    pub image_model: String,
     /// UI 语言：system | en | zh-CN | zh-TW | ja | de | fr
     pub ui_locale: String,
     /// MCP Streamable HTTP 端口
@@ -485,6 +488,7 @@ impl Default for AppSettings {
             chat_model: "deepseek-v4-flash".into(),
             refine_model: "deepseek-reasoner".into(),
             knowledge_model: "deepseek-v4-flash".into(),
+            image_model: String::new(),
             ui_locale: "system".into(),
             mcp_port: default_mcp_port(),
             mcp_enabled: true,
@@ -507,6 +511,7 @@ pub struct SettingsView {
     pub chat_model: String,
     pub refine_model: String,
     pub knowledge_model: String,
+    pub image_model: String,
     pub model_catalog: ModelCatalog,
     pub ui_locale: String,
     pub mcp_port: u16,
@@ -537,6 +542,8 @@ pub struct SaveSettingsInput {
     pub refine_model: Option<String>,
     #[serde(default, alias = "knowledge_model")]
     pub knowledge_model: Option<String>,
+    #[serde(default, alias = "image_model")]
+    pub image_model: Option<String>,
     #[serde(default, alias = "ui_locale")]
     pub ui_locale: Option<String>,
     #[serde(default, alias = "mcp_port")]

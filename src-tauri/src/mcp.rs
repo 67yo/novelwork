@@ -2399,11 +2399,12 @@ fn chapter_write_ai_guidance() -> Value {
         "plots": "linked_plots 的 inherited_from 为 root|volume|chapter：根/分卷继承按各自 order；本章剧情严格按 linked_side_plot_ids 的 order 0→N。不得混序或改写要点。章节继承根 ∪ 所属分卷（若有）。",
         "characters": "linked_characters 为本章必须出场的人物；正文中须全部出现，并符合 character 结构化字段与 formatted 全文；人物关系见 character_relations。",
         "knowledge": "linked_knowledge 为写作硬约束。世界观/故事规则与根、卷直连知识不向章继承；写章用 get_chapter_write_context 分层取根→卷→章并去重。根上 slot=write_prompts（生成/精修）及其左右子卡不在 linked_knowledge 里，由应用接到用户提示词后。优先遵守 formatted。禁止另起风格。",
+        "lore": "落盘前对照 get_chapter_write_context 根层世界观六卡与故事规则：若正文违背硬设定（法则、地理、权力、生死历法、信息规则、故事红线等），就地修订冲突句段，禁止整章重写或另起主线；无冲突则不要为「校验」改文。",
         "narrative_coherence": "生成本章正文须保证叙事合理、连贯、可读，并与 node.outline（简纲）、node.detailed_outline（细纲，优先）及前序章节记忆（若已提供）一致。①时间与因果：事件按可理解的时间顺序展开；后文不得推翻前文已确立的事实；场景/视角切换须有可感知过渡。②人物一致：决策与言行须符合人设与当前处境、认知；禁止无铺垫的性格、立场、关系或能力突变。③细节一致：人名、称谓、地名、物品、数量、伤势、天气、时辰等须前后统一。④段落衔接：相邻段落须有因果、时间或空间上的延续；禁止硬切、跳剪式跳跃导致读者无法重建过程。⑤逻辑自洽：禁止为推剧情而强行降智、反常行为或违背常识的设定（除非章纲/知识卡明确为世界观规则）。⑥节奏与情绪：变化须符合简纲/细纲与剧情卡推进，禁止情绪或基调无源反转。⑦信息有效：每段应推进情节或刻画人物/氛围，禁止无意义同义反复与凑字数。",
         "forbidden": "严禁：前后段落、场景或时间线逻辑冲突；同一事实在章内前后矛盾；人物言行与人设/当前处境不符且无解释；未在简纲/细纲或 linked_plots 中出现的重大新设定、无关支线或另起主线；缺乏因果铺垫的「机械降神」式巧合解决核心矛盾（除非大纲明确要求）；场景硬切、对话说明文式生硬灌设定；与 linked_plots 顺序或要点相悖的叙述；复制粘贴式重复段落；打破第四面墙；输出写作过程、自我评价、提纲清单或评分。",
         "length": "正文字数瞄准 get_chapter_write_context 的 word_count_min/max 中位，按细纲条数均分篇幅。±60 只是标注带，不是反复重写门槛。一次写完；偏长只删冗、偏短只补场面。set_chapter_content 若 in_band=true 禁止再为字数改正文；明显超限也只改一轮，禁止整章重写。",
         "output": "只输出本章 Markdown 正文（可用 `# 章标题` 开头，或直接正文）；禁止输出注释、写作说明、「本章完」、检查清单或自我评分。",
-        "content_usage": "写章用 get_chapter_write_context（不含正文）。本会话已提交过根则 include_root=false；同卷已提交则 include_volume=false；不要新开 session。生成新章：细纲空则先 generate_detailed_outline；禁止 get_chapter_content。精修：再 get_chapter_content 读旧稿后改。"
+        "content_usage": "写章用 get_chapter_write_context（不含正文）。本会话已提交过根则 include_root=false；同卷已提交则 include_volume=false；不要新开 session。生成新章：细纲空则先 generate_detailed_outline；禁止 get_chapter_content。精修：再 get_chapter_content 读旧稿后改。落盘前对照根层世界观/故事规则自检一轮（见 lore）。"
     })
 }
 
@@ -3840,6 +3841,7 @@ mod tests {
             "plots",
             "characters",
             "knowledge",
+            "lore",
             "narrative_coherence",
             "forbidden",
             "length",

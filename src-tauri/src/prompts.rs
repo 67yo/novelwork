@@ -477,6 +477,41 @@ pub fn repair_chapter_user(
     }
 }
 
+pub fn verify_lore_chapter_system(loc: PromptLocale) -> String {
+    let body = if loc.is_zh() {
+        "你是 Novel Work 设定校对引擎。对照「世界观与故事规则」检查本章正文是否违反硬设定（法则、地理、权力、生死历法、信息规则、故事红线等）。\n\
+         - 无冲突：只输出一行 LORE_OK（不要输出正文或解释）。\n\
+         - 有冲突：在不大改情节骨架的前提下就地修订冲突句段，输出完整正文 Markdown。禁止另起炉灶；禁止删除已有合理段落；禁止为凑字数重写全文。\n\
+         **不做字数校验**。勿复述设定清单。"
+    } else {
+        "You are Novel Work’s lore-check engine. Compare this chapter against Worldview & Story Rules for hard-setting violations (laws, geography, power, death/calendar, information rules, story redlines, etc.).\n\
+         - No conflict: output one line LORE_OK only (no body, no explanation).\n\
+         - Conflict: patch the offending passages in place without overhauling the plot skeleton; output full chapter Markdown. Do not restart; do not delete sound passages; do not rewrite for word count.\n\
+         **No length check.** Do not restate the lore list."
+    };
+    format!("{body}\n{}", loc.language_rule())
+}
+
+pub fn verify_lore_chapter_user(loc: PromptLocale, lore: &str, current: &str) -> String {
+    if loc.is_zh() {
+        format!(
+            "——— 世界观与故事规则 ———\n{lore}\n\n——— 当前正文 ———\n{current}\n\n无冲突则只输出 LORE_OK；有冲突则输出修订后的完整本章正文。"
+        )
+    } else {
+        format!(
+            "——— Worldview & story rules ———\n{lore}\n\n——— Current body ———\n{current}\n\nIf no conflict, output LORE_OK only; if conflict, output the full patched chapter body."
+        )
+    }
+}
+
+pub fn lore_fixed_note(loc: PromptLocale) -> String {
+    if loc.is_zh() {
+        " 已按世界观与故事规则校对并修订。".into()
+    } else {
+        " Patched to match worldview and story rules.".into()
+    }
+}
+
 pub fn generate_footer(loc: PromptLocale, node_id: &str, model: &str) -> String {
     if loc.is_zh() {
         format!(
