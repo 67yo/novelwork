@@ -16,15 +16,15 @@ trigger: true
 分镜头 / MiniMax 视频：`split_chapter_shots` / `generate_shot_comfy_prompts` 只返回材料（`saved: false`），再 `set_chapter_shots` 覆盖。提交 → `submit_chapter_shots_comfyui`。只读 → `get_chapter_shots`。
 章节记忆 → `get_chapter_memory` / `list_chapter_memory`；手动改 → `set_chapter_memory`；按正文抽取 → `regenerate_chapter_memory`。
 改章标题/简纲/细纲 → `update_chapter_outline`。整份细纲 → `generate_detailed_outline`（材料由工具组装，须遵守世界观/故事规则/功能选项，不要先 `get_tree`/`get_novel_info`）；单条 → `regenerate_detailed_outline_item`。
-补分卷 → `add_volume`（结构化 `volume`，勿写 `outline`）。读/改 → `get_volume` / `upsert_volume`。
-补章节卡 → `add_chapter`。
-全树/找节点 id → `get_tree`（多数情况不必：`node_id` 可直接传「第N章」/标题）。画布整列 → `layout_tree`。
+补分卷 → `add_volume`（结构化 `volume`，勿写 `outline`；可 `items[]` 批量）。读/改 → `get_volume` / `upsert_volume`。
+补章节卡 → `add_chapter`（可 `items[]` 批量）。
+全树/找节点 id → `get_tree`（多数情况不必：`node_id` 可直接传「第N章」/标题）。画布整列 → `layout_tree`（批量加卡后调用）。
 建书/改书 → `create_novel` / `update_novel`。列书 → `list_novels`。
 世界观 → `get_worldview`；缺卡先 `ensure_worldview`；生成 `generate_worldview`；写入 `apply_worldview`。故事规则 → `get_story_rules` / `apply_story_rules` / `generate_story_rules`。
-人物卡 → `get_character_card`（指定 `node_id`）/ `upsert_character_card`（无 `personality`；回执不含整卡）。
-剧情卡 → `upsert_plot_card`（回执不含整卡）。
-知识卡：完整导入 `fill_knowledge_card`（回执只有字数）；AI 提炼 `search_knowledge` 最多一轮再 `upsert_knowledge_card`。根上 `slot=write_prompts`（生成/精修）及其左右子卡不进 `linked_knowledge`；Chat 写章由应用按侧别接到用户提示后（话含「精修」用右侧，否则生成用左侧）。
-公共知识卡：`list_public_knowledge_cards` / `upsert_public_knowledge_card` / `archive_public_knowledge_card` / `add_public_knowledge_card`。
+人物卡 → `get_character_card`（指定 `node_id`）/ `upsert_character_card`（无 `personality`；回执不含整卡；可 `items[]` 批量）。
+剧情卡 → `upsert_plot_card`（回执不含整卡；可 `items[]` 批量）。
+知识卡：完整导入 `fill_knowledge_card`（回执只有字数）；AI 提炼 `search_knowledge` 最多一轮再 `upsert_knowledge_card`（可 `items[]` 批量）。根上 `slot=write_prompts`（生成/精修）及其左右子卡不进 `linked_knowledge`；Chat 写章由应用按侧别接到用户提示后（话含「精修」用右侧，否则生成用左侧）。
+公共知识卡：`list_public_knowledge_cards` / `upsert_public_knowledge_card` / `archive_public_knowledge_card` / `add_public_knowledge_card`（后两者可 `items[]` 批量）。
 连线 → `link_nodes`（根上固定槽：世界大纲 `wv`、故事规则 `sr`、生成/精修 `wp`；卷/章仍 left/right/top/bottom）。拆线 → `unlink_nodes`（不可拆世界观/故事规则，也不可拆根↔生成/精修卡）。删卡 → `delete_node`（不可删生成/精修枢纽卡）。
 公共库：`list_knowledge` → `search_knowledge`；入库 `import_knowledge`；归档 `archive_knowledge`；永久删 `delete_knowledge`。
 

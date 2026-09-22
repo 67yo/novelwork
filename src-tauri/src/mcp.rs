@@ -441,15 +441,15 @@ fn tool_defs() -> Vec<Tool> {
         ),
         tool(
             "add_volume",
-            "Add an optional volume (分卷) under the novel root (root.bottom → volume.top). Volumes can link characters/plots/knowledge (knowledge does not inherit to chapters). Write structured `volume` payload (positioning / layers / conflicts / key_beats); do not use outline.",
-            json!({
+            "Add an optional volume (分卷) under the novel root (root.bottom → volume.top). Volumes can link characters/plots/knowledge (knowledge does not inherit to chapters). Write structured `volume` payload (positioning / layers / conflicts / key_beats); do not use outline. Pass items[] to add many.",
+            with_batch_items(json!({
                 "type":"object",
                 "properties":{
                     "novel_id":{"type":"string","description":"省略则用工作台当前选中"},
                     "title":{"type":"string"},
                     "volume":{"type":"object","description":"VolumePayload：positioning, layer_setup/confrontation/resolution, conflict_*, key_beats"}
                 }
-            }),
+            })),
         ),
         tool(
             "get_volume",
@@ -486,8 +486,8 @@ fn tool_defs() -> Vec<Tool> {
         ),
         tool(
             "add_chapter",
-            "Add a chapter card. Hang on volume if link_to is a volume (or last chapter under that volume); else first chapter on root, later chapters chain by canvas y.",
-            json!({
+            "Add a chapter card. Hang on volume if link_to is a volume (or last chapter under that volume); else first chapter on root, later chapters chain by canvas y. Pass items[] to add many.",
+            with_batch_items(json!({
                 "type":"object",
                 "properties":{
                     "novel_id":{"type":"string","description":"省略则用工作台当前选中"},
@@ -495,7 +495,7 @@ fn tool_defs() -> Vec<Tool> {
                     "outline":{"type":"string"},
                     "link_to":{"type":"string","description":"宿主：volume / chapter / root；省略则挂末章或根"}
                 }
-            }),
+            })),
         ),
         tool(
             "update_chapter_outline",
@@ -715,8 +715,8 @@ fn tool_defs() -> Vec<Tool> {
         ),
         tool(
             "upsert_character_card",
-            "Create or update a character card (partial merge). Returns ok/node_id/label only — do not echo the full card back. Pass flat fields and/or `character`. Do not send personality. New cards hang on a chapter unless link_to set.",
-            json!({
+            "Create or update a character card (partial merge). Returns ok/node_id/label only — do not echo the full card back. Pass flat fields and/or `character`. Do not send personality. New cards hang on a chapter unless link_to set. Pass items[] to add many.",
+            with_batch_items(json!({
                 "type":"object",
                 "properties":{
                     "novel_id":{"type":"string","description":"省略则用工作台当前选中"},
@@ -740,12 +740,12 @@ fn tool_defs() -> Vec<Tool> {
                     "constraints":{"type":"string","description":"写章注入全文；通常由结构化字段自动生成"},
                     "link_to":{"type":"string","description":"章/根 id，或 root/novel。新建省略则挂当前选中章，否则末章，再否则根"}
                 }
-            }),
+            })),
         ),
         tool(
             "upsert_plot_card",
-            "Create or update a plot card. Returns ok/node_id/label only. New cards hang on a chapter (chapter.right → plot.left). Omit link_to: selection, else last chapter, else root.",
-            json!({
+            "Create or update a plot card. Returns ok/node_id/label only. New cards hang on a chapter (chapter.right → plot.left). Omit link_to: selection, else last chapter, else root. Pass items[] to add many.",
+            with_batch_items(json!({
                 "type":"object",
                 "properties":{
                     "novel_id":{"type":"string","description":"省略则用工作台当前选中"},
@@ -754,14 +754,13 @@ fn tool_defs() -> Vec<Tool> {
                     "outline":{"type":"string"},
                     "status":{"type":"string"},
                     "link_to":{"type":"string","description":"章/根 id，或 root/novel。新建省略则挂当前选中章，否则末章，再否则根"}
-                },
-                "required":["title"]
-            }),
+                }
+            })),
         ),
         tool(
             "upsert_knowledge_card",
-            "Create or update a tree knowledge card (partial). Returns ok/node_id/label/slot only — do not echo extracted. Worldview/story_rules: set slot or node_id + structured payload; extracted auto-synced. Fixed root slots update in place.",
-            json!({
+            "Create or update a tree knowledge card (partial). Returns ok/node_id/label/slot only — do not echo extracted. Worldview/story_rules: set slot or node_id + structured payload; extracted auto-synced. Fixed root slots update in place. Pass items[] to add many.",
+            with_batch_items(json!({
                 "type":"object",
                 "properties":{
                     "novel_id":{"type":"string","description":"省略则用工作台当前选中"},
@@ -783,7 +782,7 @@ fn tool_defs() -> Vec<Tool> {
                     "constraint_redlines":{"type":"object"},
                     "link_to":{"type":"string","description":"章/根 id，或 root/novel。新建省略则挂当前选中章，否则末章，再否则根"}
                 }
-            }),
+            })),
         ),
         tool(
             "fill_knowledge_card",
@@ -810,8 +809,8 @@ fn tool_defs() -> Vec<Tool> {
         ),
         tool(
             "upsert_public_knowledge_card",
-            "Create or update a shared knowledge card in the catalog. Pass title+extracted, or omit them to copy the current/selected tree knowledge card (node_id). Does not attach to a novel.",
-            json!({
+            "Create or update a shared knowledge card in the catalog. Pass title+extracted, or omit them to copy the current/selected tree knowledge card (node_id). Does not attach to a novel. Pass items[] to add many.",
+            with_batch_items(json!({
                 "type":"object",
                 "properties":{
                     "id":{"type":"string","description":"有则更新该公共知识卡"},
@@ -822,7 +821,7 @@ fn tool_defs() -> Vec<Tool> {
                     "novel_id":{"type":"string","description":"从树上知识卡复制时用"},
                     "node_id":{"type":["string","integer"],"description":"树上知识卡 id 或唯一标题；省略则用工作台当前选中"}
                 }
-            }),
+            })),
         ),
         tool(
             "archive_public_knowledge_card",
@@ -838,16 +837,15 @@ fn tool_defs() -> Vec<Tool> {
         ),
         tool(
             "add_public_knowledge_card",
-            "Copy a shared catalog knowledge card onto the current novel tree and link it to the selected node (chapter/root, or the host of the selected card). Does not bind public libraries as novel canon.",
-            json!({
+            "Copy a shared catalog knowledge card onto the current novel tree and link it to the selected node (chapter/root, or the host of the selected card). Does not bind public libraries as novel canon. Pass items[] to add many.",
+            with_batch_items(json!({
                 "type":"object",
                 "properties":{
                     "public_id":{"type":"string","description":"公共知识卡 id"},
                     "novel_id":{"type":"string","description":"省略则用工作台当前选中"},
                     "link_to":{"type":"string","description":"章/根节点 id，或 root/novel；省略则用当前选中"}
-                },
-                "required":["public_id"]
-            }),
+                }
+            })),
         ),
         tool(
             "link_nodes",
@@ -877,6 +875,80 @@ fn tool_defs() -> Vec<Tool> {
             }),
         ),
     ]
+}
+
+/// ponytail: 逐项 save_tree；若经常一次上百张再改成单次落盘。
+const BATCH_MAX: usize = 50;
+
+fn batch_items_schema() -> Value {
+    json!({
+        "type": "array",
+        "maxItems": 50,
+        "description": "批量添加：每项字段同本工具单条。顶层 novel_id、link_to 作缺省。有 items 时按项执行（最多 50）；失败项不回滚已成功项。整列画布请 layout_tree。",
+        "items": { "type": "object" }
+    })
+}
+
+fn with_batch_items(mut schema: Value) -> Value {
+    if let Some(props) = schema
+        .get_mut("properties")
+        .and_then(|v| v.as_object_mut())
+    {
+        props.insert("items".into(), batch_items_schema());
+    }
+    schema
+}
+
+fn merge_batch_item(parent: &Value, item: &Value) -> Value {
+    let mut obj = item.as_object().cloned().unwrap_or_default();
+    if let Some(p) = parent.as_object() {
+        for key in ["novel_id", "link_to"] {
+            if !obj.contains_key(key) {
+                if let Some(v) = p.get(key) {
+                    obj.insert(key.to_string(), v.clone());
+                }
+            }
+        }
+    }
+    Value::Object(obj)
+}
+
+fn run_maybe_batch(
+    args: Value,
+    f: impl Fn(Value) -> Result<String, String>,
+) -> Result<String, String> {
+    let Some(arr) = args.get("items").and_then(|v| v.as_array()) else {
+        return f(args);
+    };
+    if arr.is_empty() {
+        return Err("items 不能为空".into());
+    }
+    if arr.len() > BATCH_MAX {
+        return Err(format!("一次最多 {BATCH_MAX} 张，请分批"));
+    }
+    let mut results = Vec::with_capacity(arr.len());
+    let mut ok_n = 0usize;
+    for (i, item) in arr.iter().enumerate() {
+        let one = merge_batch_item(&args, item);
+        match f(one) {
+            Ok(s) => {
+                ok_n += 1;
+                let parsed = serde_json::from_str::<Value>(&s).unwrap_or(Value::String(s));
+                results.push(json!({ "ok": true, "index": i, "result": parsed }));
+            }
+            Err(e) => {
+                results.push(json!({ "ok": false, "index": i, "error": e }));
+            }
+        }
+    }
+    Ok(json!({
+        "count": results.len(),
+        "ok": ok_n,
+        "failed": results.len() - ok_n,
+        "results": results,
+        "ai_guidance": "批量已处理。失败项未回滚已成功项。需要整列画布时 layout_tree。不要把整卡贴回对话。",
+    })
+    .to_string())
 }
 
 fn tool(name: &str, description: &str, input_schema: Value) -> Tool {
@@ -1061,10 +1133,10 @@ async fn call_tool(ctx: McpCtx, name: &str, args: Value) -> Result<String, Strin
             Ok(serde_json::to_string_pretty(&tree).unwrap_or_default())
         }
         "layout_tree" => layout_tree(&ctx, args),
-        "add_volume" => add_volume(&ctx, args),
+        "add_volume" => run_maybe_batch(args, |a| add_volume(&ctx, a)),
         "get_volume" => get_volume(&ctx, args),
         "upsert_volume" => upsert_volume(&ctx, args),
-        "add_chapter" => add_chapter(&ctx, args),
+        "add_chapter" => run_maybe_batch(args, |a| add_chapter(&ctx, a)),
         "update_chapter_outline" => update_outline(&ctx, args),
         "generate_detailed_outline" => mcp_generate_detailed_outline(&ctx, args).await,
         "regenerate_detailed_outline_item" => {
@@ -1167,10 +1239,10 @@ async fn call_tool(ctx: McpCtx, name: &str, args: Value) -> Result<String, Strin
             .await?;
             Ok(json!({"items": items}).to_string())
         }
-        "upsert_character_card" => upsert_character(&ctx, args),
+        "upsert_character_card" => run_maybe_batch(args, |a| upsert_character(&ctx, a)),
         "get_character_card" => get_character_card(&ctx, args),
-        "upsert_plot_card" => upsert_plot(&ctx, args),
-        "upsert_knowledge_card" => upsert_knowledge_card(&ctx, args),
+        "upsert_plot_card" => run_maybe_batch(args, |a| upsert_plot(&ctx, a)),
+        "upsert_knowledge_card" => run_maybe_batch(args, |a| upsert_knowledge_card(&ctx, a)),
         "fill_knowledge_card" => fill_knowledge_card(&ctx, args),
         "list_public_knowledge_cards" => {
             let include_archived = args
@@ -1186,7 +1258,9 @@ async fn call_tool(ctx: McpCtx, name: &str, args: Value) -> Result<String, Strin
             }
             Ok(serde_json::to_string_pretty(&cards).unwrap_or_default())
         }
-        "upsert_public_knowledge_card" => upsert_public_knowledge_card(&ctx, args),
+        "upsert_public_knowledge_card" => {
+            run_maybe_batch(args, |a| upsert_public_knowledge_card(&ctx, a))
+        }
         "archive_public_knowledge_card" => {
             let id = arg_str(&args, "id")?;
             let archived = args.get("archived").and_then(|v| v.as_bool()).unwrap_or(true);
@@ -1200,7 +1274,9 @@ async fn call_tool(ctx: McpCtx, name: &str, args: Value) -> Result<String, Strin
                 .ok_or_else(|| "公共知识卡不存在".to_string())?;
             Ok(serde_json::to_string_pretty(&card).unwrap_or_default())
         }
-        "add_public_knowledge_card" => add_public_knowledge_card(&ctx, args),
+        "add_public_knowledge_card" => {
+            run_maybe_batch(args, |a| add_public_knowledge_card(&ctx, a))
+        }
         "link_nodes" => link_nodes(&ctx, args),
         "unlink_nodes" => unlink_nodes(&ctx, args),
         _ => Err(format!("unknown tool: {name}")),
@@ -3855,6 +3931,66 @@ mod tests {
                 "missing {k}"
             );
         }
+    }
+
+    #[test]
+    fn merge_batch_item_inherits_novel_and_link() {
+        let parent = json!({"novel_id": "n", "link_to": "root", "title": "ignore"});
+        let item = json!({"name": "李四"});
+        let m = merge_batch_item(&parent, &item);
+        assert_eq!(m["novel_id"], "n");
+        assert_eq!(m["link_to"], "root");
+        assert_eq!(m["name"], "李四");
+        assert!(m.get("title").is_none());
+    }
+
+    #[test]
+    fn merge_batch_item_keeps_item_link_to() {
+        let m = merge_batch_item(&json!({"link_to": "root"}), &json!({"link_to": "ch-1"}));
+        assert_eq!(m["link_to"], "ch-1");
+    }
+
+    #[test]
+    fn run_maybe_batch_passthrough_without_items() {
+        let out = run_maybe_batch(json!({"name": "x"}), |a| {
+            Ok(format!("one:{}", a["name"].as_str().unwrap()))
+        })
+        .unwrap();
+        assert_eq!(out, "one:x");
+    }
+
+    #[test]
+    fn run_maybe_batch_empty_and_over_max() {
+        assert!(run_maybe_batch(json!({"items": []}), |_| Ok("{}".into())).is_err());
+        let items: Vec<Value> = (0..BATCH_MAX + 1).map(|i| json!({"n": i})).collect();
+        let err = run_maybe_batch(json!({"items": items}), |_| Ok("{}".into())).unwrap_err();
+        assert!(err.contains("50"), "{err}");
+    }
+
+    #[test]
+    fn run_maybe_batch_partial_success() {
+        let args = json!({"novel_id": "n", "items": [{"name": "ok"}, {"name": "bad"}]});
+        let out = run_maybe_batch(args, |a| {
+            if a["name"] == "bad" {
+                Err("nope".into())
+            } else {
+                Ok(r#"{"ok":true,"label":"ok"}"#.into())
+            }
+        })
+        .unwrap();
+        let v: Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(v["count"], 2);
+        assert_eq!(v["ok"], 1);
+        assert_eq!(v["failed"], 1);
+        assert_eq!(v["results"][0]["ok"], true);
+        assert_eq!(v["results"][1]["error"], "nope");
+    }
+
+    #[test]
+    fn with_batch_items_adds_items_property() {
+        let s = with_batch_items(json!({"type":"object","properties":{"title":{"type":"string"}}}));
+        assert!(s["properties"]["items"].is_object());
+        assert_eq!(s["properties"]["title"]["type"], "string");
     }
 
     #[test]

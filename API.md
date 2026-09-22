@@ -754,7 +754,7 @@ MCP 条目另含：`formatted`（写作注入 Markdown，与 `character_fmt` 同
 
 ### 5.4b `layout_tree`
 
-按四带（知识 | 人物 | 根+章节 | 剧情）重写节点 `position` 并落盘。**工作台已去掉一键排版**（卡片位置手动拖动保存）；本工具仍可供 MCP / 全局 Chat 整列。工作台打开时会收到 `novel-tree-changed` 刷新。
+按四带（知识 | 人物 | 根+章节 | 剧情）重写节点 `position` 并落盘。**工作台已去掉一键排版**（卡片位置手动拖动保存）；本工具仍可供 MCP / 全局 Chat 整列。批量 `items[]` 加卡后可调用。工作台打开时会收到 `novel-tree-changed` 刷新。
 
 **请求**
 
@@ -774,9 +774,48 @@ MCP 条目另含：`formatted`（写作注入 Markdown，与 `character_fmt` 同
 
 ---
 
+### 5.4c 批量添加（`items`）
+
+下列加卡工具均可传 `items` 一次添加多张（不必新工具）：`add_chapter`、`add_volume`、`upsert_character_card`、`upsert_plot_card`、`upsert_knowledge_card`、`add_public_knowledge_card`、`upsert_public_knowledge_card`。
+
+- 每项字段同该工具单条请求；顶层 `novel_id`、`link_to` 作为缺省（项上有则覆盖）。  
+- 最多 50。有 `items` 时按项执行，不再读顶层单条载荷（除上述缺省）。  
+- 失败项不回滚已成功项。  
+- 批量后需要整列画布时调 `layout_tree`。
+
+**请求（人物卡）**
+
+```json
+{
+  "novel_id": "n-uuid",
+  "link_to": "root",
+  "items": [
+    { "name": "李四", "role": "配角" },
+    { "name": "王五" }
+  ]
+}
+```
+
+**返回**
+
+```json
+{
+  "count": 2,
+  "ok": 2,
+  "failed": 0,
+  "results": [
+    { "ok": true, "index": 0, "result": { "ok": true, "node_id": "char-…", "label": "李四", "kind": "character" } },
+    { "ok": true, "index": 1, "result": { "ok": true, "node_id": "char-…", "label": "王五", "kind": "character" } }
+  ],
+  "ai_guidance": "批量已处理。失败项未回滚已成功项。需要整列画布时 layout_tree。不要把整卡贴回对话。"
+}
+```
+
+---
+
 ### 5.5 `add_chapter`
 
-在末章之后（按画布 y 排序）追加章节卡；没有章节时挂到根。边为上一节点 **bottom → 新章 top**（首章即根.bottom → 首章.top）。新卡放在宿主下方，不自动排版。  
+在末章之后（按画布 y 排序）追加章节卡；没有章节时挂到根。边为上一节点 **bottom → 新章 top**（首章即根.bottom → 首章.top）。新卡放在宿主下方，不自动排版。一次多张见 §5.4c `items`。  
 `link_to` 可指向**分卷**：挂到该卷末章，卷下尚无章则挂分卷本身（`kind: "chapter"` 边）。
 
 **请求**
@@ -803,7 +842,7 @@ MCP 条目另含：`formatted`（写作注入 Markdown，与 `character_fmt` 同
 
 ### 5.5b `add_volume` / `get_volume` / `upsert_volume`
 
-在根下追加**分卷**节点（可选）。边为根 **bottom → 分卷 top**，`kind: "volume"`。分卷可挂人物/剧情/知识卡；其下章节写作继承「根 ∪ 本卷」。
+在根下追加**分卷**节点（可选）。边为根 **bottom → 分卷 top**，`kind: "volume"`。分卷可挂人物/剧情/知识卡；其下章节写作继承「根 ∪ 本卷」。一次多张见 §5.4c `items`（`upsert_volume` 仍为单条更新）。
 
 结构化字段（`VolumePayload`，深度合并，不打断关联）：
 
@@ -1408,7 +1447,7 @@ AI 重写本章细纲中的**一条**（0-based `index`），保留其余条目�
 
 ### 6.2 `upsert_character_card`
 
-无 `node_id` 则新建；有则更新。新建默认挂**章节卡**（同前）。新卡不自动排版，需要整列时用 `layout_tree`。
+无 `node_id` 则新建；有则更新。新建默认挂**章节卡**（同前）。新卡不自动排版，需要整列时用 `layout_tree`。一次多张见 §5.4c `items`。
 
 **更新是深度合并**：省略的结构化字段保留原值；可传：
 - `character`：`CharacterCard` 本体，**或** `get_character_card` 返回的整条 entry（含 `formatted` 的包装会自动摊平）
@@ -1519,13 +1558,13 @@ AI 重写本章细纲中的**一条**（0-based `index`），保留其余条目�
 | `status` | `active` \| `resolved` \| `deferred` |
 | `link_to` | 章或根的**节点 id**；也可写 `root` / `novel`（解析成小说根的真实 id，不是字面 `"root"`）。**新建且省略时挂当前选中章，否则末章，再否则根**。边为 **章.right → 剧情.left** |
 
-**返回**：`{ "ok": true, "node_id", "label", "kind": "side_plot", "ai_guidance" }`（不回整张 TreeNode）
+**返回**：`{ "ok": true, "node_id", "label", "kind": "side_plot", "ai_guidance" }`（不回整张 TreeNode）。一次多张见 §5.4c `items`。
 
 ---
 
 ### 6.4 `upsert_knowledge_card`
 
-树上知识卡（非公共库本体）。
+树上知识卡（非公共库本体）。一次多张见 §5.4c `items`。
 
 **更新是部分字段**：省略的 `book_ids` / `extract_prompt` / `extracted` **保留原值**（便于 AI 只写回 `extracted`）。
 
@@ -1636,7 +1675,7 @@ AI 重写本章细纲中的**一条**（0-based `index`），保留其余条目�
 
 #### `add_public_knowledge_card`
 
-把目录里的一张卡**复制**成树上知识卡，并挂到指定/当前选中节点（章、根，或人物/剧情/知识卡的宿主）。
+把目录里的一张卡**复制**成树上知识卡，并挂到指定/当前选中节点（章、根，或人物/剧情/知识卡的宿主）。一次多张见 §5.4c `items`。
 
 ```json
 { "public_id": "pkc-uuid", "link_to": "chapter-uuid" }
@@ -1743,6 +1782,7 @@ curl -s http://127.0.0.1:17832/mcp \
 | 改动 | 同步 |
 |------|------|
 | `src-tauri/src/mcp.rs` 工具名 / arguments / 返回 JSON | **本文** + `src-tauri/skills/novel/SKILL.md` + `skills.rs` 工具名测试 |
+| 加卡工具 `items[]` 批量 | `add_chapter` / `add_volume` / `upsert_character_card` / `upsert_plot_card` / `upsert_knowledge_card` / `add_public_knowledge_card` / `upsert_public_knowledge_card` |
 | `CharacterCard` / `KnowledgeCardPayload` / `NovelFeatures` 等树上载荷 | 上表 + `json_linked_*` / `get_*` / `upsert_*` / `patch_*` + 对应 `*_fmt.rs` |
 | 章节 AI 预生成 / 精修 / 记忆策略 | `Project.md`（`project-md-sync.mdc`） |
 | 应用内 Tauri `invoke` 命令 | `src/lib/api.ts`（非 MCP，但常与载荷同改） |
