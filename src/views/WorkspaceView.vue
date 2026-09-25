@@ -261,6 +261,9 @@ const publicPickBusy = ref(false);
 const publicPickWriteSide = ref<WritePromptKind | null>(null);
 const publishBusy = ref(false);
 const chapterMd = ref("");
+/** 正文书盘读取中：列表先出，正文后台加载 */
+const chapterBodyLoading = ref(false);
+let chapterBodyLoadGen = 0;
 /** 章节正文手动编辑 */
 const bodyEditing = ref(false);
 const bodyDraft = ref("");
@@ -657,27 +660,55 @@ async function selectNode(n: TreeNode) {
     const vid = chapterParentVolumeId(n.id, tree.value.nodes, tree.value.edges);
     if (vid && collapsedVolumeIdSet.value.has(vid)) toggleVolumeCollapse(vid);
   }
-  const prevId = selected.value?.id;
+  const prev = selected.value;
+  if (prev?.kind === "chapter" && prev.id !== n.id) {
+    await persistChapterBody();
+  }
+  const prevId = prev?.id;
   const resolved = tree.value?.nodes.find((x) => x.id === n.id) ?? n;
   selected.value = resolved;
   rememberWorkspaceNode(n.id);
-  await api.setWorkspaceSelection(props.id, n.id);
+  void api.setWorkspaceSelection(props.id, n.id);
   notice.value = "";
   chapterResultNotice.value = "";
   copyHint.value = "";
   memoryPanelOpen.value = false;
   pendingParaRewrite.value = null;
   if (prevId !== n.id) clearBodyDiff();
+  const gen = ++chapterBodyLoadGen;
   if (n.kind === "chapter" || n.kind === "side_plot") {
-    chapterMd.value = await api.getChapter(props.id, n.id);
+    chapterBodyLoading.value = n.kind === "chapter";
+    if (n.kind === "chapter") {
+      closeBodySuggest();
+      bodyDraft.value = "";
+      bodyEditing.value = true;
+      bodyAutosaved.value = false;
+      lastSavedBody = "";
+    } else {
+      leaveChapterBodyEdit();
+    }
+    void (async () => {
+      try {
+        const md = await api.getChapter(props.id, n.id);
+        if (gen !== chapterBodyLoadGen || selected.value?.id !== n.id) return;
+        chapterMd.value = md;
+        if (n.kind === "chapter") enterChapterBodyEdit();
+      } catch (e) {
+        if (gen !== chapterBodyLoadGen) return;
+        chapterMd.value = "";
+        chapterResultNotice.value = String(e);
+      } finally {
+        if (gen === chapterBodyLoadGen) chapterBodyLoading.value = false;
+      }
+    })();
   } else {
+    chapterBodyLoading.value = false;
     chapterMd.value = "";
+    leaveChapterBodyEdit();
   }
   if (n.kind === "chapter") {
-    enterChapterBodyEdit();
     void loadChapterShots(n.id, false);
   } else {
-    leaveChapterBodyEdit();
     shots.value = [];
   }
 }
@@ -897,6 +928,7 @@ const bodyNouns = computed(() => {
 });
 
 async function persistChapterBody() {
+  if (chapterBodyLoading.value) return;
   if (!selected.value || selected.value.kind !== "chapter") return;
   while (bodySaveBusy.value) {
     await new Promise((r) => setTimeout(r, 20));
@@ -934,7 +966,7 @@ const scheduleBodyAutosave = useDebounceFn(() => {
 }, 3000);
 
 watch(bodyDraft, () => {
-  if (!bodyEditing.value) return;
+  if (!bodyEditing.value || chapterBodyLoading.value) return;
   bodyAutosaved.value = false;
   scheduleBodyAutosave();
   if (!bodySuggestOn.value) return;
@@ -5798,7 +5830,18 @@ function startResizeChatH(ev: MouseEvent) {
           <template v-else>
             <div class="flex min-h-0 min-w-0 w-full flex-1 flex-col gap-2 overflow-hidden">
             <div
-              v-if="bodyView === 'diff' && bodyDiffReady"
+              v-if="chapterBodyLoading"
+              class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6"
+              role="status"
+              aria-live="polite"
+              aria-busy="true"
+            >
+              <Loader2 class="h-6 w-6 animate-spin text-primary" />
+              <p class="text-sm font-medium text-foreground">{{ t("workspace.bodyLoading") }}</p>
+              <p class="text-center text-xs text-muted-foreground">{{ t("workspace.waitingResult") }}</p>
+            </div>
+            <div
+              v-else-if="bodyView === 'diff' && bodyDiffReady"
               class="chapter-body-diff min-h-0 flex-1 overflow-y-auto px-3 py-2"
             >
               <p class="chapter-body-dock-muted mb-2 text-[11px]">{{ t("workspace.refineDiffHint") }}</p>

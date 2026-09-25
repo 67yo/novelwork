@@ -1,0 +1,66 @@
+# Develop 构建：macOS DMG + Windows NSIS
+#
+# 产出：
+#   macOS   src-tauri/target/release/bundle/dmg/*.dmg
+#   Windows src-tauri/target/release/bundle/nsis/*-setup.exe
+#
+# 未配置代码签名。可在 Actions 手动触发，或推送到 develop。
+
+name: develop-release
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            name: macos
+            bundles: dmg
+            artifact: src-tauri/target/release/bundle/dmg/*.dmg
+          - os: windows-latest
+            name: windows
+            bundles: nsis
+            artifact: src-tauri/target/release/bundle/nsis/*-setup.exe
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm tauri build --bundles ${{ matrix.bundles }}
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Novel-Work-${{ matrix.name }}
+          path: ${{ matrix.artifact }}
+          if-no-files-found: error
