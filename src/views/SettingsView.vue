@@ -294,7 +294,7 @@ function resetAddForm() {
 }
 
 function protocolLabel(id: string) {
-  return t(`settings.protocol.${id}`);
+  return t(`settings.protocol.${id}` as MessageKey);
 }
 
 function protocolAllowsEmptyKey(id: string) {
