@@ -77,7 +77,6 @@ pub fn run() {
     let state = commands::init_state().expect("init app state");
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(state)

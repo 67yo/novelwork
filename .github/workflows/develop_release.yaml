@@ -1,10 +1,13 @@
-# Develop 构建：macOS DMG + Windows NSIS
+# Develop 构建：macOS DMG（Apple Silicon + Intel）+ Windows NSIS
 #
 # 产出：
-#   macOS   src-tauri/target/release/bundle/dmg/*.dmg
-#   Windows src-tauri/target/release/bundle/nsis/*-setup.exe
+#   Apple Silicon  src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+#   Intel          src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
+#   Windows        src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe
 #
-# 未配置代码签名。可在 Actions 手动触发，或推送到 develop。
+# 未配置代码签名。可在 Actions 手动触发，或推送到 main。
+# 首次仍会编译约 40 分钟；之后靠 rust-cache 复用依赖。安装包不进缓存，
+# 避免多份 target 撑破仓库 10GB 缓存上限、互相挤掉。
 
 name: develop-release
 
@@ -17,6 +20,14 @@ on:
 permissions:
   contents: read
 
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "1"
+  CARGO_PROFILE_RELEASE_INCREMENTAL: "true"
+  CARGO_PROFILE_RELEASE_LTO: "false"
+  CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
+  MACOSX_DEPLOYMENT_TARGET: "11.0"
+
 jobs:
   build:
     strategy:
@@ -24,18 +35,32 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            name: macos
+            name: macos-apple-silicon
+            rust_target: aarch64-apple-darwin
             bundles: dmg
-            artifact: src-tauri/target/release/bundle/dmg/*.dmg
+            artifact: src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+          - os: macos-latest
+            name: macos-intel
+            rust_target: x86_64-apple-darwin
+            bundles: dmg
+            artifact: src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
           - os: windows-latest
             name: windows
+            rust_target: x86_64-pc-windows-msvc
             bundles: nsis
-            artifact: src-tauri/target/release/bundle/nsis/*-setup.exe
+            artifact: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe
 
     runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Exclude workspace from Windows Defender
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
+          Add-MpPreference -ExclusionPath "${{ github.workspace }}" -ErrorAction SilentlyContinue
 
       - uses: pnpm/action-setup@v4
         with:
@@ -43,25 +68,30 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
 
       - name: Install protoc
         uses: arduino/setup-protoc@v3
         with:
+          version: "29.3"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: src-tauri -> target
+          shared-key: develop-release-${{ matrix.name }}
+          cache-on-failure: true
 
       - name: Install frontend deps
         run: pnpm install --frozen-lockfile
 
       - name: Build
-        run: pnpm tauri build --bundles ${{ matrix.bundles }}
+        run: pnpm tauri build --bundles ${{ matrix.bundles }} --target ${{ matrix.rust_target }}
 
       - name: Upload installer
         uses: actions/upload-artifact@v4
@@ -69,3 +99,15 @@ jobs:
           name: Novel-Work-${{ matrix.name }}
           path: ${{ matrix.artifact }}
           if-no-files-found: error
+
+      # rust-cache 的 post 在全部 step 之后才写入。先丢掉安装包和最终二进制，
+      # 只留下 deps/build，下次命中后只重链本 crate。
+      - name: Trim target before rust-cache save
+        if: always()
+        shell: bash
+        run: |
+          rel="src-tauri/target/${{ matrix.rust_target }}/release"
+          rm -rf "$rel/bundle" "$rel/nsis" "$rel/wix" "$rel/macos" "$rel/dmg" "$rel/incremental"
+          rm -f "$rel"/nove-work "$rel"/nove-work.exe "$rel"/nove-work.pdb \
+            "$rel"/nove_work.pdb "$rel"/libnove_work.* "$rel"/*.d
+          rm -rf src-tauri/target/debug src-tauri/target/release
