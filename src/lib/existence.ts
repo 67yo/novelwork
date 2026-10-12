@@ -1,3 +1,5 @@
+import { asText } from "@/lib/asText";
+
 /** 存在基础结构化（slot=wv_existence） */
 export type ExistenceData = {
   premise: string;
@@ -22,11 +24,11 @@ export function normalizeExistence(
 ): ExistenceData {
   const d = emptyExistence();
   if (!raw) return d;
-  d.premise = raw.premise ?? "";
-  d.death = raw.death ?? "";
-  d.calendar = raw.calendar ?? "";
-  d.lifespan = raw.lifespan ?? "";
-  d.disease_reproduction = raw.disease_reproduction ?? "";
+  d.premise = asText(raw.premise);
+  d.death = asText(raw.death);
+  d.calendar = asText(raw.calendar);
+  d.lifespan = asText(raw.lifespan);
+  d.disease_reproduction = asText(raw.disease_reproduction);
   return d;
 }
 

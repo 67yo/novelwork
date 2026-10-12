@@ -129,6 +129,7 @@ import {
   ChevronUp,
   Copy,
   GitBranch,
+  GripVertical,
   Hash,
   Layers,
   LayoutGrid,
@@ -197,6 +198,13 @@ import {
   type WritePromptKind,
 } from "@/lib/writePrompts";
 import { migrateRootSpecialEdges } from "@/lib/flowSockets";
+import {
+  FREE_CHAPTER_GROUP,
+  assignChapterYs,
+  manuscriptGroups,
+  relinkChapterChain,
+  reorderInGroup,
+} from "@/lib/chapterListReorder";
 import type { FlowCanvasEdge, FlowCanvasNode, FlowConnect } from "@/lib/flowCanvas";
 import {
   formatStoryRulesBlockExtracted,
@@ -655,7 +663,7 @@ async function maybeMigrateWorldview(tr: NovelTree): Promise<NovelTree> {
   return persistTree(tr);
 }
 
-async function selectNode(n: TreeNode) {
+async function selectNode(n: TreeNode, opts?: { body?: string }) {
   if (tree.value && n.kind === "chapter") {
     const vid = chapterParentVolumeId(n.id, tree.value.nodes, tree.value.edges);
     if (vid && collapsedVolumeIdSet.value.has(vid)) toggleVolumeCollapse(vid);
@@ -676,7 +684,12 @@ async function selectNode(n: TreeNode) {
   pendingParaRewrite.value = null;
   if (prevId !== n.id) clearBodyDiff();
   const gen = ++chapterBodyLoadGen;
-  if (n.kind === "chapter" || n.kind === "side_plot") {
+  if (n.kind === "chapter" && opts?.body !== undefined) {
+    chapterBodyLoading.value = false;
+    closeBodySuggest();
+    chapterMd.value = opts.body;
+    enterChapterBodyEdit();
+  } else if (n.kind === "chapter" || n.kind === "side_plot") {
     chapterBodyLoading.value = n.kind === "chapter";
     if (n.kind === "chapter") {
       closeBodySuggest();
@@ -855,6 +868,7 @@ function pickBodyDiff(index: number, side: "old" | "new") {
 }
 
 function queueChatChapterBody(nodeId: string, beforeRaw: string) {
+  scheduleBodyAutosave.cancel();
   const incoming = stripChapterMeta(beforeRaw);
   const origin =
     bodyDiffOrigin.value?.nodeId === nodeId
@@ -874,6 +888,7 @@ function queueChatChapterBody(nodeId: string, beforeRaw: string) {
 
 async function applyChatChapterBody(nodeId: string, beforeRaw: string) {
   const gen = ++chapterContentGen;
+  scheduleBodyAutosave.cancel();
   if (
     selected.value?.kind === "chapter" &&
     selected.value.id !== nodeId &&
@@ -894,14 +909,15 @@ async function applyChatChapterBody(nodeId: string, beforeRaw: string) {
       : beforeRaw,
   );
   const after = stripChapterMeta(afterRaw);
+  // 丢掉尚未返回的 getChapter，避免用旧稿盖掉 MCP 新稿和对比。
+  chapterBodyLoadGen += 1;
+  chapterBodyLoading.value = false;
   if (selected.value?.id !== nodeId) {
-    await selectNode(n);
+    await selectNode(n, { body: afterRaw });
     if (gen !== chapterContentGen) return;
   } else {
     chapterMd.value = afterRaw;
-    bodyDraft.value = after;
-    lastSavedBody = after;
-    bodyAutosaved.value = false;
+    enterChapterBodyEdit();
   }
   workspaceTab.value = "manuscript";
   if (before === after) return;
@@ -929,6 +945,7 @@ const bodyNouns = computed(() => {
 
 async function persistChapterBody() {
   if (chapterBodyLoading.value) return;
+  if (contentChangePending?.nodeId === selected.value?.id) return;
   if (!selected.value || selected.value.kind !== "chapter") return;
   while (bodySaveBusy.value) {
     await new Promise((r) => setTimeout(r, 20));
@@ -1310,6 +1327,9 @@ onUnmounted(() => {
     contentChangeFlush = null;
   }
   contentChangePending = null;
+  endChapterPointerDrag();
+  chapterDragId.value = null;
+  chapterDropId.value = null;
   stopChapterTick();
   void stopChapterTts();
   // Only clear if still this novel — late clear must not wipe the next workspace.
@@ -2488,6 +2508,72 @@ const manuscriptRows = computed((): ManuscriptRow[] => {
   return rows;
 });
 
+const chapterDragId = ref<string | null>(null);
+const chapterDropId = ref<string | null>(null);
+let stopChapterDragListen: (() => void) | null = null;
+
+function chapterGroupOf(chapterId: string): string | null {
+  for (const [gid, ids] of manuscriptGroups(manuscriptRows.value)) {
+    if (ids.includes(chapterId)) return gid;
+  }
+  return null;
+}
+
+function endChapterPointerDrag() {
+  stopChapterDragListen?.();
+  stopChapterDragListen = null;
+}
+
+async function applyChapterReorder(fromId: string, toId: string) {
+  const tr = tree.value;
+  if (!tr || fromId === toId) return;
+  const gid = chapterGroupOf(fromId);
+  if (!gid || gid !== chapterGroupOf(toId)) return;
+  const ids = manuscriptGroups(manuscriptRows.value).get(gid);
+  if (!ids) return;
+  const next = reorderInGroup(ids, fromId, toId);
+  if (!next) return;
+  const hostId =
+    gid === FREE_CHAPTER_GROUP ? tr.nodes.find((n) => n.kind === "novel")?.id : gid;
+  if (!hostId) return;
+  assignChapterYs(tr.nodes, next);
+  tr.edges = relinkChapterChain(tr.edges, hostId, next);
+  tree.value = await persistTree(tr);
+  syncFlowFromTree();
+}
+
+function onChapterPointerDown(row: ManuscriptRow, e: PointerEvent) {
+  if (row.kind !== "chapter" || e.button !== 0) return;
+  e.preventDefault();
+  e.stopPropagation();
+  endChapterPointerDrag();
+  chapterDragId.value = row.id;
+  chapterDropId.value = row.id;
+  const onMove = (ev: PointerEvent) => {
+    const hit = document
+      .elementFromPoint(ev.clientX, ev.clientY)
+      ?.closest("[data-chapter-id]");
+    const id = hit?.getAttribute("data-chapter-id");
+    if (id && chapterGroupOf(id) === chapterGroupOf(row.id)) chapterDropId.value = id;
+  };
+  const onUp = () => {
+    const fromId = chapterDragId.value;
+    const toId = chapterDropId.value;
+    chapterDragId.value = null;
+    chapterDropId.value = null;
+    endChapterPointerDrag();
+    if (fromId && toId) void applyChapterReorder(fromId, toId);
+  };
+  window.addEventListener("pointermove", onMove);
+  window.addEventListener("pointerup", onUp);
+  window.addEventListener("pointercancel", onUp);
+  stopChapterDragListen = () => {
+    window.removeEventListener("pointermove", onMove);
+    window.removeEventListener("pointerup", onUp);
+    window.removeEventListener("pointercancel", onUp);
+  };
+}
+
 function openWordStats() {
   const n = manuscriptRows.value.filter((r) => r.kind === "chapter").length;
   wordStatsOpen.value = true;
@@ -2640,9 +2726,8 @@ const storyRulesChatOpen = ref(false);
 
 const titleI18n = (key: string) => t(key as Parameters<typeof t>[0]);
 
-async function openWorldviewChat(slot?: string | null) {
+async function openWorldviewChat() {
   if (!tree.value || worldviewBusy.value) return;
-  const slotId = typeof slot === "string" && slot.trim() ? slot.trim() : null;
   worldviewBusy.value = true;
   try {
     const before = missingWorldviewSlots(tree.value).length;
@@ -2658,7 +2743,7 @@ async function openWorldviewChat(slot?: string | null) {
       await nextTick();
       void fitView({ padding: 0.18, duration: 280 });
     }
-    worldviewChatSlot.value = slotId;
+    worldviewChatSlot.value = null;
     worldviewChatOpen.value = true;
   } catch (e) {
     notice.value = String(e);
@@ -2666,10 +2751,6 @@ async function openWorldviewChat(slot?: string | null) {
     worldviewBusy.value = false;
   }
 }
-
-provide("novework.openWorldviewSlotChat", (slot: string) => {
-  void openWorldviewChat(slot);
-});
 
 async function onWorldviewChatApplied() {
   if (!tree.value) return;
@@ -5221,7 +5302,7 @@ function startResizeChatH(ev: MouseEvent) {
               class="h-7 w-full px-1.5 text-[11px]"
               :disabled="worldviewBusy"
               :title="t('workspace.wv.hint')"
-              @click="openWorldviewChat()"
+              @click="openWorldviewChat"
             >
               <Loader2 v-if="worldviewBusy" class="mr-1 h-3.5 w-3.5 shrink-0 animate-spin" />
               <Sparkles v-else class="mr-1 h-3.5 w-3.5 shrink-0" />
@@ -5398,9 +5479,27 @@ function startResizeChatH(ev: MouseEvent) {
                 v-for="row in manuscriptRows"
                 :key="row.kind + row.id"
                 class="flex items-center gap-1 rounded-md px-1 py-0.5"
-                :class="selected?.id === row.id ? 'bg-primary/10' : 'hover:bg-muted/50'"
+                :class="[
+                  selected?.id === row.id ? 'bg-primary/10' : 'hover:bg-muted/50',
+                  row.kind === 'chapter' && chapterDragId === row.id ? 'opacity-50' : '',
+                  row.kind === 'chapter' &&
+                  chapterDropId === row.id &&
+                  chapterDragId &&
+                  chapterDragId !== row.id
+                    ? 'ring-1 ring-primary'
+                    : '',
+                ]"
                 :style="{ paddingLeft: 4 + row.indent * 14 + 'px' }"
+                :data-chapter-id="row.kind === 'chapter' ? row.id : undefined"
               >
+                <span
+                  v-if="row.kind === 'chapter'"
+                  class="flex shrink-0 cursor-grab touch-none text-muted-foreground/70 active:cursor-grabbing"
+                  :title="t('workspace.chapterDragSort')"
+                  @pointerdown="onChapterPointerDown(row, $event)"
+                >
+                  <GripVertical class="h-3 w-3" aria-hidden="true" />
+                </span>
                 <button
                   type="button"
                   class="min-w-0 flex-1 truncate py-1 text-left text-xs"
@@ -5830,18 +5929,7 @@ function startResizeChatH(ev: MouseEvent) {
           <template v-else>
             <div class="flex min-h-0 min-w-0 w-full flex-1 flex-col gap-2 overflow-hidden">
             <div
-              v-if="chapterBodyLoading"
-              class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6"
-              role="status"
-              aria-live="polite"
-              aria-busy="true"
-            >
-              <Loader2 class="h-6 w-6 animate-spin text-primary" />
-              <p class="text-sm font-medium text-foreground">{{ t("workspace.bodyLoading") }}</p>
-              <p class="text-center text-xs text-muted-foreground">{{ t("workspace.waitingResult") }}</p>
-            </div>
-            <div
-              v-else-if="bodyView === 'diff' && bodyDiffReady"
+              v-if="bodyView === 'diff' && bodyDiffReady"
               class="chapter-body-diff min-h-0 flex-1 overflow-y-auto px-3 py-2"
             >
               <p class="chapter-body-dock-muted mb-2 text-[11px]">{{ t("workspace.refineDiffHint") }}</p>
@@ -5878,6 +5966,17 @@ function startResizeChatH(ev: MouseEvent) {
                   </div>
                 </template>
               </div>
+            </div>
+            <div
+              v-else-if="chapterBodyLoading"
+              class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6"
+              role="status"
+              aria-live="polite"
+              aria-busy="true"
+            >
+              <Loader2 class="h-6 w-6 animate-spin text-primary" />
+              <p class="text-sm font-medium text-foreground">{{ t("workspace.bodyLoading") }}</p>
+              <p class="text-center text-xs text-muted-foreground">{{ t("workspace.waitingResult") }}</p>
             </div>
             <ChapterBodyEditor
               v-else-if="bodyEditing"

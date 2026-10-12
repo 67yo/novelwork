@@ -177,6 +177,8 @@ pub fn run() {
             commands::generate_chapter_plots,
             commands::consolidate_plot_cards,
             commands::generate_chapter_cards,
+            commands::generate_guide_cast,
+            commands::generate_guide_structure,
             commands::chat_cancel,
             commands::fill_knowledge_card,
             commands::list_public_knowledge_cards,

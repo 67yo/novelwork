@@ -38,7 +38,7 @@ function applyBlock(
   raw: Record<string, unknown> | undefined,
   t: TitleFn,
 ): boolean {
-  if (!raw) return false;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
   const node = storyRulesBlockBySlot(tree, rulesId, slot);
   if (!node?.knowledge) return false;
   let data: Record<string, unknown>;
@@ -65,20 +65,33 @@ function applyBlock(
   return true;
 }
 
+function unwrapStoryRulesPayload(payload: StoryRulesGenPayload | Record<string, unknown> | null | undefined): StoryRulesGenPayload {
+  if (!payload || typeof payload !== "object") return {};
+  const p = payload as Record<string, unknown>;
+  if (p.surface_setting || p.story_engine || p.fulfillment_system || p.constraint_redlines) {
+    return payload as StoryRulesGenPayload;
+  }
+  if (p.blocks && typeof p.blocks === "object" && !Array.isArray(p.blocks)) {
+    return p.blocks as StoryRulesGenPayload;
+  }
+  return payload as StoryRulesGenPayload;
+}
+
 /** 将 Chat 返回的四卡 JSON 写入树上 */
 export function applyStoryRulesPayload(
   tree: NovelTree,
-  payload: StoryRulesGenPayload,
+  payload: StoryRulesGenPayload | Record<string, unknown>,
   t: TitleFn,
 ): boolean {
+  const src = unwrapStoryRulesPayload(payload);
   ensureStoryRulesFanCards(tree, t);
   const rules = findStoryRulesNode(tree);
   if (!rules) return false;
   let changed = false;
-  if (applyBlock(tree, rules.id, "sr_surface_setting", payload.surface_setting, t)) changed = true;
-  if (applyBlock(tree, rules.id, "sr_story_engine", payload.story_engine, t)) changed = true;
-  if (applyBlock(tree, rules.id, "sr_fulfillment_system", payload.fulfillment_system, t)) changed = true;
-  if (applyBlock(tree, rules.id, "sr_constraint_redlines", payload.constraint_redlines, t)) changed = true;
+  if (applyBlock(tree, rules.id, "sr_surface_setting", src.surface_setting as Record<string, unknown> | undefined, t)) changed = true;
+  if (applyBlock(tree, rules.id, "sr_story_engine", src.story_engine as Record<string, unknown> | undefined, t)) changed = true;
+  if (applyBlock(tree, rules.id, "sr_fulfillment_system", src.fulfillment_system as Record<string, unknown> | undefined, t)) changed = true;
+  if (applyBlock(tree, rules.id, "sr_constraint_redlines", src.constraint_redlines as Record<string, unknown> | undefined, t)) changed = true;
   if (changed) {
     syncStoryRulesParentExtracted(tree, rules.id, t);
   }

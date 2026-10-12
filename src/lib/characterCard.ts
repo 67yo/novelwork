@@ -1,4 +1,5 @@
 /** 人物卡完整结构化设定（写章注入用 formatCharacterExtracted） */
+import { asText } from "@/lib/asText";
 
 export type CharacterRelation = {
   name: string;
@@ -216,7 +217,7 @@ export function emptyCharacterCard(): CharacterCard {
 }
 
 function str(v: unknown): string {
-  return v == null ? "" : String(v);
+  return asText(v);
 }
 
 function asObj(v: unknown): Record<string, unknown> | null {

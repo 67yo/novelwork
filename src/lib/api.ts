@@ -732,6 +732,20 @@ export const api = {
   /** 根节点：生成第 1–count 章章节卡（同号覆盖） */
   generateChapterCards: (novelId: string, count: number, userBrief: string) =>
     invoke<GenerateResult>("generate_chapter_cards", { novelId, count, userBrief }),
+  /** 开书向导：一次生成挂根人物卡（重跑替换根上人物） */
+  generateGuideCast: (novelId: string, notes = "", model?: string | null) =>
+    invoke<GenerateResult>("generate_guide_cast", {
+      novelId,
+      notes,
+      model: model?.trim() || null,
+    }),
+  /** 开书向导：分卷（可空）+ 章节卡 */
+  generateGuideStructure: (novelId: string, notes = "", model?: string | null) =>
+    invoke<GenerateResult>("generate_guide_structure", {
+      novelId,
+      notes,
+      model: model?.trim() || null,
+    }),
   /** 终止进行中的 chat（开书 `__create__` 等） */
   chatCancel: (novelId: string) => invoke<void>("chat_cancel", { novelId }),
   fillKnowledgeCard,

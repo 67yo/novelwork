@@ -1,3 +1,5 @@
+import { asText } from "@/lib/asText";
+
 /** 时空地理：关键地点 — 可存树上地点卡 knowledge.key_location */
 export type KeyLocation = {
   name: string;
@@ -35,10 +37,10 @@ export function emptySpatiotemporal(): SpatiotemporalData {
 
 export function normalizeLocation(raw: Partial<KeyLocation> | null | undefined): KeyLocation {
   return {
-    name: raw?.name ?? "",
-    features: raw?.features ?? "",
-    terrain: raw?.terrain ?? "",
-    faction: raw?.faction ?? "",
+    name: asText(raw?.name),
+    features: asText(raw?.features),
+    terrain: asText(raw?.terrain),
+    faction: asText(raw?.faction),
   };
 }
 
@@ -48,11 +50,11 @@ export function normalizeSpatiotemporal(
 ): SpatiotemporalData {
   const d = emptySpatiotemporal();
   if (!raw) return d;
-  d.premise = raw.premise ?? "";
-  d.era = raw.era ?? "";
-  d.ecology = raw.ecology ?? "";
-  d.world_pattern = raw.world_pattern ?? "";
-  d.atmosphere = raw.atmosphere ?? "";
+  d.premise = asText(raw.premise);
+  d.era = asText(raw.era);
+  d.ecology = asText(raw.ecology);
+  d.world_pattern = asText(raw.world_pattern);
+  d.atmosphere = asText(raw.atmosphere);
   d.locations = Array.isArray(raw.locations)
     ? raw.locations.map((l) => normalizeLocation(l))
     : [];

@@ -1999,3 +1999,111 @@ pub fn shot_comfy_prompts_user(loc: PromptLocale, label: &str, chars: &str, shot
         format!("[Chapter] {label}\n[Looks]\n{chars}\n\n[Shots]\n{shots_json}\n")
     }
 }
+
+/// 开书向导：一次生成挂根的完整人物卡。
+pub fn generate_guide_cast_system(loc: PromptLocale) -> String {
+    if loc.is_zh() {
+        "你是 Novel Work 人物设定助手。根据小说、功能选项、世界观与故事规则，一次写出全书主要人物。\n\
+         硬性规则：只输出一个 JSON；含 reply（2–4 句中文）与 characters 数组（4–8 人，须含主角）。\n\
+         每人必须有 label（真名）以及完整人物卡字段，禁止留空、禁止「待定」：\n\
+         role, personality, motto, gender, style, alignment, age, aliases,\n\
+         world_position{birth_class,faction,social_role,conflict_stance},\n\
+         world_anchors{embodies_law,embodies_note,shaped_by_law,shaped_by_note,will_challenge},\n\
+         relations[{name,relation,definition,default_attitude,hidden_tension}]（至少 1 条，指向本组其他人),\n\
+         core_belief{belief,author_verdict(prove|disprove|unresolved),source},\n\
+         deep{desire_surface,desire_deep,fear,fear_source,secret_content,secret_who_knows,secret_should_know,secret_exposure,line_trigger,line_source,line_reaction,trauma_wound,trauma_trigger,trauma_stress,trauma_imprint,contradiction_poles,contradiction_source,contradiction_trajectory,arc_growth,arc_fall,arc_choice},\n\
+         voice{positioning,cognitive_filter,body_language,sentence_length,pause,patterns,catchphrases[],emotion_anger,emotion_tense,emotion_mask,emotion_sad,emotion_happy,banned}。\n\
+         catchphrases 为非空字符串数组。须服从【功能选项】与【世界观】【故事规则】，人物彼此关系自洽。\n\
+         输出示例：{\"reply\":\"…\",\"characters\":[{\"label\":\"林深\",\"role\":\"主角\",…}]}"
+            .into()
+    } else {
+        "You are Novel Work's cast designer. Output one JSON with reply and characters (4–8, include the protagonist).\n\
+         Each item needs label plus a complete character card (no empty placeholders). Obey story tags, worldview, and story rules."
+            .into()
+    }
+}
+
+pub fn generate_guide_cast_user(
+    loc: PromptLocale,
+    novel_title: &str,
+    synopsis: &str,
+    features_block: &str,
+    worldview_snapshot: &str,
+    story_rules_snapshot: &str,
+    notes: &str,
+) -> String {
+    let notes = notes.trim();
+    if loc.is_zh() {
+        format!(
+            "【小说】{novel_title}\n【简介】{synopsis}\n\n【功能选项】\n{features_block}\n\n\
+             【世界观快照】\n{worldview_snapshot}\n\n【故事规则】\n{story_rules_snapshot}\n\n\
+             【用户补充】\n{}\n\n请输出完整 JSON。",
+            if notes.is_empty() { "（无）" } else { notes }
+        )
+    } else {
+        format!(
+            "[Novel] {novel_title}\n[Synopsis] {synopsis}\n\n[Story tags]\n{features_block}\n\n\
+             [Worldview]\n{worldview_snapshot}\n\n[Story rules]\n{story_rules_snapshot}\n\n\
+             [Notes]\n{}\n\nOutput the JSON.",
+            if notes.is_empty() { "(none)" } else { notes }
+        )
+    }
+}
+
+/// 开书向导：分卷结构（可空=章直接挂根）。
+pub fn generate_guide_structure_system(loc: PromptLocale, chapter_count: u32) -> String {
+    if loc.is_zh() {
+        format!(
+            "你是 Novel Work 结构编辑。为全书规划分卷（可选）与章号区间。全书计划 {chapter_count} 章。\n\
+             硬性规则：只输出一个 JSON；含 reply（2–4 句）与 volumes 数组。\n\
+             用户要求不分卷或一卷到底时，volumes 输出 []。\n\
+             否则 volumes 按阅读顺序，章号连续覆盖 1–{chapter_count}、不重叠：\n\
+             {{\"label\":\"第一卷 · …\",\"outline\":\"本卷纲要\",\"chapter_from\":1,\"chapter_to\":10,\n\
+               \"volume\":{{\"positioning\":\"\",\"layer_setup\":{{\"chapters\":\"1-4\",\"description\":\"\"}},\
+               \"layer_confrontation\":{{\"chapters\":\"5-8\",\"description\":\"\"}},\
+               \"layer_resolution\":{{\"chapters\":\"9-10\",\"description\":\"\"}},\
+               \"conflict_external\":\"\",\"conflict_internal\":\"\",\"conflict_deep\":\"\",\
+               \"key_beats\":[{{\"order\":1,\"cost\":\"\",\"description\":\"\"}}]}}}}\n\
+             须服从功能选项、世界观、故事规则与人物。不要写章节正文。"
+        )
+    } else {
+        format!(
+            "You are Novel Work's structure editor. Plan volumes (optional) covering chapters 1–{chapter_count}.\n\
+             Output one JSON with reply and volumes. Empty volumes[] means chapters hang on the root.\n\
+             Ranges must be contiguous and non-overlapping. Do not write chapter bodies."
+        )
+    }
+}
+
+pub fn generate_guide_structure_user(
+    loc: PromptLocale,
+    novel_title: &str,
+    synopsis: &str,
+    features_block: &str,
+    chapter_count: u32,
+    cast_names: &str,
+    notes: &str,
+) -> String {
+    let notes = notes.trim();
+    if loc.is_zh() {
+        format!(
+            "【小说】{novel_title}\n【简介】{synopsis}\n【计划章数】{chapter_count}\n【人物】{cast_names}\n\n\
+             【功能选项】\n{features_block}\n\n【用户补充】\n{}\n\n请输出 JSON。",
+            if notes.is_empty() {
+                "（无；若未说明则自行决定是否分卷）"
+            } else {
+                notes
+            }
+        )
+    } else {
+        format!(
+            "[Novel] {novel_title}\n[Synopsis] {synopsis}\n[Chapters] {chapter_count}\n[Cast] {cast_names}\n\n\
+             [Story tags]\n{features_block}\n\n[Notes]\n{}\n\nOutput JSON.",
+            if notes.is_empty() {
+                "(none; decide whether to volume-split)"
+            } else {
+                notes
+            }
+        )
+    }
+}

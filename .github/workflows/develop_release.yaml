@@ -5,9 +5,8 @@
 #   Intel          src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
 #   Windows        src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe
 #
-# 未配置代码签名。可在 Actions 手动触发，或推送到 main。
-# 首次仍会编译约 40 分钟；之后靠 rust-cache 复用依赖。安装包不进缓存，
-# 避免多份 target 撑破仓库 10GB 缓存上限、互相挤掉。
+# crates.io 只在 cargo-fetch 拉一次，.crate 缓存跨 Apple Silicon / Intel / Windows 复用。
+# 编译产物仍按架构分缓存。安装包不进缓存，避免撑破仓库 10GB 上限。
 
 name: develop-release
 
@@ -29,7 +28,31 @@ env:
   MACOSX_DEPLOYMENT_TARGET: "11.0"
 
 jobs:
+  cargo-fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache crates.io downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-dl-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: cargo-dl-
+          enableCrossOsArchive: true
+
+      - name: Fetch crates
+        run: |
+          cargo fetch --locked --manifest-path src-tauri/Cargo.toml --target aarch64-apple-darwin
+          cargo fetch --locked --manifest-path src-tauri/Cargo.toml --target x86_64-apple-darwin
+          cargo fetch --locked --manifest-path src-tauri/Cargo.toml --target x86_64-pc-windows-msvc
+
   build:
+    needs: cargo-fetch
     strategy:
       fail-fast: false
       matrix:
@@ -39,11 +62,11 @@ jobs:
             rust_target: aarch64-apple-darwin
             bundles: dmg
             artifact: src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
-          - os: macos-latest
-            name: macos-intel
-            rust_target: x86_64-apple-darwin
-            bundles: dmg
-            artifact: src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
+          # - os: macos-latest
+          #   name: macos-intel
+          #   rust_target: x86_64-apple-darwin
+          #   bundles: dmg
+          #   artifact: src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
           - os: windows-latest
             name: windows
             rust_target: x86_64-pc-windows-msvc
@@ -86,6 +109,17 @@ jobs:
           workspaces: src-tauri -> target
           shared-key: develop-release-${{ matrix.name }}
           cache-on-failure: true
+
+      # rust-cache 按架构分开，crates.io 的 .crate 用同一把 key 从 cargo-fetch 回填。
+      - name: Restore crates.io downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-dl-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: cargo-dl-
+          enableCrossOsArchive: true
 
       - name: Install frontend deps
         run: pnpm install --frozen-lockfile

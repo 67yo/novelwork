@@ -1,3 +1,5 @@
+import { asText } from "@/lib/asText";
+
 /** 信息传播结构化（slot=wv_info_flow） */
 export type InfoFlowData = {
   premise: string;
@@ -25,11 +27,11 @@ export function normalizeInfoFlow(
 ): InfoFlowData {
   const d = emptyInfoFlow();
   if (!raw) return d;
-  d.premise = raw.premise ?? "";
-  d.info_speed = raw.info_speed ?? "";
-  d.info_barrier = raw.info_barrier ?? "";
-  d.rumor_truth = raw.rumor_truth ?? raw.message_truth ?? "";
-  d.knowledge_carrier = raw.knowledge_carrier ?? "";
+  d.premise = asText(raw.premise);
+  d.info_speed = asText(raw.info_speed);
+  d.info_barrier = asText(raw.info_barrier);
+  d.rumor_truth = asText(raw.rumor_truth) || asText(raw.message_truth);
+  d.knowledge_carrier = asText(raw.knowledge_carrier);
   return d;
 }
 

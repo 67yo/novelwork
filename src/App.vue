@@ -332,7 +332,7 @@ function startResizeFloat(ev: MouseEvent) {
           <BookOpen class="h-4 w-4" />
           <span>{{ t("nav.novels") }}</span>
         </RouterLink>
-        <RouterLink :to="'/novels'" :class="navOn(route.name === 'novels')" :title="t('nav.novelsListTitle')">
+        <RouterLink :to="'/novels'" :class="navOn(route.name === 'novels' || route.name === 'novel-guide')" :title="t('nav.novelsListTitle')">
           <List class="h-4 w-4" />
           <span>{{ t("nav.novelsList") }}</span>
         </RouterLink>

@@ -1,3 +1,5 @@
+import { asText } from "@/lib/asText";
+
 /** 历史文化：宗教 / 重大事件子卡 + 主卡固定项（slot=wv_history_culture） */
 export type WorldReligion = {
   name: string;
@@ -45,17 +47,17 @@ export function emptyHistoryCulture(): HistoryCultureData {
 
 export function normalizeReligion(raw: Partial<WorldReligion> | null | undefined): WorldReligion {
   return {
-    name: raw?.name ?? "",
-    core_belief: raw?.core_belief ?? "",
-    followers_scope: raw?.followers_scope ?? "",
+    name: asText(raw?.name),
+    core_belief: asText(raw?.core_belief),
+    followers_scope: asText(raw?.followers_scope),
   };
 }
 
 export function normalizeMajorEvent(raw: Partial<MajorEvent> | null | undefined): MajorEvent {
   return {
-    title: raw?.title ?? "",
-    event: raw?.event ?? "",
-    long_term_impact: raw?.long_term_impact ?? "",
+    title: asText(raw?.title),
+    event: asText(raw?.event),
+    long_term_impact: asText(raw?.long_term_impact),
   };
 }
 
@@ -64,10 +66,10 @@ export function normalizeHistoryCulture(
 ): HistoryCultureData {
   const d = emptyHistoryCulture();
   if (!raw) return d;
-  d.premise = raw.premise ?? "";
-  d.customs = raw.customs ?? "";
-  d.economy = raw.economy ?? "";
-  d.daily_slices = raw.daily_slices ?? "";
+  d.premise = asText(raw.premise);
+  d.customs = asText(raw.customs);
+  d.economy = asText(raw.economy);
+  d.daily_slices = asText(raw.daily_slices);
   d.religions = Array.isArray(raw.religions)
     ? raw.religions.map((r) => normalizeReligion(r))
     : [];

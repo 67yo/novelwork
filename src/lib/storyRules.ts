@@ -1,4 +1,5 @@
 import type { MessageKey } from "@/i18n/messages";
+import { asText } from "@/lib/asText";
 
 /** 故事规则右侧扇形四卡（挂在 story_rules 下，不可删、连线不可断） */
 export const STORY_RULES_FAN_SLOTS = [
@@ -238,7 +239,8 @@ export function storyRulesFanTitleKey(
 
 function normList(raw: unknown): string[] {
   if (!Array.isArray(raw) || !raw.length) return [""];
-  return raw.map((x) => (x == null ? "" : String(x)));
+  const list = raw.map(asText);
+  return list.length ? list : [""];
 }
 
 export function emptySurfaceSetting(): SurfaceSettingData {
@@ -288,29 +290,29 @@ export function normalizeSurfaceSetting(
 ): SurfaceSettingData {
   const d = emptySurfaceSetting();
   if (!raw) return d;
-  d.premise = raw.premise ?? "";
-  d.core_conflict = raw.core_conflict ?? "";
-  d.reader_promise = raw.reader_promise ?? "";
-  d.target_audience = raw.target_audience ?? "";
-  d.tone_reference = raw.tone_reference ?? "";
-  d.commercial_tags = raw.commercial_tags ?? "";
-  d.extended_premise = raw.extended_premise ?? "";
+  d.premise = asText(raw.premise);
+  d.core_conflict = asText(raw.core_conflict);
+  d.reader_promise = asText(raw.reader_promise);
+  d.target_audience = asText(raw.target_audience);
+  d.tone_reference = asText(raw.tone_reference);
+  d.commercial_tags = asText(raw.commercial_tags);
+  d.extended_premise = asText(raw.extended_premise);
   return d;
 }
 
 export function normalizeStoryEngine(raw: Partial<StoryEngineData> | null | undefined): StoryEngineData {
   const d = emptyStoryEngine();
   if (!raw) return d;
-  d.premise = raw.premise ?? "";
-  d.bright_line = raw.bright_line ?? "";
-  d.dark_line = raw.dark_line ?? "";
-  d.suspense_setup = raw.suspense_setup ?? "";
-  d.conflict_engine = raw.conflict_engine ?? "";
-  d.external_conflict = raw.external_conflict ?? "";
-  d.internal_conflict = raw.internal_conflict ?? "";
-  d.relational_conflict = raw.relational_conflict ?? "";
-  d.progression_cycle = raw.progression_cycle ?? "";
-  d.protagonist_dilemma = raw.protagonist_dilemma ?? "";
+  d.premise = asText(raw.premise);
+  d.bright_line = asText(raw.bright_line);
+  d.dark_line = asText(raw.dark_line);
+  d.suspense_setup = asText(raw.suspense_setup);
+  d.conflict_engine = asText(raw.conflict_engine);
+  d.external_conflict = asText(raw.external_conflict);
+  d.internal_conflict = asText(raw.internal_conflict);
+  d.relational_conflict = asText(raw.relational_conflict);
+  d.progression_cycle = asText(raw.progression_cycle);
+  d.protagonist_dilemma = asText(raw.protagonist_dilemma);
   return d;
 }
 
@@ -319,11 +321,11 @@ export function normalizeFulfillmentSystem(
 ): FulfillmentSystemData {
   const d = emptyFulfillmentSystem();
   if (!raw) return d;
-  d.premise = raw.premise ?? "";
-  d.growth_path = raw.growth_path ?? "";
-  d.ending_texture = raw.ending_texture ?? "";
+  d.premise = asText(raw.premise);
+  d.growth_path = asText(raw.growth_path);
+  d.ending_texture = asText(raw.ending_texture);
   d.payoff_syntax = normList(raw.payoff_syntax);
-  d.emotional_rhythm = raw.emotional_rhythm ?? "";
+  d.emotional_rhythm = asText(raw.emotional_rhythm);
   d.tension_archetypes = normList(raw.tension_archetypes ?? raw.tension_circles);
   return d;
 }
@@ -333,7 +335,7 @@ export function normalizeConstraintRedlines(
 ): ConstraintRedlinesData {
   const d = emptyConstraintRedlines();
   if (!raw) return d;
-  d.premise = raw.premise ?? "";
+  d.premise = asText(raw.premise);
   d.redlines = normList(raw.redlines);
   return d;
 }

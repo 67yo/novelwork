@@ -1,3 +1,5 @@
+import { asText } from "@/lib/asText";
+
 /** 核心法则：世界公理（名称 + 四元组）——可存树上公理卡 knowledge.world_axiom */
 export type WorldAxiom = {
   name: string;
@@ -34,11 +36,11 @@ export function emptyCoreLaws(): CoreLawsData {
 
 export function normalizeAxiom(raw: Partial<WorldAxiom> | null | undefined): WorldAxiom {
   return {
-    name: raw?.name ?? "",
-    statement: raw?.statement ?? "",
-    boundary: raw?.boundary ?? "",
-    cost: raw?.cost ?? "",
-    mechanism: raw?.mechanism ?? "",
+    name: asText(raw?.name),
+    statement: asText(raw?.statement),
+    boundary: asText(raw?.boundary),
+    cost: asText(raw?.cost),
+    mechanism: asText(raw?.mechanism),
   };
 }
 
@@ -46,15 +48,15 @@ export function normalizeAxiom(raw: Partial<WorldAxiom> | null | undefined): Wor
 export function normalizeCoreLaws(raw: Partial<CoreLawsData> | null | undefined): CoreLawsData {
   const d = emptyCoreLaws();
   if (!raw) return d;
-  d.premise = raw.premise ?? "";
-  d.power_system = raw.power_system ?? "";
-  d.power_expression = raw.power_expression ?? "";
+  d.premise = asText(raw.premise);
+  d.power_system = asText(raw.power_system);
+  d.power_expression = asText(raw.power_expression);
   d.axioms = Array.isArray(raw.axioms)
     ? raw.axioms.map((a) => normalizeAxiom(a))
     : [];
   d.taboos =
     Array.isArray(raw.taboos) && raw.taboos.length
-      ? raw.taboos.map((t) => (t == null ? "" : String(t)))
+      ? raw.taboos.map((t) => asText(t))
       : [""];
   return d;
 }

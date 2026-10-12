@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
+import { useLocalStorage } from "@vueuse/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import {
   ArrowUp,
@@ -36,7 +37,7 @@ function onHeaderDown(e: MouseEvent) {
 const { t } = useI18n();
 const route = useRoute();
 const messages = ref<GlobalChatMessage[]>([]);
-const draft = ref("");
+const draft = useLocalStorage("novework.chatDraft", "");
 const sending = ref(false);
 const error = ref("");
 const expanded = ref(false);

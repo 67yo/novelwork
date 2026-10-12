@@ -22,4 +22,9 @@ console.assert(md.includes("### 盐门之变"));
 console.assert(formatWorldReligionExtracted(emptyReligion()) === "");
 console.assert(parseWorldReligionJson('{"name":"A","core_belief":"b","followers_scope":"c"}')?.name === "A");
 console.assert(parseMajorEventJson('{"title":"T","event":"e","long_term_impact":"i"}')?.title === "T");
+const nested = normalizeHistoryCulture({
+  customs: { festival: "节庆祭河", taboo: ["夜不熄火"] } as unknown as string,
+});
+console.assert(nested.customs.includes("节庆祭河"));
+console.assert(formatHistoryCultureExtracted(nested).includes("节庆祭河"));
 console.log("historyCulture.selfcheck ok");

@@ -1,5 +1,5 @@
 /** 最小自检：blockDataFromKnowledge 从知识卡嵌套字段读出 premise（勿把整卡当 flat）。 */
-import { blockDataFromKnowledge, normalizeStoryRulesBlock } from "./storyRules";
+import { blockDataFromKnowledge, normalizeStoryRulesBlock, normalizeSurfaceSetting } from "./storyRules";
 
 const k = {
   surface_setting: {
@@ -24,5 +24,12 @@ const fromLegacy = normalizeStoryRulesBlock("sr_fulfillment_system", {
 if ((fromLegacy as { tension_archetypes: string[] }).tension_archetypes[0] !== "旧键") {
   throw new Error("legacy tension_circles should map to tension_archetypes");
 }
+
+const nested = normalizeSurfaceSetting({
+  premise: { text: "立意" } as unknown as string,
+  core_conflict: ["冲突"] as unknown as string,
+});
+if (nested.premise !== "立意") throw new Error("object field should flatten to text");
+if (nested.core_conflict !== "冲突") throw new Error("array field should join to text");
 
 console.log("storyRules.selfcheck ok");

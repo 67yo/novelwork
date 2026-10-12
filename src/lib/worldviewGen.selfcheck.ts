@@ -103,4 +103,19 @@ console.assert(
   tree.nodes.find((n) => knowledgeSlot(n) === "wv_existence")?.knowledge?.extracted.includes("只改存在基础"),
   "existence filled",
 );
+
+const objCustoms = applyWorldviewPayload(
+  tree,
+  {
+    history_culture: {
+      customs: { festival: "祭炉", taboo: ["夜不熄火"] },
+    },
+  },
+  t,
+);
+console.assert(objCustoms, "object customs apply");
+console.assert(
+  tree.nodes.find((n) => knowledgeSlot(n) === "wv_history_culture")?.knowledge?.extracted.includes("祭炉"),
+  "object customs flattened",
+);
 console.log("worldviewGen.selfcheck ok");

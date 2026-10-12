@@ -118,10 +118,18 @@ async function createEditor() {
   connection.addPreset(() =>
     new BidirectFlow({
       makeConnection(from, to) {
-        const pair = getSourceTarget(from, to);
+        if (from.nodeId === to.nodeId) return false;
+        let pair = getSourceTarget(from, to);
+        if (!pair) {
+          // stacked in/out hits often resolve as the same side
+          const flipped = {
+            ...to,
+            side: to.side === "output" ? ("input" as const) : ("output" as const),
+          };
+          pair = getSourceTarget(from, flipped);
+        }
         if (!pair) return false;
         const [source, target] = pair;
-        if (source.nodeId === target.nodeId) return false;
         emit("connect", {
           source: source.nodeId,
           target: target.nodeId,
@@ -361,9 +369,9 @@ defineExpose({ fitView, zoomBy });
 </style>
 <style>
 .rete-pick-out .story-port-hit--out {
-  pointer-events: none !important;
+  display: none !important;
 }
 .rete-pick-in .story-port-hit--in {
-  pointer-events: none !important;
+  display: none !important;
 }
 </style>

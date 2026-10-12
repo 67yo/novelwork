@@ -1,3 +1,5 @@
+import { asText } from "@/lib/asText";
+
 /** 社会权力：种族 */
 export type WorldRace = {
   name: string;
@@ -49,20 +51,20 @@ export function emptySocialPower(): SocialPowerData {
 
 export function normalizeRace(raw: Partial<WorldRace> | null | undefined): WorldRace {
   return {
-    name: raw?.name ?? "",
-    features: raw?.features ?? "",
-    population: raw?.population ?? "",
-    social_status: raw?.social_status ?? "",
+    name: asText(raw?.name),
+    features: asText(raw?.features),
+    population: asText(raw?.population),
+    social_status: asText(raw?.social_status),
   };
 }
 
 export function normalizeFaction(raw: Partial<MajorFaction> | null | undefined): MajorFaction {
   return {
-    name: raw?.name ?? "",
-    faction_type: raw?.faction_type ?? "",
-    goal: raw?.goal ?? "",
-    means: raw?.means ?? "",
-    power_base: raw?.power_base ?? "",
+    name: asText(raw?.name),
+    faction_type: asText(raw?.faction_type),
+    goal: asText(raw?.goal),
+    means: asText(raw?.means),
+    power_base: asText(raw?.power_base),
   };
 }
 
@@ -71,10 +73,10 @@ export function normalizeSocialPower(
 ): SocialPowerData {
   const d = emptySocialPower();
   if (!raw) return d;
-  d.premise = raw.premise ?? "";
-  d.class_structure = raw.class_structure ?? "";
-  d.political_system = raw.political_system ?? "";
-  d.power_visibility = raw.power_visibility ?? "";
+  d.premise = asText(raw.premise);
+  d.class_structure = asText(raw.class_structure);
+  d.political_system = asText(raw.political_system);
+  d.power_visibility = asText(raw.power_visibility);
   d.races = Array.isArray(raw.races) ? raw.races.map((r) => normalizeRace(r)) : [];
   d.factions = Array.isArray(raw.factions)
     ? raw.factions.map((f) => normalizeFaction(f))

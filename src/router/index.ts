@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from "vue-router";
 import LibraryView from "@/views/LibraryView.vue";
 import NovelsView from "@/views/NovelsView.vue";
 import WorkspaceView from "@/views/WorkspaceView.vue";
+import NovelGuideView from "@/views/NovelGuideView.vue";
 import StatsView from "@/views/StatsView.vue";
 import SettingsView from "@/views/SettingsView.vue";
 
@@ -11,6 +12,7 @@ const router = createRouter({
     { path: "/", redirect: "/novels" },
     { path: "/library", name: "library", component: LibraryView },
     { path: "/novels", name: "novels", component: NovelsView },
+    { path: "/novels/guide", name: "novel-guide", component: NovelGuideView },
     { path: "/novels/:id", name: "workspace", component: WorkspaceView, props: true },
     { path: "/stats", name: "stats", component: StatsView },
     { path: "/settings", name: "settings", component: SettingsView },

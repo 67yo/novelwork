@@ -132,9 +132,14 @@ async function confirmDelete() {
         <h1 class="text-2xl font-semibold tracking-tight">{{ t("novels.title") }}</h1>
         <p class="mt-1 text-sm text-muted-foreground">{{ t("novels.subtitle") }}</p>
       </div>
-      <Button @click="showCreate ? closeCreate() : openCreate()">
-        {{ showCreate ? t("novels.cancel") : t("novels.create") }}
-      </Button>
+      <div class="flex shrink-0 gap-2">
+        <Button variant="outline" @click="router.push('/novels/guide')">
+          {{ t("novels.guide.open") }}
+        </Button>
+        <Button @click="showCreate ? closeCreate() : openCreate()">
+          {{ showCreate ? t("novels.cancel") : t("novels.create") }}
+        </Button>
+      </div>
     </div>
 
     <div class="flex gap-2 text-sm">

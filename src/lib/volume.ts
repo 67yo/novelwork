@@ -1,4 +1,5 @@
 /** 分卷结构化设定：本卷定位 / 三层结构 / 冲突层级 / 关键节点 */
+import { asText } from "@/lib/asText";
 export type VolumeLayerBlock = {
   chapters: string;
   description: string;
@@ -44,8 +45,8 @@ export function emptyVolume(): VolumeData {
 
 export function normalizeLayer(raw: Partial<VolumeLayerBlock> | null | undefined): VolumeLayerBlock {
   return {
-    chapters: raw?.chapters ?? "",
-    description: raw?.description ?? "",
+    chapters: asText(raw?.chapters),
+    description: asText(raw?.description),
   };
 }
 
@@ -59,21 +60,21 @@ export function normalizeKeyBeat(
       : fallbackOrder;
   return {
     order,
-    cost: raw?.cost ?? "",
-    description: raw?.description ?? "",
+    cost: asText(raw?.cost),
+    description: asText(raw?.description),
   };
 }
 
 export function normalizeVolume(raw: Partial<VolumeData> | null | undefined): VolumeData {
   const d = emptyVolume();
   if (!raw) return d;
-  d.positioning = raw.positioning ?? "";
+  d.positioning = asText(raw.positioning);
   d.layer_setup = normalizeLayer(raw.layer_setup);
   d.layer_confrontation = normalizeLayer(raw.layer_confrontation);
   d.layer_resolution = normalizeLayer(raw.layer_resolution);
-  d.conflict_external = raw.conflict_external ?? "";
-  d.conflict_internal = raw.conflict_internal ?? "";
-  d.conflict_deep = raw.conflict_deep ?? "";
+  d.conflict_external = asText(raw.conflict_external);
+  d.conflict_internal = asText(raw.conflict_internal);
+  d.conflict_deep = asText(raw.conflict_deep);
   d.key_beats =
     Array.isArray(raw.key_beats) && raw.key_beats.length
       ? raw.key_beats.map((b, i) => normalizeKeyBeat(b, i + 1))
